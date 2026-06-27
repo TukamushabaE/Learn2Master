@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Student Dashboard</h2>
+<a href="{{ url_for('view_progress') }}" class="btn btn-outline-info mb-3">View My Progress Trail</a>
 <div class="row">
     {% for subject in subjects %}
     <div class="col-md-4">

@@ -78,3 +78,16 @@ class RecommendationLog(db.Model):
     __table_args__ = (
         db.Index('ix_rec_log_user_time', 'user_id', 'timestamp'),
     )
+
+class AttemptLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    learning_outcome_id = db.Column(db.Integer, db.ForeignKey('learning_outcome.id'), nullable=False)
+    correct = db.Column(db.Boolean, nullable=False)
+    p_before = db.Column(db.Float, nullable=False)
+    p_after = db.Column(db.Float, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.Index('ix_attempt_log_user_lo', 'user_id', 'learning_outcome_id'),
+    )
