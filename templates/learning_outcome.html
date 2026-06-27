@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{{ url_for('view_subject', subject_id=lo.topic.subject_id) }}">{{ lo.topic.subject.name }}</a></li>
+    <li class="breadcrumb-item active">{{ lo.name }}</li>
+  </ol>
+</nav>
+
+<div class="row">
+    <div class="col-md-8">
+        {% if is_locked %}
+        <div class="alert alert-warning">
+            <h5>Locked Learning Outcome</h5>
+            <p>You must achieve at least 85% mastery in all previous learning outcomes before accessing this one.</p>
+            <a href="{{ url_for('view_subject', subject_id=lo.topic.subject_id) }}" class="btn btn-secondary">Return to Subject</a>
+        </div>
+        {% else %}
+        <h2>{{ lo.name }}</h2>
+        <p class="lead">{{ lo.description }}</p>
+
+        {% if resources %}
+            {% for resource in resources %}
+            <div class="card mb-3 border-primary shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title text-primary">{{ resource.title }} <small class="text-muted">({{ resource.type }})</small></h5>
+                    <p>{{ resource.content }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Learning Materials</h5>
+                    <p>{{ lo.notes }}</p>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Practical Evidence</h5>
+                <p>Demonstrate your mastery by submitting practical evidence (e.g., photos of your work, links to projects, or a reflection).</p>
+                <form action="{{ url_for('submit_evidence', lo_id=lo.id) }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <textarea name="content" class="form-control" rows="3" placeholder="Describe your evidence or paste a link..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-info">Submit Evidence</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-md-4">
+        {% if not is_locked or current_user.role != 'student' %}
+        <div class="card bg-light">
+            <div class="card-body">
+                <h5>Mastery Status</h5>
+                <div class="progress mb-3" style="height: 25px;">
+                    <div class="progress-bar" role="progressbar" style="width: {{ knowledge_level * 100 }}%;">
+                        {{ (knowledge_level * 100) | round(1) }}%
+                    </div>
+                </div>
+
+                <h6>AI Recommendation</h6>
+                <div class="alert alert-info">
+                    <strong>{{ recommendation }}</strong>
+                    <hr>
+                    <small>{{ explanation }}</small>
+                </div>
+
+                <form action="{{ url_for('take_test', lo_id=lo.id) }}" method="POST" class="mb-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="correct" value="true">
+                    <button type="submit" class="btn btn-success w-100">Simulate Correct Answer</button>
+                </form>
+                <form action="{{ url_for('take_test', lo_id=lo.id) }}" method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="correct" value="false">
+                    <button type="submit" class="btn btn-danger w-100">Simulate Incorrect Answer</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

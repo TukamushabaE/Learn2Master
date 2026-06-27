@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Learning Progress Trail</h2>
+<p>Track your mastery journey through the Competency-Based Curriculum.</p>
+{% if attempts %}
+<table class="table">
+    <thead>
+        <tr>
+            <th>Learning Outcome</th>
+            <th>Result</th>
+            <th>Knowledge Gain</th>
+            <th>Timestamp</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for attempt in attempts %}
+        <tr>
+            <td>{{ attempt.learning_outcome_id }}</td>
+            <td>
+                {% if attempt.correct %}
+                    <span class="badge bg-success">Correct</span>
+                {% else %}
+                    <span class="badge bg-danger">Incorrect</span>
+                {% endif %}
+            </td>
+            <td>{{ (attempt.p_before * 100) | round(1) }}% → {{ (attempt.p_after * 100) | round(1) }}%</td>
+            <td>{{ attempt.timestamp }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No attempts recorded yet. Start learning from your dashboard!</p>
+{% endif %}
+<a href="{{ url_for('dashboard') }}" class="btn btn-primary">Back to Dashboard</a>
+{% endblock %}

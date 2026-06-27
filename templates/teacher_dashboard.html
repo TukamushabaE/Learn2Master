@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Teacher Dashboard</h2>
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Evidence Review</h5>
+                <p>Review practical evidence submitted by students.</p>
+                <a href="{{ url_for('teacher_evidence') }}" class="btn btn-primary">Review Evidence</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">AI Recommendations</h5>
+                <p>Monitor and override AI-driven student recommendations.</p>
+                <a href="{{ url_for('teacher_recommendations') }}" class="btn btn-secondary">View Logs</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

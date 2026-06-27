@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>AI Recommendation Logs</h2>
+<table class="table">
+    <thead>
+        <tr>
+            <th>User</th>
+            <th>Learning Outcome</th>
+            <th>Recommendation</th>
+            <th>Timestamp</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for log in logs %}
+        <tr>
+            <td>{{ log.user_id }}</td>
+            <td>{{ log.learning_outcome_id }}</td>
+            <td><strong>{{ log.recommendation }}</strong><br><small>{{ log.explanation }}</small></td>
+            <td>{{ log.timestamp }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
