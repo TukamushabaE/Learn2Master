@@ -5,7 +5,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import check_password_hash
 from engine import calculate_bkt, get_recommendation
-from models import db, User, Subject, Topic, LearningOutcome, MasteryRecord, Evidence, RecommendationLog, AttemptLog
+from models import db, User, Subject, Topic, LearningOutcome, MasteryRecord, Evidence, RecommendationLog, AttemptLog, LearningResource
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///learn2master.db'
@@ -98,8 +98,16 @@ def view_lo(lo_id):
 
     mastery = MasteryRecord.query.filter_by(user_id=current_user.id, learning_outcome_id=lo_id).first()
     knowledge_level = mastery.knowledge_level if mastery else 0.0
+
+    # Adaptive resource selection
+    resources = LearningResource.query.filter(
+        LearningResource.learning_outcome_id == lo_id,
+        LearningResource.min_mastery <= knowledge_level,
+        LearningResource.max_mastery >= knowledge_level
+    ).all()
+
     rec, expl = get_recommendation(knowledge_level)
-    return render_template('learning_outcome.html', lo=lo, knowledge_level=knowledge_level, recommendation=rec, explanation=expl, is_locked=is_locked)
+    return render_template('learning_outcome.html', lo=lo, knowledge_level=knowledge_level, recommendation=rec, explanation=expl, is_locked=is_locked, resources=resources)
 
 @app.route('/lo/<int:lo_id>/test', methods=['POST'])
 @login_required
@@ -115,10 +123,13 @@ def take_test(lo_id):
         db.session.add(mastery)
 
     p_before = mastery.knowledge_level
-    new_level = calculate_bkt(p_before, correct)
+    new_level, reasoning = calculate_bkt(p_before, correct)
     rec, expl = get_recommendation(new_level)
 
-    log = RecommendationLog(user_id=current_user.id, learning_outcome_id=lo_id, recommendation=rec, explanation=expl)
+    # Enrich explanation with AI reasoning for XAI
+    full_explanation = f"{expl} | AI Insight: {reasoning['message']}"
+
+    log = RecommendationLog(user_id=current_user.id, learning_outcome_id=lo_id, recommendation=rec, explanation=full_explanation)
     db.session.add(log)
 
     attempt = AttemptLog(

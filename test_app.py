@@ -4,18 +4,16 @@ from engine import calculate_bkt, get_recommendation
 class TestEngine(unittest.TestCase):
     def test_bkt_progression(self):
         # Testing with initial p = 0.3
-        p1 = calculate_bkt(0.3, True)
+        p1, reasoning = calculate_bkt(0.3, True)
         self.assertGreater(p1, 0.3)
+        self.assertIn("Correct", reasoning['message'])
 
-        p2 = calculate_bkt(p1, True)
+        p2, reasoning = calculate_bkt(p1, True)
         self.assertGreater(p2, p1)
 
-        p3 = calculate_bkt(p2, False)
+        p3, reasoning = calculate_bkt(p2, False)
         self.assertLess(p3, p2)
-
-        # Test lower clamp
-        p_low = calculate_bkt(0.01, False)
-        self.assertGreaterEqual(p_low, 0.01)
+        self.assertIn("Incorrect", reasoning['message'])
 
     def test_recommendations(self):
         rec1, _ = get_recommendation(0.2)

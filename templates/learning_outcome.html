@@ -20,19 +20,23 @@
         <h2>{{ lo.name }}</h2>
         <p class="lead">{{ lo.description }}</p>
 
-        <div class="card mb-3">
-            <div class="card-body">
-                <h5 class="card-title">Adaptive Notes</h5>
-                <p>{{ lo.notes }}</p>
+        {% if resources %}
+            {% for resource in resources %}
+            <div class="card mb-3 border-primary shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title text-primary">{{ resource.title }} <small class="text-muted">({{ resource.type }})</small></h5>
+                    <p>{{ resource.content }}</p>
+                </div>
             </div>
-        </div>
-
-        <div class="card mb-3">
-            <div class="card-body">
-                <h5 class="card-title">Worked Examples</h5>
-                <p>{{ lo.examples }}</p>
+            {% endfor %}
+        {% else %}
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Learning Materials</h5>
+                    <p>{{ lo.notes }}</p>
+                </div>
             </div>
-        </div>
+        {% endif %}
 
         <div class="card mb-3">
             <div class="card-body">

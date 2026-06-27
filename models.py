@@ -91,3 +91,12 @@ class AttemptLog(db.Model):
     __table_args__ = (
         db.Index('ix_attempt_log_user_lo', 'user_id', 'learning_outcome_id'),
     )
+
+class LearningResource(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    learning_outcome_id = db.Column(db.Integer, db.ForeignKey('learning_outcome.id'), nullable=False)
+    type = db.Column(db.String(50)) # notes, video, example
+    title = db.Column(db.String(200))
+    content = db.Column(db.Text)
+    min_mastery = db.Column(db.Float, default=0.0)
+    max_mastery = db.Column(db.Float, default=1.0)
