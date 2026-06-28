@@ -8,6 +8,7 @@ class TestProduction(unittest.TestCase):
         app.config['TESTING'] = True
         app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
         app.config['WTF_CSRF_ENABLED'] = False
+        app.config['DEBUG'] = True
         self.client = app.test_client()
         with app.app_context():
             db.create_all()
@@ -25,7 +26,11 @@ class TestProduction(unittest.TestCase):
     def test_index_redirects_to_login(self):
         response = self.client.get('/')
         self.assertEqual(response.status_code, 302)
-        self.assertIn('/login', response.location)
+        self.assertTrue(response.location.endswith('/login') or '/login' in response.location)
+
+    def test_sync_endpoint_auth(self):
+        response = self.client.post('/sync/assessments', json={'attempts': []})
+        self.assertEqual(response.status_code, 302)
 
 if __name__ == '__main__':
     unittest.main()
