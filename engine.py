@@ -1,11 +1,13 @@
+import os
+
 def calculate_bkt(current_p, correct):
     """
     Bayesian Knowledge Tracing with Explainability
     Returns: (new_p, reasoning)
     """
-    p_transit = 0.1
-    p_slip = 0.1
-    p_guess = 0.2
+    p_transit = float(os.environ.get('BKT_TRANSIT', 0.1))
+    p_slip = float(os.environ.get('BKT_SLIP', 0.1))
+    p_guess = float(os.environ.get('BKT_GUESS', 0.2))
 
     if correct:
         p_posterior = (current_p * (1 - p_slip)) / (current_p * (1 - p_slip) + (1 - current_p) * p_guess)

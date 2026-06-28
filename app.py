@@ -2,19 +2,23 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 from functools import wraps
+from datetime import datetime
 from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_wtf.csrf import CSRFProtect
+from flask_migrate import Migrate
 from flask_talisman import Talisman
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_migrate import Migrate
 from whitenoise import WhiteNoise
 from werkzeug.security import check_password_hash
 from engine import calculate_bkt, get_recommendation
 from models import db, User, Subject, Topic, LearningOutcome, MasteryRecord, Evidence, RecommendationLog, AttemptLog, LearningResource
 
 app = Flask(__name__)
+
+# Static files with WhiteNoise
+app.wsgi_app = WhiteNoise(app.wsgi_app, root='static/', prefix='static/')
 
 # Production configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///learn2master.db')
@@ -24,16 +28,32 @@ if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Static files with WhiteNoise
-app.wsgi_app = WhiteNoise(app.wsgi_app, root='static/', prefix='static/')
+# Logging Configuration
+if not app.debug:
+    if not os.path.exists('logs'):
+        os.mkdir('logs')
+    file_handler = RotatingFileHandler('logs/learn2master.log', maxBytes=10240, backupCount=10)
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'))
+    file_handler.setLevel(logging.INFO)
+    app.logger.addHandler(file_handler)
+    app.logger.setLevel(logging.INFO)
+    app.logger.info('Learn2Master startup')
 
 # Database initialization
 db.init_app(app)
 migrate = Migrate(app, db)
 
-# Security: CSRF and Security Headers
+# Rate Limiting
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
 csrf = CSRFProtect(app)
-# CSP policy: Allow Chart.js, Google Fonts, and inline styles for the prototype
+
+# Security Headers: Allow Chart.js, Google Fonts, and inline styles for the prototype
 csp = {
     'default-src': "'self'",
     'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
@@ -41,32 +61,11 @@ csp = {
     'script-src': ["'self'", 'https://cdn.jsdelivr.net', "'unsafe-inline'"],
     'img-src': ["'self'", 'data:', 'https://*']
 }
-Talisman(app, content_security_policy=csp, force_https=False) # force_https=False for dev/demo
-
-# Rate Limiting
-limiter = Limiter(
-    get_remote_address,
-    app=app,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
-)
+Talisman(app, content_security_policy=csp, force_https=not (app.debug or app.config.get('TESTING')))
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-
-# Logging
-if not app.debug:
-    if not os.path.exists('logs'):
-        os.mkdir('logs')
-    file_handler = RotatingFileHandler('logs/learn2master.log', maxBytes=10240, backupCount=10)
-    file_handler.setFormatter(logging.Formatter(
-        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
-    ))
-    file_handler.setLevel(logging.INFO)
-    app.logger.addHandler(file_handler)
-    app.logger.setLevel(logging.INFO)
-    app.logger.info('Learn2Master startup')
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -98,8 +97,56 @@ def index():
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
+@app.route('/health')
+def health():
+    return {"status": "healthy"}, 200
+
+@app.route('/sync/assessments', methods=['POST'])
+@login_required
+@role_required('student')
+def sync_assessments():
+    data = request.json
+    if not data or 'attempts' not in data:
+        return {"error": "Invalid data format"}, 400
+
+    results = []
+    for attempt in data['attempts']:
+        lo_id = attempt.get('learning_outcome_id')
+        correct = attempt.get('correct')
+        timestamp_str = attempt.get('timestamp')
+
+        if not lo_id or correct is None:
+            continue
+
+        # Check for existing attempt with same timestamp to ensure idempotency
+        if timestamp_str:
+            ts = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+            existing = AttemptLog.query.filter_by(user_id=current_user.id, learning_outcome_id=lo_id, timestamp=ts).first()
+            if existing: continue
+
+        mastery = MasteryRecord.query.filter_by(user_id=current_user.id, learning_outcome_id=lo_id).first()
+        if not mastery:
+            mastery = MasteryRecord(user_id=current_user.id, learning_outcome_id=lo_id, knowledge_level=0.3)
+            db.session.add(mastery)
+
+        p_before = mastery.knowledge_level
+        new_level, reasoning = calculate_bkt(p_before, correct)
+        rec, expl = get_recommendation(new_level)
+
+        log = RecommendationLog(user_id=current_user.id, learning_outcome_id=lo_id, recommendation=rec, explanation=f"{expl} | Sync")
+        db.session.add(log)
+
+        new_attempt = AttemptLog(user_id=current_user.id, learning_outcome_id=lo_id, correct=correct, p_before=p_before, p_after=new_level)
+        if timestamp_str: new_attempt.timestamp = ts
+        db.session.add(new_attempt)
+
+        mastery.knowledge_level = new_level
+
+    db.session.commit()
+    return {"status": "synced"}, 200
+
 @app.route('/login', methods=['GET', 'POST'])
-@limiter.limit("10 per minute")
+@limiter.limit('10 per minute')
 def login():
     if request.method == 'POST':
         user = db.session.execute(db.select(User).filter_by(username=request.form['username'])).scalar_one_or_none()
@@ -183,7 +230,12 @@ def view_lo(lo_id):
 @role_required('student')
 @limiter.limit("30 per hour")
 def take_test(lo_id):
-    correct = request.form.get('correct') == 'true'
+    correct_val = request.form.get('correct')
+    if correct_val not in ['true', 'false']:
+        flash('Invalid test data')
+        return redirect(url_for('view_lo', lo_id=lo_id))
+    correct = correct_val == 'true'
+
     mastery = db.session.execute(
         db.select(MasteryRecord).filter_by(user_id=current_user.id, learning_outcome_id=lo_id)
     ).scalar_one_or_none()
@@ -248,6 +300,9 @@ def admin_users():
 @role_required('student')
 def submit_evidence(lo_id):
     content = request.form.get('content')
+    if not content or len(content.strip()) == 0:
+        flash('Evidence content cannot be empty')
+        return redirect(url_for('view_lo', lo_id=lo_id))
     evidence_type = request.form.get('type', 'text')
 
     evidence = Evidence(
@@ -268,6 +323,9 @@ def submit_evidence(lo_id):
 def review_evidence(evidence_id):
     evidence = db.get_or_404(Evidence, evidence_id)
     status = request.form.get('status') # approved or rejected
+    if status not in ['approved', 'rejected']:
+        flash('Invalid status')
+        return redirect(url_for('teacher_evidence'))
     feedback = request.form.get('feedback')
 
     evidence.status = status
@@ -300,4 +358,4 @@ def view_progress():
     return render_template('progress.html', attempts=attempts)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true', port=int(os.environ.get('PORT', 5000)))
