@@ -1,25 +1,76 @@
 import os
+import logging
+from logging.handlers import RotatingFileHandler
 from functools import wraps
 from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_wtf.csrf import CSRFProtect
+from flask_talisman import Talisman
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_migrate import Migrate
+from whitenoise import WhiteNoise
 from werkzeug.security import check_password_hash
 from engine import calculate_bkt, get_recommendation
 from models import db, User, Subject, Topic, LearningOutcome, MasteryRecord, Evidence, RecommendationLog, AttemptLog, LearningResource
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///learn2master.db'
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
 
+# Production configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///learn2master.db')
+if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
+    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
+
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Static files with WhiteNoise
+app.wsgi_app = WhiteNoise(app.wsgi_app, root='static/', prefix='static/')
+
+# Database initialization
 db.init_app(app)
+migrate = Migrate(app, db)
+
+# Security: CSRF and Security Headers
 csrf = CSRFProtect(app)
+# CSP policy: Allow Chart.js, Google Fonts, and inline styles for the prototype
+csp = {
+    'default-src': "'self'",
+    'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+    'font-src': ["'self'", 'https://fonts.gstatic.com'],
+    'script-src': ["'self'", 'https://cdn.jsdelivr.net', "'unsafe-inline'"],
+    'img-src': ["'self'", 'data:', 'https://*']
+}
+Talisman(app, content_security_policy=csp, force_https=False) # force_https=False for dev/demo
+
+# Rate Limiting
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+# Logging
+if not app.debug:
+    if not os.path.exists('logs'):
+        os.mkdir('logs')
+    file_handler = RotatingFileHandler('logs/learn2master.log', maxBytes=10240, backupCount=10)
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+    ))
+    file_handler.setLevel(logging.INFO)
+    app.logger.addHandler(file_handler)
+    app.logger.setLevel(logging.INFO)
+    app.logger.info('Learn2Master startup')
+
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 def role_required(*roles):
     def decorator(f):
@@ -32,6 +83,15 @@ def role_required(*roles):
         return decorated
     return decorator
 
+@app.errorhandler(404)
+def not_found_error(error):
+    return render_template('errors/404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return render_template('errors/500.html'), 500
+
 @app.route('/')
 def index():
     if current_user.is_authenticated:
@@ -39,9 +99,10 @@ def index():
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute")
 def login():
     if request.method == 'POST':
-        user = User.query.filter_by(username=request.form['username']).first()
+        user = db.session.execute(db.select(User).filter_by(username=request.form['username'])).scalar_one_or_none()
         if user and check_password_hash(user.password_hash, request.form['password']):
             login_user(user)
             return redirect(url_for('dashboard'))
@@ -58,7 +119,7 @@ def logout():
 @login_required
 def dashboard():
     if current_user.role == 'student':
-        subjects = Subject.query.all()
+        subjects = db.session.execute(db.select(Subject)).scalars().all()
         return render_template('student_dashboard.html', subjects=subjects)
     elif current_user.role == 'teacher':
         return render_template('teacher_dashboard.html')
@@ -70,41 +131,49 @@ def dashboard():
 @login_required
 @role_required('student', 'teacher', 'admin')
 def view_subject(subject_id):
-    subject = Subject.query.get_or_404(subject_id)
+    subject = db.get_or_404(Subject, subject_id)
     return render_template('subject.html', subject=subject)
 
 @app.route('/learning_outcome/<int:lo_id>')
 @login_required
 @role_required('student', 'teacher', 'admin')
 def view_lo(lo_id):
-    lo = LearningOutcome.query.get_or_404(lo_id)
+    lo = db.get_or_404(LearningOutcome, lo_id)
 
     # Check for sequential locking (only for students)
     is_locked = False
     if current_user.role == 'student':
-        previous_los = LearningOutcome.query.filter(
-            LearningOutcome.topic_id == lo.topic_id,
-            LearningOutcome.order < lo.order
-        ).all()
+        previous_los = db.session.execute(
+            db.select(LearningOutcome).filter(
+                LearningOutcome.topic_id == lo.topic_id,
+                LearningOutcome.order < lo.order
+            )
+        ).scalars().all()
 
         for prev_lo in previous_los:
-            prev_mastery = MasteryRecord.query.filter_by(
-                user_id=current_user.id,
-                learning_outcome_id=prev_lo.id
-            ).first()
+            prev_mastery = db.session.execute(
+                db.select(MasteryRecord).filter_by(
+                    user_id=current_user.id,
+                    learning_outcome_id=prev_lo.id
+                )
+            ).scalar_one_or_none()
             if not prev_mastery or prev_mastery.knowledge_level < 0.85:
                 is_locked = True
                 break
 
-    mastery = MasteryRecord.query.filter_by(user_id=current_user.id, learning_outcome_id=lo_id).first()
+    mastery = db.session.execute(
+        db.select(MasteryRecord).filter_by(user_id=current_user.id, learning_outcome_id=lo_id)
+    ).scalar_one_or_none()
     knowledge_level = mastery.knowledge_level if mastery else 0.0
 
     # Adaptive resource selection
-    resources = LearningResource.query.filter(
-        LearningResource.learning_outcome_id == lo_id,
-        LearningResource.min_mastery <= knowledge_level,
-        LearningResource.max_mastery >= knowledge_level
-    ).all()
+    resources = db.session.execute(
+        db.select(LearningResource).filter(
+            LearningResource.learning_outcome_id == lo_id,
+            LearningResource.min_mastery <= knowledge_level,
+            LearningResource.max_mastery >= knowledge_level
+        )
+    ).scalars().all()
 
     rec, expl = get_recommendation(knowledge_level)
     return render_template('learning_outcome.html', lo=lo, knowledge_level=knowledge_level, recommendation=rec, explanation=expl, is_locked=is_locked, resources=resources)
@@ -112,9 +181,12 @@ def view_lo(lo_id):
 @app.route('/lo/<int:lo_id>/test', methods=['POST'])
 @login_required
 @role_required('student')
+@limiter.limit("30 per hour")
 def take_test(lo_id):
     correct = request.form.get('correct') == 'true'
-    mastery = MasteryRecord.query.filter_by(user_id=current_user.id, learning_outcome_id=lo_id).first()
+    mastery = db.session.execute(
+        db.select(MasteryRecord).filter_by(user_id=current_user.id, learning_outcome_id=lo_id)
+    ).scalar_one_or_none()
 
     # Initialize with p_init if not exists
     if not mastery:
@@ -150,21 +222,25 @@ def take_test(lo_id):
 @role_required('teacher')
 def teacher_evidence():
     # Filter by teacher's school for basic multi-tenancy support
-    evidences = Evidence.query.join(User).filter(User.school == current_user.school).all()
+    evidences = db.session.execute(
+        db.select(Evidence).join(User).filter(User.school == current_user.school)
+    ).scalars().all()
     return render_template('teacher_evidence.html', evidences=evidences)
 
 @app.route('/teacher/recommendations')
 @login_required
 @role_required('teacher')
 def teacher_recommendations():
-    logs = RecommendationLog.query.join(User).filter(User.school == current_user.school).order_by(RecommendationLog.timestamp.desc()).limit(100).all()
+    logs = db.session.execute(
+        db.select(RecommendationLog).join(User).filter(User.school == current_user.school).order_by(RecommendationLog.timestamp.desc()).limit(100)
+    ).scalars().all()
     return render_template('teacher_recommendations.html', logs=logs)
 
 @app.route('/admin/users')
 @login_required
 @role_required('admin')
 def admin_users():
-    users = User.query.all()
+    users = db.session.execute(db.select(User)).scalars().all()
     return render_template('admin_users.html', users=users)
 
 @app.route('/lo/<int:lo_id>/evidence', methods=['POST'])
@@ -190,7 +266,7 @@ def submit_evidence(lo_id):
 @login_required
 @role_required('teacher')
 def review_evidence(evidence_id):
-    evidence = Evidence.query.get_or_404(evidence_id)
+    evidence = db.get_or_404(Evidence, evidence_id)
     status = request.form.get('status') # approved or rejected
     feedback = request.form.get('feedback')
 
@@ -199,10 +275,12 @@ def review_evidence(evidence_id):
 
     # If approved, boost mastery to 1.0 (or 0.99)
     if status == 'approved':
-        mastery = MasteryRecord.query.filter_by(
-            user_id=evidence.user_id,
-            learning_outcome_id=evidence.learning_outcome_id
-        ).first()
+        mastery = db.session.execute(
+            db.select(MasteryRecord).filter_by(
+                user_id=evidence.user_id,
+                learning_outcome_id=evidence.learning_outcome_id
+            )
+        ).scalar_one_or_none()
         if not mastery:
             mastery = MasteryRecord(user_id=evidence.user_id, learning_outcome_id=evidence.learning_outcome_id)
             db.session.add(mastery)
@@ -216,7 +294,9 @@ def review_evidence(evidence_id):
 @login_required
 @role_required('student')
 def view_progress():
-    attempts = AttemptLog.query.filter_by(user_id=current_user.id).order_by(AttemptLog.timestamp.desc()).all()
+    attempts = db.session.execute(
+        db.select(AttemptLog).filter_by(user_id=current_user.id).order_by(AttemptLog.timestamp.desc())
+    ).scalars().all()
     return render_template('progress.html', attempts=attempts)
 
 if __name__ == '__main__':
