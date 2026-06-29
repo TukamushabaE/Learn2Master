@@ -1,36 +1,67 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Learning Progress Trail</h2>
-<p>Track your mastery journey through the Competency-Based Curriculum.</p>
-{% if attempts %}
-<table class="table">
-    <thead>
-        <tr>
-            <th>Learning Outcome</th>
-            <th>Result</th>
-            <th>Knowledge Gain</th>
-            <th>Timestamp</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for attempt in attempts %}
-        <tr>
-            <td>{{ attempt.learning_outcome_id }}</td>
-            <td>
-                {% if attempt.correct %}
-                    <span class="badge bg-success">Correct</span>
-                {% else %}
-                    <span class="badge bg-danger">Incorrect</span>
-                {% endif %}
-            </td>
-            <td>{{ (attempt.p_before * 100) | round(1) }}% → {{ (attempt.p_after * 100) | round(1) }}%</td>
-            <td>{{ attempt.timestamp }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p>No attempts recorded yet. Start learning from your dashboard!</p>
-{% endif %}
-<a href="{{ url_for('dashboard') }}" class="btn btn-primary">Back to Dashboard</a>
+<h2>My Progress Trail <a href="{{ url_for('export_student_report') }}" class="btn btn-sm btn-outline-success float-end">Export CSV</a></h2>
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <canvas id="masteryChart" height="100"></canvas>
+    </div>
+</div>
+<div class="row">
+    <div class="col-md-12">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Learning Outcome</th>
+                    <th>Result</th>
+                    <th>Mastery Change</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for attempt in attempts %}
+                <tr>
+                    <td>{{ attempt.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>{{ attempt.learning_outcome.name }}</td>
+                    <td>
+                        {% if attempt.correct %}
+                        <span class="badge bg-success">Correct</span>
+                        {% else %}
+                        <span class="badge bg-danger">Incorrect</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ (attempt.p_before * 100) | round(0) }}% &rarr; {{ (attempt.p_after * 100) | round(0) }}%
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('masteryChart').getContext('2d');
+    const data = {
+        labels: [{% for attempt in attempts | reverse %}"{{ attempt.timestamp.strftime('%m/%d %H:%M') }}",{% endfor %}],
+        datasets: [{
+            label: 'Mastery Progress',
+            data: [{% for attempt in attempts | reverse %}{{ attempt.p_after }},{% endfor %}],
+            borderColor: 'rgb(75, 192, 192)',
+            tension: 0.1
+        }]
+    };
+    new Chart(ctx, {
+        type: 'line',
+        data: data,
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 1
+                }
+            }
+        }
+    });
+</script>
 {% endblock %}
