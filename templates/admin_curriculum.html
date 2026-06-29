@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card p-4">
+    <h2 class="fw-bold mb-4">Curriculum Management</h2>
+    <div class="row">
+        {% for subject in subjects %}
+        <div class="col-md-6 mb-4">
+            <div class="card border p-3">
+                <h5>{{ subject.name }}</h5>
+                <p class="small text-muted">{{ subject.topics|length }} Topics</p>
+                <a href="#" class="btn btn-sm btn-primary">Edit Syllabus</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

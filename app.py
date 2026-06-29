@@ -172,7 +172,8 @@ def dashboard():
     elif current_user.role == 'teacher':
         return redirect(url_for('teacher_dashboard_home'))
     elif current_user.role == 'admin':
-        return render_template('admin_dashboard.html')
+        recent_logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(10).all()
+        return render_template('admin_dashboard.html', recent_logs=recent_logs)
     return "Unknown role"
 
 @app.route('/teacher/dashboard')
@@ -521,15 +522,31 @@ def admin_usage_report():
 @app.route('/ai/tutor', methods=['POST'])
 @login_required
 def ai_tutor():
-    user_input = request.json.get('message')
-    # Simple rule-based AI tutor as a placeholder for LLM integration
-    response = "I am your Learn2Master AI tutor. "
-    if 'mastery' in user_input.lower():
-        response += "Mastery is calculated using Bayesian Knowledge Tracing, which estimates the probability that you know a concept based on your quiz performance."
-    elif 'progress' in user_input.lower():
-        response += "You can track your progress in the 'My Progress Trail' section of your dashboard."
+    user_input = request.json.get('message').lower()
+
+    # Context-aware logic using student's mastery data
+    mastery_records = MasteryRecord.query.filter_by(user_id=current_user.id).all()
+    avg_mastery = sum([m.knowledge_level for m in mastery_records]) / len(mastery_records) if mastery_records else 0.0
+
+    response = "Hello " + current_user.username.capitalize() + "! I'm your Learn2Master Assistant. "
+
+    if 'mastery' in user_input:
+        response += f"Your current average mastery across all subjects is {avg_mastery:.1%}. We use Bayesian Knowledge Tracing (BKT) to accurately track your learning progress."
+    elif 'help' in user_input or 'struggling' in user_input:
+        low_mastery = [m for m in mastery_records if m.knowledge_level < 0.5]
+        if low_mastery:
+            lo_name = low_mastery[0].learning_outcome.name
+            response += f"I noticed you're finding '{lo_name}' a bit challenging. I recommend reviewing the foundational notes and attempting some practice questions to boost your understanding."
+        else:
+            response += "You're doing great! Keep focusing on your current learning outcomes. Is there a specific topic you'd like to discuss?"
+    elif 'progress' in user_input:
+        recent = AttemptLog.query.filter_by(user_id=current_user.id).order_by(AttemptLog.timestamp.desc()).first()
+        if recent:
+            response += f"Your last activity was on '{recent.learning_outcome.name}', where you achieved a mastery level of {recent.p_after:.1%}. You're on the right track!"
+        else:
+            response += "You haven't started any assessments yet. Pick a subject from your dashboard to begin your journey!"
     else:
-        response += "Focus on completing your current learning outcome and achieving at least 85% mastery to unlock the next one."
+        response += "I'm here to support your learning under the Ugandan CBC. You can ask me about your mastery, progress, or for help with specific topics."
 
     return {"response": response}
 
@@ -550,6 +567,35 @@ def researcher_dashboard():
     return render_template('researcher_dashboard.html', stats=stats)
 # End of app.py
 
+
+@app.route('/admin/schools')
+@login_required
+@role_required('admin')
+def admin_schools():
+    # Placeholder for school management
+    schools = db.session.query(User.school).distinct().all()
+    return render_template('admin_schools.html', schools=[s[0] for s in schools if s[0]])
+
+@app.route('/admin/curriculum')
+@login_required
+@role_required('admin')
+def admin_curriculum():
+    subjects = Subject.query.all()
+    return render_template('admin_curriculum.html', subjects=subjects)
+
+@app.route('/admin/competencies')
+@login_required
+@role_required('admin')
+def admin_competencies():
+    # In CBC, competencies are often mapped to Learning Outcomes
+    outcomes = LearningOutcome.query.all()
+    return render_template('admin_competencies.html', outcomes=outcomes)
+
+@app.route('/admin/settings')
+@login_required
+@role_required('admin')
+def admin_settings():
+    return render_template('admin_settings.html')
 
 if __name__ == '__main__':
     app.run(debug=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true', port=int(os.environ.get('PORT', 5000)))
