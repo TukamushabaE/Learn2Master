@@ -1,0 +1,23 @@
+{% extends "layouts/base.html" %}
+{% block title %}Question Bank{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="learn-card">
+    <span class="subject-code">Concept-Tagged Question Bank</span>
+    <h1>Questions</h1>
+    <div class="concept-grid">
+        {% for q in rows %}
+        <div class="concept-pill">
+            <span>{{ q.subject_name }} - {{ q.assessment_type|title }}</span>
+            <strong>{{ q.concept_tag.replace('_',' ')|title }}</strong>
+            <small>{{ q.question_text }}</small>
+            <small>Difficulty: {{ q.difficulty_level }} - Bloom: {{ q.bloom_level }} - Time: {{ q.estimated_time_minutes }} min</small>
+            <small>Feedback: {{ q.feedback }}</small>
+            <small>Resource hint: {{ q.resource_hint }}</small>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

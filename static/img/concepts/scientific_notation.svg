@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">Scientific notation</title>
+  <desc id="desc">Large and small measurements can be written using powers of ten.</desc>
+  <rect width="720" height="360" fill="#f7fbff"/>
+  <rect x="90" y="70" width="540" height="220" rx="18" fill="#ffffff" stroke="#7c8da0" stroke-width="3"/>
+  <text x="360" y="117" text-anchor="middle" font-family="Inter,Arial" font-size="24" font-weight="800" fill="#26394f">Scientific Notation</text>
+  <text x="360" y="170" text-anchor="middle" font-family="Inter,Arial" font-size="28" font-weight="800" fill="#17486a">4 500 m = 4.5 x 10³ m</text>
+  <text x="360" y="225" text-anchor="middle" font-family="Inter,Arial" font-size="28" font-weight="800" fill="#6f4200">0.003 s = 3 x 10⁻³ s</text>
+  <text x="360" y="326" text-anchor="middle" font-family="Inter,Arial" font-size="16" font-weight="700" fill="#26394f">Use it to record very large or very small measurements clearly.</text>
+</svg>

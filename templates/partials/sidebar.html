@@ -1,0 +1,34 @@
+<aside class="sidebar">
+    <div class="brand-block">
+        <div class="brand-mark">L2M</div>
+        <div>
+            <div class="brand-name">Learn2Master</div>
+            <div class="brand-subtitle">CBC Mastery AI</div>
+        </div>
+    </div>
+
+    <nav class="side-nav">
+        {% if session.get("role") == "learner" %}
+        <a href="{{ url_for('student.student_dashboard') }}" class="nav-link">Home <span>Dashboard</span></a>
+        <a href="{{ url_for('subjects.subjects') }}" class="nav-link">Subjects <span>Physics + ICT</span></a>
+        <a href="{{ url_for('student.assessments') }}" class="nav-link">Assessments <span>Evidence</span></a>
+        <a href="{{ url_for('student.my_analytics') }}" class="nav-link">Analytics <span>Progress</span></a>
+        {% elif session.get("role") == "teacher" %}
+        <a href="{{ url_for('teacher.teacher_dashboard') }}" class="nav-link">Teacher <span>Dashboard</span></a>
+        <a href="{{ url_for('teacher.learners') }}" class="nav-link">Learners <span>Profiles</span></a>
+        <a href="{{ url_for('teacher.ai_insights') }}" class="nav-link">AI <span>Insights</span></a>
+        <a href="{{ url_for('teacher.reports') }}" class="nav-link">Reports <span>Evidence</span></a>
+        {% elif session.get("role") in ["school_admin", "super_admin"] %}
+        <a href="{{ url_for('admin.admin_dashboard') }}" class="nav-link">Admin <span>Dashboard</span></a>
+        <a href="{{ url_for('admin.users') }}" class="nav-link">Users <span>Roles</span></a>
+        <a href="{{ url_for('admin.curriculum') }}" class="nav-link">Curriculum <span>CBC</span></a>
+        <a href="{{ url_for('admin.reports') }}" class="nav-link">Reports <span>Analytics</span></a>
+        {% endif %}
+    </nav>
+
+    <div class="research-card mini">
+        <strong>Research Prototype</strong>
+        <span>MSc Information Systems</span>
+        <small>AI-enabled mastery-based learning under CBC</small>
+    </div>
+</aside>

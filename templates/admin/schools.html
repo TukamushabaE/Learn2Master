@@ -1,0 +1,26 @@
+{% extends "layouts/base.html" %}
+{% block title %}Schools{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">{% endblock %}
+{% block content %}
+<section class="learn-card">
+    <span class="subject-code">Institution Management</span>
+    <h1>Schools</h1>
+    {% if can_add_school %}
+    <form method="post" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input name="school_name" placeholder="New school name" style="padding:10px;border:1px solid #d8dee8;border-radius:8px;">
+        <button type="submit" style="padding:10px 13px;border:1px solid #143d73;border-radius:8px;background:#143d73;color:#fff;font-weight:800;">Add School</button>
+    </form>
+    {% endif %}
+    <div class="concept-grid">
+        {% for s in schools %}
+        <div class="concept-pill good">
+            <span>{{ s.school_name }}</span>
+            <strong>{{ s.classes }} class(es)</strong>
+            <small>{{ s.users }} user account(s)</small>
+            <a href="{{ url_for('admin.school_report', school_id=s.school_id) }}">Open printable school report</a>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

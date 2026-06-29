@@ -1,0 +1,29 @@
+<aside class="sidebar">
+    <div class="brand-block">
+        <div class="brand-mark">L2M</div>
+        <div>
+            <div class="brand-name">Learn2Master</div>
+            <div class="brand-subtitle">Admin Portal</div>
+        </div>
+    </div>
+
+    <nav class="side-nav">
+        <a href="{{ url_for('admin.admin_dashboard') }}" class="nav-link">Home <span>Dashboard</span></a>
+        <a href="{{ url_for('admin.users') }}" class="nav-link">ID <span>Account Management</span></a>
+        <a href="{{ url_for('admin.create_user') }}" class="nav-link">New <span>Create Account</span></a>
+        <a href="{{ url_for('admin.roles') }}" class="nav-link">Role <span>Roles</span></a>
+        <a href="{{ url_for('admin.schools') }}" class="nav-link">School <span>Schools</span></a>
+        <a href="{{ url_for('admin.curriculum') }}" class="nav-link">Book <span>Curriculum</span></a>
+        <a href="{{ url_for('admin.competencies') }}" class="nav-link">Goal <span>Competencies</span></a>
+        <a href="{{ url_for('admin.questions') }}" class="nav-link">QBank <span>Question Bank</span></a>
+        <a href="{{ url_for('analytics.analytics_dashboard') }}" class="nav-link">Data <span>System Analytics</span></a>
+        <a href="{{ url_for('admin.settings') }}" class="nav-link">Set <span>Settings</span></a>
+        <a href="{{ url_for('admin.backups') }}" class="nav-link">Safe <span>Backups</span></a>
+        <a href="{{ url_for('admin.logs') }}" class="nav-link">Log <span>Audit Logs</span></a>
+        <a href="{{ url_for('admin.reports') }}" class="nav-link">Print <span>Reports</span></a>
+        <a href="{{ url_for('framework.alignment') }}" class="nav-link">Map <span>Framework Alignment</span></a>
+        <a href="{{ url_for('research.research_dashboard') }}" class="nav-link">Lab <span>Research Dashboard</span></a>
+        <a href="{{ url_for('research.research_reports') }}" class="nav-link">CSV <span>Research Reports</span></a>
+        <a href="{{ url_for('auth.logout') }}" class="nav-link">Exit <span>Logout</span></a>
+    </nav>
+</aside>

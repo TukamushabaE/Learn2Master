@@ -1,0 +1,27 @@
+{% extends "layouts/base.html" %}
+{% block title %}Mastery{% endblock %}
+{% block content %}
+<div class="page-hero">
+    <div><h1>Mastery Matrix</h1><p>This page demonstrates sequential competency tracking, mastery validation, and evidence-based progression under CBC.</p></div>
+</div>
+<div class="section-title"><div><h2>Competency Progress</h2><p>Each learning outcome is tracked against mastery score, level, and status.</p></div></div>
+<div class="card table-card">
+    <table class="data-table">
+        <thead><tr><th>Subject</th><th>Competency</th><th>Learning Outcome</th><th>Score</th><th>Level</th><th>Status</th></tr></thead>
+        <tbody>
+        {% for r in records %}
+            <tr>
+                <td>{{ r.subject_name }}</td>
+                <td><strong>{{ r.competency_code }}</strong><br><span style="color:var(--muted)">{{ r.competency_name }}</span></td>
+                <td><strong>{{ r.outcome_code }}</strong><br><span style="color:var(--muted)">{{ r.outcome_name }}</span></td>
+                <td>{{ r.mastery_score }}%</td>
+                <td>{{ r.mastery_level }}</td>
+                <td><span class="status {% if r.mastery_status == 'Mastered' %}mastered{% elif r.mastery_score > 0 %}in-progress{% endif %}">{{ r.mastery_status }}</span></td>
+            </tr>
+        {% else %}
+            <tr><td colspan="6" class="empty-state">No mastery records found.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

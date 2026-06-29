@@ -1,0 +1,87 @@
+{% extends "layouts/base.html" %}
+{% block title %}Curriculum{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>
+.admin-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.admin-form-grid label{font-weight:700}.admin-form-grid input,.admin-form-grid select,.admin-form-grid textarea{width:100%;margin-top:5px;padding:10px;border:1px solid #d8dee8;border-radius:8px;background:#fff}.full-span{grid-column:1/-1}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;cursor:pointer}.curriculum-row{display:grid;grid-template-columns:1.1fr 1.6fr 1fr;gap:12px;padding:13px 0;border-bottom:1px solid #edf1f6}@media(max-width:900px){.admin-form-grid,.curriculum-row{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div>
+    <p class="eyebrow">NCDC CBC Curriculum Mapping</p>
+    <h1>Curriculum Management</h1>
+    <p>Manage subjects, topics, competencies, learning outcomes, performance indicators and success criteria for the mastery pathway.</p>
+  </div>
+  <div class="hero-badge"><span>Mode</span><strong>{% if can_edit %}Editable{% else %}Review{% endif %}</strong></div>
+</section>
+
+{% if can_edit %}
+<section class="learn-card">
+  <span class="subject-code">Curriculum Authoring</span>
+  <h2>Add CBC Elements</h2>
+  <form method="post" class="admin-form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="curriculum_action" value="add_subject">
+    <label>Subject<input name="subject_name" placeholder="e.g. Chemistry"></label>
+    <div><button class="button" type="submit">Add Subject</button></div>
+  </form>
+  <hr>
+  <form method="post" class="admin-form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="curriculum_action" value="add_topic">
+    <label>Subject<select name="subject_id">{% for s in subjects %}<option value="{{ s.subject_id }}">{{ s.subject_name }}</option>{% endfor %}</select></label>
+    <label>Term<select name="term_id">{% for t in terms %}<option value="{{ t.term_id }}">{{ t.term_name }}</option>{% endfor %}</select></label>
+    <label>Class Level<input name="class_level" value="Senior One"></label>
+    <label>Topic<input name="topic_title" required></label>
+    <label class="full-span">Description<textarea name="topic_description" rows="2"></textarea></label>
+    <div><button class="button" type="submit">Add Topic</button></div>
+  </form>
+  <hr>
+  <form method="post" class="admin-form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="curriculum_action" value="add_outcome">
+    <label>Competency<select name="competency_id">{% for c in competencies %}<option value="{{ c.competency_id }}">{{ c.subject_name }} - {{ c.competency_code }}</option>{% endfor %}</select></label>
+    <label>Topic<select name="topic_id">{% for t in topics %}<option value="{{ t.topic_id }}">{{ t.subject_name }} - {{ t.topic_title }}</option>{% endfor %}</select></label>
+    <label>Outcome Code<input name="outcome_code" required></label>
+    <label class="full-span">Outcome Name<input name="outcome_name" required></label>
+    <label class="full-span">Description<textarea name="outcome_description" rows="2"></textarea></label>
+    <label>Threshold<input type="number" name="mastery_threshold" value="80" min="50" max="100"></label>
+    <label>Sequence<input type="number" name="sequence_order" value="1" min="1"></label>
+    <label><input type="checkbox" name="practical_required"> Practical evidence required</label>
+    <label><input type="checkbox" name="teacher_review_required"> Teacher review required</label>
+    <div><button class="button" type="submit">Add Outcome</button></div>
+  </form>
+  <hr>
+  <form method="post" class="admin-form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="curriculum_action" value="add_indicator">
+    <label>Learning Outcome<select name="outcome_id">{% for o in outcomes %}<option value="{{ o.outcome_id }}">{{ o.outcome_code }} - {{ o.outcome_name }}</option>{% endfor %}</select></label>
+    <label class="full-span">Performance Indicator<input name="indicator_text" required></label>
+    <div><button class="button" type="submit">Add Indicator</button></div>
+  </form>
+  <hr>
+  <form method="post" class="admin-form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="curriculum_action" value="add_success_criterion">
+    <label>Learning Outcome<select name="outcome_id">{% for o in outcomes %}<option value="{{ o.outcome_id }}">{{ o.outcome_code }} - {{ o.outcome_name }}</option>{% endfor %}</select></label>
+    <label class="full-span">Success Criterion<input name="criteria_text" required></label>
+    <div><button class="button" type="submit">Add Criterion</button></div>
+  </form>
+</section>
+{% endif %}
+
+<section class="learn-card">
+  <span class="subject-code">Curriculum Map</span>
+  <h2>Topics, Competencies and Learning Outcomes</h2>
+  {% for r in rows %}
+  <div class="curriculum-row">
+    <div><strong>{{ r.subject_name }}</strong><small>{{ r.course_title or "Course not generated yet" }}</small></div>
+    <div><strong>{{ r.outcome_code }}: {{ r.outcome_name }}</strong><small>{{ r.competency_code }} | indicators {{ r.indicators }} | success criteria {{ r.success_criteria }}</small></div>
+    <div><strong>{{ r.mastery_threshold }}%</strong><small>Seq {{ r.sequence_order }} | Practical {{ "Yes" if r.practical_required else "No" }} | Review {{ "Yes" if r.teacher_review_required else "No" }}</small></div>
+  </div>
+  {% else %}
+  <p>No curriculum records yet.</p>
+  {% endfor %}
+</section>
+{% endblock %}

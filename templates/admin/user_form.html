@@ -1,0 +1,104 @@
+{% extends "layouts/base.html" %}
+{% block title %}{% if user %}Edit Account{% else %}Create Account{% endif %}{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.form-grid label{font-weight:700}.admin-input,.admin-select{width:100%;margin-top:6px;padding:11px 12px;border:1px solid #d8dee8;border-radius:8px;background:#fff}.full-span{grid-column:1/-1}.form-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.button{border:1px solid #cfd7e3;border-radius:8px;background:#fff;padding:10px 14px;font-weight:800;text-decoration:none;color:#1f2937;cursor:pointer}.primary-button{background:#143d73;color:#fff;border-color:#143d73}.reset-panel{margin-top:18px;padding-top:18px;border-top:1px solid #edf0f5}@media(max-width:760px){.form-grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<section class="learn-card">
+    <span class="subject-code">Secure Account Administration</span>
+    <h1>{% if user %}Edit {{ user.full_name }}{% else %}Create Managed Account{% endif %}</h1>
+    <p>Teacher and administrator accounts are created here so public registration remains learner-only.</p>
+
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-grid">
+            <label>Full name
+                <input class="admin-input" name="full_name" value="{{ user.full_name if user else '' }}" required>
+            </label>
+            <label>Username
+                <input class="admin-input" name="username" value="{{ user.username if user else '' }}" {% if user %}readonly{% endif %} required>
+            </label>
+            <label>Email
+                <input class="admin-input" type="email" name="email" value="{{ user.email if user else '' }}">
+            </label>
+            <label>Phone
+                <input class="admin-input" name="phone" value="{{ user.phone if user else '' }}">
+            </label>
+            <label>Title or office
+                <input class="admin-input" name="title" value="{{ user.title if user else '' }}" placeholder="Class teacher, Head of ICT, Principal">
+            </label>
+            <label>Role
+                <select class="admin-select" name="role_name" required>
+                    {% for role in roles %}
+                    <option value="{{ role.role_name }}" {% if user and user.role_name == role.role_name %}selected{% endif %}>{{ role.display_name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>School
+                <select class="admin-select" name="school_id" required>
+                    {% for school in schools %}
+                    <option value="{{ school.school_id }}" {% if user and user.school_id == school.school_id %}selected{% endif %}>{{ school.school_name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Status
+                <select class="admin-select" name="account_status">
+                    {% for status in statuses %}
+                    <option value="{{ status }}" {% if user and user.account_status == status %}selected{% elif not user and status == 'Active' %}selected{% endif %}>{{ status }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Security level
+                <input class="admin-input" type="number" name="security_level" min="1" max="5" value="{{ user.security_level if user else 1 }}">
+            </label>
+            <label>Subject assignment
+                <select class="admin-select" name="subject_id">
+                    <option value="">No subject assigned</option>
+                    {% for subject in subjects %}
+                    <option value="{{ subject.subject_id }}" {% if assigned_subject_id == subject.subject_id %}selected{% endif %}>{{ subject.subject_name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Class / Stream assignment
+                <select class="admin-select" name="class_id">
+                    <option value="">No class assigned</option>
+                    {% for class_row in classes %}
+                    <option value="{{ class_row.class_id }}" {% if assigned_class_id == class_row.class_id %}selected{% endif %}>{{ class_row.class_name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            {% if not user %}
+            <label>Temporary password
+                <input class="admin-input" type="password" name="password" value="ChangeMe123!" required>
+            </label>
+            {% endif %}
+            <label class="full-span">
+                <input type="checkbox" name="must_change_password" {% if not user or user.must_change_password %}checked{% endif %}>
+                Require password change after next login
+            </label>
+        </div>
+        <div class="form-actions">
+            <button class="button primary-button" type="submit">Save Account</button>
+            <a class="button" href="{{ url_for('admin.users') }}">Back to Accounts</a>
+        </div>
+    </form>
+
+    {% if user %}
+    <div class="reset-panel">
+        <h2>Password Reset</h2>
+        <form method="post" action="{{ url_for('admin.reset_password', user_id=user.user_id) }}" class="form-grid">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label>New temporary password
+                <input class="admin-input" type="password" name="new_password" value="ChangeMe123!" required>
+            </label>
+            <div class="form-actions">
+                <button class="button" type="submit">Reset and Unlock</button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

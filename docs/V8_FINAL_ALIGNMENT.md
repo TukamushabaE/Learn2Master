@@ -1,16 +1,20 @@
-# V8 Final Alignment: Dissertation Framework
+# Learn2Master V8 Dissertation Final Edition
 
-## 1. Offline-First Architecture
-- **Service Worker**: Implemented in `static/sw.js` to cache core shell and assets.
-- **Manifest**: `static/manifest.json` for PWA installation on student devices.
+This version addresses the remaining proposal-alignment gaps by adding:
 
-## 2. CBC Learner Profiling & Adaptation
-- **Adaptive Resources**: Learning materials are matched to student mastery thresholds (min/max mastery).
-- **Sequential Locking**: Students cannot advance to LO(n+1) until LO(n) >= 85% mastery.
+1. **AI Learner Profiling**: profile fields and analytics-driven learner profile support.
+2. **Simplified Bayesian Knowledge Tracing (BKT)**: concept-level mastery probability updated after every assessment answer.
+3. **Explainable AI**: AI explanations stored in `ai_explanations` with evidence and confidence.
+4. **Sequential Content Adaptation**: next learning outcome remains locked until mastery evidence is complete.
+5. **Assessment and Feedback**: pre-test, adaptive practice, reflection, post-test, weak-concept feedback.
+6. **Recommendation System**: weak-concept notes, videos, worked examples, adaptive questions and remediation messages.
+7. **Teacher Decision Support**: AI review, teacher approval/override, interventions, practical evidence review.
+8. **Practical Evidence Portfolio**: learner submissions for screenshots, reports, experiment photos or practical artifacts.
+9. **Learning Analytics**: research dashboard with mastery, learning gain, reflections, practical evidence, BKT and offline metrics.
+10. **Offline-Ready Foundation**: local SQLite operation and sync queue table for offline event capture.
 
-## 3. Explainable AI (XAI)
-- **BKT Reasoning**: The `calculate_bkt` function now returns mathematical reasoning for every update.
-- **Teacher Oversight**: Reasoning is stored in `RecommendationLog` and exposed in teacher dashboards.
+## Scope
+The system remains a research prototype focused on Senior One Physics and ICT with one starter topic per subject, as agreed for feasibility.
 
-## 4. Scalability
-- **Containerization**: Docker and Docker Compose files provided for cloud deployment.
+## Remaining non-software work
+Full dissertation completion still requires pilot testing, screenshots, Chapter Four analysis, questionnaires, user feedback, and supervisor review.

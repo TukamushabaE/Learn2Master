@@ -1,13 +1,20 @@
 import os
-from flask import Flask
-from models import db
+import sqlite3
 
-app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///learn2master.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+DB_NAME = "learn2master.db"
 
-db.init_app(app)
+if os.path.exists(DB_NAME):
+    os.remove(DB_NAME)
 
-with app.app_context():
-    db.create_all()
-    print("Database initialized successfully.")
+with open("database_v2.sql", "r", encoding="utf-8") as f:
+    sql_script = f.read()
+
+conn = sqlite3.connect(DB_NAME)
+try:
+    conn.executescript(sql_script)
+    conn.commit()
+    print("Learn2Master research-grade database created successfully!")
+except Exception as e:
+    print("Error:", e)
+finally:
+    conn.close()

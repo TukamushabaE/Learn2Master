@@ -1,0 +1,19 @@
+{% extends "layouts/base.html" %}
+{% block title %}Courses{% endblock %}
+{% block content %}
+<div class="page-hero">
+    <div><h1>CBC Courses</h1><p>Courses are organized by subject and linked to competencies, outcomes, lessons, assessments, and mastery progression.</p></div>
+</div>
+<div class="section-title"><div><h2>Available Courses</h2><p>These courses form the learning pathway for the Learn2Master prototype.</p></div></div>
+<div class="grid grid-3">
+    {% for course in courses %}
+    <div class="card course-card">
+        <h3>{{ course.course_title }}</h3>
+        <p style="color:var(--muted)">{{ course.course_description }}</p>
+        <div class="course-meta"><span class="tag">{{ course.subject_name }}</span><span class="tag">{{ course.difficulty_level }}</span></div>
+    </div>
+    {% else %}
+    <div class="card empty-state">No courses available. Run seed_data.py first.</div>
+    {% endfor %}
+</div>
+{% endblock %}

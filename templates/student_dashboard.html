@@ -1,53 +1,73 @@
-{% extends "base.html" %}
+{% extends "layouts/base.html" %}
+
+{% block title %}Learner Dashboard{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subjects.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+
 {% block content %}
-<div class="row mb-4">
-    <div class="col-md-8">
-        <h2>Welcome back, {{ current_user.username }}!</h2>
-        <p class="lead">Continue your mastery journey today.</p>
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Learn2Master Research Prototype</p>
+        <h1>Good day, {{ session.get('full_name', 'Learner') }} 👋</h1>
+        <p>Senior One mastery-based learning for Physics and ICT. All mastery values on this dashboard come from assessment attempts processed by the algorithm.</p>
     </div>
-    <div class="col-md-4 text-end">
-        <div class="card bg-primary text-white">
-            <div class="card-body">
-                <h5 class="card-title">Overall Mastery</h5>
-                <h2 class="display-4">{{ (avg_mastery * 100) | round(1) }}%</h2>
-            </div>
-        </div>
+    <div class="hero-badge">
+        <span>Average Mastery</span>
+        <strong>{{ stats.avg_mastery }}%</strong>
     </div>
+</section>
+
+<div class="subject-grid">
+    <article class="subject-card">
+        <div class="subject-icon">🎯</div>
+        <div class="subject-content"><span class="subject-code">Mastered Outcomes</span><h2>{{ stats.mastered_outcomes }}/{{ stats.total_outcomes }}</h2><p>Generated from mastery records after formative assessments.</p></div>
+    </article>
+    <article class="subject-card">
+        <div class="subject-icon">📝</div>
+        <div class="subject-content"><span class="subject-code">Attempted Outcomes</span><h2>{{ stats.attempted }}</h2><p>Number of outcomes where the learner has submitted assessment evidence.</p></div>
+    </article>
 </div>
 
-<div class="row">
-    <div class="col-md-8">
-        <h4>Your Subjects</h4>
-        <div class="row">
-            {% for subject in subjects %}
-            <div class="col-md-6 mb-4">
-                <div class="card h-100 shadow-sm">
-                    <div class="card-body">
-                        <h5 class="card-title">{{ subject.name }}</h5>
-                        <p class="card-text">Master the competencies for {{ subject.name }}.</p>
-                        <a href="{{ url_for('view_subject', subject_id=subject.id) }}" class="btn btn-outline-primary">Open Subject</a>
-                    </div>
-                </div>
+<div class="two-column-learning" style="margin-top:24px;">
+    <section class="learn-card ai-panel">
+        <span class="subject-code">Explainable AI Coach</span>
+        <h2>Current Recommendation</h2>
+        {% if latest_recommendation %}
+            <p>{{ latest_recommendation.recommendation_reason }}</p>
+            <div class="info-row"><span>Recommendation Type</span><strong>{{ latest_recommendation.recommendation_type }}</strong></div>
+            <div class="info-row"><span>AI Confidence</span><strong>{{ latest_recommendation.confidence_score }}%</strong></div>
+            <div class="info-row"><span>Expected Mastery</span><strong>{{ latest_recommendation.expected_mastery }}%</strong></div>
+            <div class="info-row"><span>Study Time</span><strong>{{ latest_recommendation.estimated_study_minutes }} minutes</strong></div>
+            <div class="info-row"><span>Resource</span><strong>{{ latest_recommendation.recommended_resource }}</strong></div>
+        {% else %}
+            <p>No AI recommendation yet. Open a pathway, attempt an assessment, and the algorithm will calculate mastery and generate feedback.</p>
+        {% endif %}
+    </section>
+
+    <section class="learn-card">
+        <span class="subject-code">Continue Learning</span>
+        <h2>Active Pathways</h2>
+        {% for p in pathways %}
+            <div class="info-row">
+                <span>{{ p.subject_name }}: {{ p.course_title }}</span>
+                <strong>{{ p.avg_score|round|int }}%</strong>
             </div>
-            {% endfor %}
-        </div>
-    </div>
-    <div class="col-md-4">
-        <h4>Recent Activity</h4>
-        <ul class="list-group">
-            {% for attempt in recent_attempts %}
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-                {{ attempt.learning_outcome.name }}
-                <span class="badge {{ 'bg-success' if attempt.correct else 'bg-danger' }} rounded-pill">
-                    {{ (attempt.p_after * 100) | round(0) }}%
-                </span>
-            </li>
-            {% endfor %}
-            {% if not recent_attempts %}
-            <li class="list-group-item">No recent activity.</li>
-            {% endif %}
-        </ul>
-        <a href="{{ url_for('view_progress') }}" class="btn btn-link mt-2">View Full Progress Trail</a>
-    </div>
+        {% endfor %}
+        <br>
+        <a class="btn-primary" href="{{ url_for('subjects.subjects') }}">Go to Subjects →</a>
+    </section>
 </div>
+
+<section class="assessment-panel">
+    <p class="eyebrow">Recent System Evidence</p>
+    <h2>Learning Logs</h2>
+    {% for activity in activities %}
+        <div class="info-row"><span>{{ activity.activity_type }}</span><strong>{{ activity.activity_description }}</strong></div>
+    {% else %}
+        <p>No learning logs yet.</p>
+    {% endfor %}
+</section>
 {% endblock %}

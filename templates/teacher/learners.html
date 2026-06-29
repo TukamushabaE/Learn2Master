@@ -1,0 +1,22 @@
+{% extends "layouts/base.html" %}
+{% block title %}Learners{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">{% endblock %}
+{% block content %}
+<section class="learn-card">
+  <span class="subject-code">Teacher</span>
+  <h1>Learner Profiles</h1>
+  <p>AI learner profile evidence: pace, support style, mastery records, at-risk status and competency portfolio.</p>
+  <div class="concept-grid">
+  {% for l in learners %}
+    <a class="concept-pill {% if l.avg_mastery and l.avg_mastery >= 80 %}good{% else %}weak{% endif %}" href="{{ url_for('teacher.learner_portfolio', learner_id=l.user_id) }}">
+      <span>{{ l.full_name }} | {{ l.class_level }}</span>
+      <strong>{{ l.avg_mastery or 0 }}%</strong>
+      <small>{{ l.learning_style }} | Pace: {{ l.learning_pace }} | {{ l.mastered_records or 0 }} mastered</small>
+      <small>Open competency portfolio</small>
+    </a>
+  {% else %}
+    <p>No learners found.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "layouts/base.html" %}
+{% block title %}Account Management{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>
+.admin-toolbar,.account-row,.report-row{display:grid;gap:12px}.admin-toolbar{grid-template-columns:2fr 1fr 1fr auto;align-items:end}.admin-input,.admin-select{width:100%;padding:11px 12px;border:1px solid #d8dee8;border-radius:8px;background:#fff}.account-row{grid-template-columns:2fr 1fr 1fr 1fr auto;align-items:center;padding:14px 0;border-bottom:1px solid #edf0f5}.status-badge{display:inline-flex;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#eef6ff;color:#155da8}.status-Suspended,.status-Locked{background:#fff1f1;color:#a61b1b}.status-Pending{background:#fff8db;color:#836100}.admin-actions{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}.small-button{border:1px solid #cfd7e3;border-radius:8px;background:#fff;padding:7px 10px;font-weight:700;text-decoration:none;color:#1f2937;cursor:pointer}.danger-button{border-color:#f1b7b7;color:#a61b1b}.primary-button{background:#143d73;color:#fff;border-color:#143d73}.security-pill{font-weight:800;color:#143d73}@media(max-width:900px){.admin-toolbar,.account-row{grid-template-columns:1fr}.admin-actions{justify-content:flex-start}}
+</style>
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Identity and Access Governance</p>
+        <h1>Account Management</h1>
+        <p>Manage learners, teachers, school administrators and super administrators with status, security level, reporting and audit traceability.</p>
+    </div>
+    <div class="hero-badge"><span>Visible Accounts</span><strong>{{ users|length }}</strong></div>
+</section>
+
+<section class="learn-card">
+    <form class="admin-toolbar" method="get" action="{{ url_for('admin.users') }}">
+        <label>Search
+            <input class="admin-input" name="q" value="{{ search }}" placeholder="Name, username or email">
+        </label>
+        <label>Role
+            <select class="admin-select" name="role">
+                <option value="">All roles</option>
+                {% for role in roles %}
+                    <option value="{{ role.role_name }}" {% if role_filter == role.role_name %}selected{% endif %}>{{ role.display_name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Status
+            <select class="admin-select" name="status">
+                <option value="">All statuses</option>
+                {% for status in statuses %}
+                    <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>{{ status }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <div class="admin-actions">
+            <button class="small-button primary-button" type="submit">Filter</button>
+            <a class="small-button" href="{{ url_for('admin.create_user') }}">New Account</a>
+        </div>
+    </form>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Controlled Register</span>
+    <h2>Users, Roles and Security Levels</h2>
+    {% for u in users %}
+    <div class="account-row">
+        <div>
+            <strong>{{ u.full_name }}</strong>
+            <small>{{ u.username }}{% if u.email %} | {{ u.email }}{% endif %}{% if u.school_name %} | {{ u.school_name }}{% endif %}</small>
+        </div>
+        <div>{{ role_label(u.role_name) }}<br><small>{{ u.title or "No title set" }}</small></div>
+        <div><span class="status-badge status-{{ u.account_status }}">{{ u.account_status }}</span><br><small>{{ u.failed_login_attempts or 0 }} failed login(s)</small></div>
+        <div><span class="security-pill">Level {{ u.security_level }}</span><br><small>{{ security_label(u.security_level) }}</small></div>
+        <div class="admin-actions">
+            <a class="small-button" href="{{ url_for('admin.user_report', user_id=u.user_id) }}">Report</a>
+            <a class="small-button" href="{{ url_for('admin.edit_user', user_id=u.user_id) }}">Edit</a>
+            <form method="post" action="{{ url_for('admin.update_user_status', user_id=u.user_id, action='activate') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="small-button" type="submit">Activate</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.update_user_status', user_id=u.user_id, action='suspend') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="small-button danger-button" type="submit">Suspend</button>
+            </form>
+        </div>
+    </div>
+    {% else %}
+    <p>No accounts match the selected filters.</p>
+    {% endfor %}
+</section>
+{% endblock %}

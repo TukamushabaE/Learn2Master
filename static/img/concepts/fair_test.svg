@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">Fair test planning</title>
+  <desc id="desc">Change one variable, measure one variable and keep other factors constant.</desc>
+  <rect width="720" height="360" fill="#f7fbff"/>
+  <rect x="72" y="96" width="150" height="95" rx="12" fill="#dff3ff" stroke="#2a7fb8" stroke-width="3"/>
+  <text x="147" y="134" text-anchor="middle" font-family="Inter,Arial" font-size="17" font-weight="800" fill="#17486a">Change</text>
+  <text x="147" y="163" text-anchor="middle" font-family="Inter,Arial" font-size="14" fill="#17486a">one variable</text>
+  <rect x="285" y="96" width="150" height="95" rx="12" fill="#e8f8ed" stroke="#2d8a48" stroke-width="3"/>
+  <text x="360" y="134" text-anchor="middle" font-family="Inter,Arial" font-size="17" font-weight="800" fill="#175225">Measure</text>
+  <text x="360" y="163" text-anchor="middle" font-family="Inter,Arial" font-size="14" fill="#175225">one response</text>
+  <rect x="498" y="96" width="150" height="95" rx="12" fill="#fff0d9" stroke="#d17b00" stroke-width="3"/>
+  <text x="573" y="134" text-anchor="middle" font-family="Inter,Arial" font-size="17" font-weight="800" fill="#6f4200">Control</text>
+  <text x="573" y="163" text-anchor="middle" font-family="Inter,Arial" font-size="14" fill="#6f4200">other factors</text>
+  <path d="M225 144 H280" stroke="#506070" stroke-width="5" marker-end="url(#arrow)"/>
+  <path d="M438 144 H493" stroke="#506070" stroke-width="5" marker-end="url(#arrow)"/>
+  <rect x="155" y="252" width="410" height="54" rx="15" fill="#ffffff" stroke="#7c8da0" stroke-width="2"/>
+  <text x="360" y="286" text-anchor="middle" font-family="Inter,Arial" font-size="17" font-weight="800" fill="#26394f">Fair tests make evidence trustworthy.</text>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#506070"/></marker></defs>
+</svg>

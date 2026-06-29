@@ -1,0 +1,39 @@
+{% extends "layouts/base.html" %}
+{% block title %}Backups and Offline Readiness{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>.row-line{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:12px;padding:12px 0;border-bottom:1px solid #edf1f6}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;cursor:pointer}.admin-input{padding:10px;border:1px solid #d8dee8;border-radius:8px}@media(max-width:800px){.row-line{grid-template-columns:1fr}}</style>
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div><p class="eyebrow">System Reliability</p><h1>Backups and Offline Foundation</h1><p>Track SQLite backup records, cached resource packets and pending offline sync events for low-resource deployment readiness.</p></div>
+  <div class="hero-badge"><span>Pending Sync</span><strong>{{ sync|selectattr('sync_status','equalto','Pending')|list|length }}</strong></div>
+</section>
+<section class="learn-card">
+  <h2>Manual Backup Register</h2>
+  {% if can_create_backup %}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input class="admin-input" name="backup_name" placeholder="Backup label, e.g. Before dissertation demo">
+    <button class="button" type="submit">Record Backup</button>
+  </form>
+  {% else %}
+  <p>Backup records are visible here. Only the Super Administrator can create new backup records.</p>
+  {% endif %}
+  {% for b in backups %}
+  <div class="row-line"><strong>{{ b.backup_name }}</strong><span>{{ b.backup_status }}</span><small>{{ b.created_at }} | {{ b.file_path }}</small></div>
+  {% else %}<p>No backup records yet.</p>{% endfor %}
+</section>
+<section class="learn-card">
+  <h2>Cached Resources</h2>
+  {% for c in cached %}
+  <div class="row-line"><strong>{{ c.resource_title }}</strong><span>{{ c.cache_status }}</span><small>{{ c.cache_key }} | {{ c.estimated_size_kb }} KB</small></div>
+  {% else %}<p>No cached resources registered.</p>{% endfor %}
+</section>
+<section class="learn-card">
+  <h2>Offline Sync Queue</h2>
+  {% for s in sync %}
+  <div class="row-line"><strong>{{ s.event_type }}</strong><span>{{ s.sync_status }}</span><small>{{ s.created_at }} | {{ s.payload }}</small></div>
+  {% else %}<p>No offline sync events yet.</p>{% endfor %}
+</section>
+{% endblock %}

@@ -1,40 +1,81 @@
-{% extends "base.html" %}
-{% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">Register</div>
-            <div class="card-body">
-                <form method="POST" action="">
-                    {{ form.hidden_tag() }}
-                    <div class="mb-3">
-                        {{ form.username.label(class="form-label") }}
-                        {{ form.username(class="form-control") }}
-                    </div>
-                    <div class="mb-3">
-                        {{ form.email.label(class="form-label") }}
-                        {{ form.email(class="form-control") }}
-                    </div>
-                    <div class="mb-3">
-                        {{ form.password.label(class="form-label") }}
-                        {{ form.password(class="form-control") }}
-                    </div>
-                    <div class="mb-3">
-                        {{ form.confirm_password.label(class="form-label") }}
-                        {{ form.confirm_password(class="form-control") }}
-                    </div>
-                    <div class="mb-3">
-                        {{ form.role.label(class="form-label") }}
-                        {{ form.role(class="form-control") }}
-                    </div>
-                    <div class="mb-3">
-                        {{ form.school.label(class="form-label") }}
-                        {{ form.school(class="form-control") }}
-                    </div>
-                    {{ form.submit(class="btn btn-primary") }}
-                </form>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Register | Learn2Master</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="register-page">
+
+<div class="register-wrapper">
+    <div class="register-card">
+
+        <div class="register-image-side">
+            <div class="register-overlay">
+                <div class="brand-mark big">🎓</div>
+                <h1>Join Learn2Master</h1>
+                <p>Build your CBC mastery profile, track competencies, and receive smart learning guidance.</p>
+                <a href="{{ url_for('auth.home') }}">Already registered?</a>
             </div>
         </div>
+
+        <div class="register-form-side">
+            <div class="login-brand">
+                <div class="brand-mark">🎓</div>
+                <h2>Learn<span>2Master</span></h2>
+            </div>
+
+            <h1>Create Account</h1>
+            <p class="login-subtitle">Start your personalized mastery-based learning journey.</p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="{{ url_for('auth.register') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-grid">
+                    <div class="input-group">
+                        <label>Full Name</label>
+                        <input type="text" name="full_name" placeholder="e.g. Tukamushaba Elijah" required>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Username</label>
+                        <input type="text" name="username" placeholder="Choose username" required>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Email Address</label>
+                    <input type="email" name="email" placeholder="example@email.com">
+                </div>
+
+                <div class="input-group">
+                    <label>School</label>
+                    <input type="text" name="school_name" value="Kigezi High School" required>
+                </div>
+
+                <div class="input-group">
+                    <label>Password</label>
+                    <input type="password" name="password" placeholder="Create secure password" required>
+                </div>
+
+                <button type="submit" class="login-btn">Create Account</button>
+            </form>
+
+            <p class="signup-text">
+                Already have an account?
+                <a href="{{ url_for('auth.home') }}">Login</a>
+            </p>
+        </div>
+
     </div>
 </div>
-{% endblock %}
+
+</body>
+</html>

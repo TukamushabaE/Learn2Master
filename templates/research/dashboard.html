@@ -1,0 +1,64 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Research Dashboard{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="hero-panel">
+  <div>
+    <p class="eyebrow">Chapter Four Evidence</p>
+    <h1>Research Evaluation Dashboard</h1>
+    <p>This dashboard maps directly to the proposal evaluation indicators: mastery attainment, learning gain, feedback responsiveness, teacher oversight, system reliability, and low-resource readiness.</p>
+  </div>
+  <div class="hero-badge"><span>Framework</span><strong>V8 Final</strong></div>
+</section>
+
+<div class="cards-grid">
+  <div class="stat-card"><h3>Learners</h3><p class="stat-number">{{ metrics.learners }}</p></div>
+  <div class="stat-card"><h3>Attempts</h3><p class="stat-number">{{ metrics.attempts }}</p></div>
+  <div class="stat-card"><h3>Mastery Rate</h3><p class="stat-number">{{ metrics.mastery_rate }}%</p></div>
+  <div class="stat-card"><h3>Learning Gain</h3><p class="stat-number">{{ metrics.learning_gain }}%</p></div>
+  <div class="stat-card"><h3>Average Pre-test</h3><p class="stat-number">{{ metrics.avg_pretest }}%</p></div>
+  <div class="stat-card"><h3>Average Post-test</h3><p class="stat-number">{{ metrics.avg_posttest }}%</p></div>
+  <div class="stat-card"><h3>AI Recommendations</h3><p class="stat-number">{{ metrics.ai_recommendations }}</p></div>
+  <div class="stat-card"><h3>Teacher Interventions</h3><p class="stat-number">{{ metrics.teacher_interventions }}</p></div>
+</div>
+
+<section class="learn-card">
+  <span class="subject-code">V8 Proposal Evidence</span>
+  <h2>Evidence-Based Mastery Components</h2>
+  <div class="evidence-grid">
+    <div><span>Reflections</span><strong>{{ metrics.reflections }}</strong></div>
+    <div><span>Practical Evidence</span><strong>{{ metrics.practical_evidence }}</strong></div>
+    <div><span>Approved Practical</span><strong>{{ metrics.approved_practical }}</strong></div>
+    <div><span>BKT Observations</span><strong>{{ metrics.bkt_observations }}</strong></div>
+    <div><span>Avg BKT Mastery</span><strong>{{ metrics.avg_bkt_mastery }}%</strong></div>
+    <div><span>Offline Pending Sync</span><strong>{{ metrics.offline_pending }}</strong></div>
+  </div>
+</section>
+
+<section class="learn-card">
+  <h2>Weak Concept Evidence</h2>
+  <div class="concept-grid">
+  {% for row in weak_concepts %}
+    <div class="concept-pill {% if row.avg_score >= 70 %}good{% else %}weak{% endif %}">
+      <span>{{ row.concept_tag.replace('_',' ')|title }}</span>
+      <strong>{{ row.avg_score }}%</strong>
+      <small>{{ row.evidence }} evidence records</small>
+    </div>
+  {% else %}
+    <p>No concept evidence has been generated yet.</p>
+  {% endfor %}
+  </div>
+</section>
+
+<section class="learn-card ai-panel">
+  <span class="subject-code">Proposal Traceability</span>
+  <h2>How this supports Chapter Four</h2>
+  <p>The values above can be used to report mastery attainment rate, learning gain, learner response to feedback, teacher oversight effectiveness, and technical readiness for low-resource deployment.</p>
+  <p><a href="{{ url_for('research.research_reports') }}">Open printable research report</a> | <a href="{{ url_for('research.research_reports', format='csv') }}">Export CSV</a></p>
+</section>
+{% endblock %}
