@@ -1,4 +1,5 @@
 import os
+import json
 
 def calculate_bkt(current_p, correct):
     """
@@ -36,3 +37,62 @@ def get_recommendation(knowledge_level):
         return "Complete adaptive practice questions.", "You are in the zone of proximal development (0.5 < pL < 0.85). Practice will solidify your mental models."
     else:
         return "Submit practical evidence for mastery.", "High conceptual mastery detected (pL >= 0.85). Demonstrate competency through practical application."
+
+class AIEngine:
+    """
+    Advanced AI Engine for Learn2Master.
+    Future-ready for LLM and DKT integration.
+    """
+    @staticmethod
+    def analyze_knowledge_gaps(mastery_records):
+        """
+        Identifies specific sub-competencies where the student is struggling.
+        Returns a list of 'Gap' objects.
+        """
+        gaps = []
+        for record in mastery_records:
+            if record.knowledge_level < 0.5:
+                gaps.append({
+                    "lo_id": record.learning_outcome_id,
+                    "name": record.learning_outcome.name,
+                    "level": record.knowledge_level,
+                    "priority": "High",
+                    "reason": "Knowledge level is significantly below the threshold for competency."
+                })
+        return gaps
+
+    @staticmethod
+    def tutor_response(user_input, context):
+        """
+        Mock RAG-based LLM response.
+        In production, this would call an LLM (e.g. GPT-4) with context injected.
+        """
+        username = context.get('username', 'Student')
+        avg_mastery = context.get('avg_mastery', 0.0)
+        recent_activity = context.get('recent_activity')
+        gaps = context.get('gaps', [])
+
+        user_input = user_input.lower()
+
+        # Base Persona
+        response = f"Hello {username}! I'm the Learn2Master AI Assistant, specialized in the Uganda CBC framework. "
+
+        if "mastery" in user_input:
+            msg = f"Your aggregate mastery is {avg_mastery:.1%}. "
+            if avg_mastery > 0.8:
+                msg += "Excellent work! You are nearing the 'Distinction' tier."
+            else:
+                msg += "You're making steady progress toward competency."
+            return msg
+
+        if "gap" in user_input or "struggle" in user_input or "help" in user_input:
+            if gaps:
+                gap = gaps[0]
+                return f"I see you're currently challenged by '{gap['name']}' (Mastery: {gap['level']:.1%}). I suggest we revisit the 'Practical Examples' section for this topic."
+            return "You don't have any major knowledge gaps right now. Great job! Ready to move to the next topic?"
+
+        if "cbc" in user_input:
+            return "The Competency-Based Curriculum (CBC) focuses on what you can *do*, not just what you know. My job is to help you bridge that gap through practical evidence and adaptive quizzes."
+
+        # Default fallback
+        return "I'm analyzing your progress. How can I assist you with your current Physics or ICT competencies today?"

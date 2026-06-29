@@ -1,46 +1,213 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <title>Learn2Master V8</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { padding-top: 50px; }
-        .navbar { margin-bottom: 20px; }
+        :root {
+            --sidebar-bg: #0d3b85;
+            --sidebar-hover: #154ca3;
+            --topbar-bg: #f8f9fa;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+        }
+        #wrapper {
+            display: flex;
+            min-height: 100vh;
+        }
+        #sidebar-wrapper {
+            width: 250px;
+            background-color: var(--sidebar-bg);
+            color: white;
+            transition: all 0.3s;
+        }
+        .sidebar-heading {
+            padding: 2rem 1.5rem;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .sidebar-heading span {
+            font-size: 0.8rem;
+            display: block;
+            font-weight: normal;
+            opacity: 0.8;
+        }
+        .list-group-item {
+            background-color: transparent;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            transition: background 0.2s;
+        }
+        .list-group-item:hover {
+            background-color: var(--sidebar-hover);
+            color: white;
+        }
+        .list-group-item i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        #page-content-wrapper {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .topbar {
+            height: 70px;
+            background-color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .search-container {
+            position: relative;
+            width: 400px;
+        }
+        .search-container input {
+            padding-left: 2.5rem;
+            border-radius: 20px;
+            background-color: #f1f3f4;
+            border: none;
+        }
+        .search-container i {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #5f6368;
+        }
+        .user-profile {
+            display: flex;
+            align-items: center;
+            background-color: #f1f3f4;
+            padding: 5px 15px;
+            border-radius: 30px;
+        }
+        .user-avatar {
+            width: 35px;
+            height: 35px;
+            background-color: #0d3b85;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .logout-btn {
+            color: #a52a2a;
+            font-weight: bold;
+            text-decoration: none;
+            margin-left: 15px;
+        }
+        .main-content {
+            padding: 2rem;
+            flex-grow: 1;
+        }
+        .card {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+        .cbc-badge {
+            background-color: #fff9db;
+            color: #f08c00;
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            margin-right: 15px;
+        }
+        .footer-info {
+            display: flex;
+            justify-content: space-between;
+            padding: 1rem 2rem;
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-        <div class="container">
-            <a class="navbar-brand" href="/">Learn2Master</a>
-            <div class="navbar-nav ms-auto">
-
-                {% if current_user.is_authenticated %}
-                    <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
-                    <a class="nav-link" href="{{ url_for('profile') }}">Profile</a>
-                    {% if current_user.role == 'admin' %}
-                        <a class="nav-link" href="{{ url_for('admin_audit') }}">Audit Log</a>
-                    {% endif %}
-                    <span class="nav-link text-light">Welcome, {{ current_user.username }} ({{ current_user.role }})</span>
-                    <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
-                {% else %}
-                    <a class="nav-link" href="{{ url_for('login') }}">Login</a>
-                    <a class="nav-link" href="{{ url_for('register') }}">Register</a>
-                {% endif %}
-
+    <div id="wrapper">
+        <!-- Sidebar -->
+        {% if current_user.is_authenticated %}
+        <div id="sidebar-wrapper">
+            <div class="sidebar-heading">
+                Learn2Master
+                <span>Admin Portal</span>
+            </div>
+            <div class="list-group list-group-flush">
+                <a href="{{ url_for('dashboard') }}" class="list-group-item"><i class="fas fa-home"></i> Dashboard</a>
+                <a href="{{ url_for('admin_users') }}" class="list-group-item"><i class="fas fa-users"></i> Users</a>
+                <a href="{{ url_for('admin_schools') }}" class="list-group-item"><i class="fas fa-school"></i> Schools</a>
+                <a href="{{ url_for('admin_curriculum') }}" class="list-group-item"><i class="fas fa-book"></i> Curriculum</a>
+                <a href="{{ url_for('admin_competencies') }}" class="list-group-item"><i class="fas fa-bullseye"></i> Competencies</a>
+                <a href="{{ url_for('admin_usage_report') }}" class="list-group-item"><i class="fas fa-chart-line"></i> System Analytics</a>
+                <a href="{{ url_for('admin_settings') }}" class="list-group-item"><i class="fas fa-cog"></i> Settings</a>
+                <a href="{{ url_for('admin_audit') }}" class="list-group-item"><i class="fas fa-file-alt"></i> Audit Logs</a>
+                <a href="{{ url_for('admin_usage_report') }}" class="list-group-item"><i class="fas fa-file-contract"></i> Reports</a>
             </div>
         </div>
-    </nav>
-    <div class="container">
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            {% for message in messages %}
-              <div class="alert alert-warning">{{ message }}</div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-        {% block content %}{% endblock %}
+        {% endif %}
+
+        <!-- Page Content -->
+        <div id="page-content-wrapper">
+            <!-- Topbar -->
+            {% if current_user.is_authenticated %}
+            <div class="topbar">
+                <div class="search-container">
+                    <i class="fas fa-search"></i>
+                    <input type="text" class="form-control" placeholder="Search subjects, competencies, less">
+                </div>
+                <div class="d-flex align-items-center">
+                    <span class="cbc-badge">CBC</span>
+                    <i class="fas fa-bell me-4 text-secondary"></i>
+                    <div class="user-profile">
+                        <div class="user-avatar">{{ current_user.username[0].upper() }}</div>
+                        <div class="user-info">
+                            <div style="font-weight: bold; font-size: 0.9rem;">{{ current_user.username.capitalize() }}</div>
+                            <div style="font-size: 0.7rem; color: #6c757d;">{{ current_user.role.capitalize() }}</div>
+                        </div>
+                    </div>
+                    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="main-content">
+                {% with messages = get_flashed_messages() %}
+                  {% if messages %}
+                    {% for message in messages %}
+                      <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                      </div>
+                    {% endfor %}
+                  {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </div>
+
+            <div class="footer-info">
+                <span>Learn2Master V3</span>
+                <span>AI-Enabled Framework for Mastery-Based Learning under CBC</span>
+                <span>Developed by Tukamushaba Elijah</span>
+            </div>
+        </div>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         if ("serviceWorker" in navigator) {
             window.addEventListener("load", () => {
