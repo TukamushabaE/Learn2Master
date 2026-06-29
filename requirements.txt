@@ -13,3 +13,4 @@ groq
 huggingface_hub
 numpy
 PyPDF2
+python-magic
