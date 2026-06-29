@@ -1,12 +1,50 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Admin Dashboard</h2>
-<div class="row">
+<h2>System Administrator Dashboard</h2>
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card bg-dark text-white mb-3">
+            <div class="card-body text-center">
+                <h5 class="card-title">System Status</h5>
+                <span class="badge bg-success">HEALTHY</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-secondary text-white mb-3">
+            <div class="card-body text-center">
+                <h5 class="card-title">Storage</h5>
+                <p class="card-text">SQLite Active</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
     <div class="col-md-4">
-        <div class="card mb-3">
+        <div class="card shadow-sm mb-3">
             <div class="card-body">
-                <h5 class="card-title">Users</h5>
+                <h5 class="card-title">User Management</h5>
+                <p>Manage accounts for students, teachers, and admins.</p>
                 <a href="{{ url_for('admin_users') }}" class="btn btn-primary">Manage Users</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Audit & Security</h5>
+                <p>Monitor system-wide actions and BKT transitions.</p>
+                <a href="{{ url_for('admin_audit') }}" class="btn btn-warning">View Logs</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Curriculum</h5>
+                <p>System usage and engagement analytics.</p>
+                <a href="{{ url_for('admin_usage_report') }}" class="btn btn-info">Usage Report</a>
             </div>
         </div>
     </div>

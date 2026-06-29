@@ -16,6 +16,39 @@
             <p>You must achieve at least 85% mastery in all previous learning outcomes before accessing this one.</p>
             <a href="{{ url_for('view_subject', subject_id=lo.topic.subject_id) }}" class="btn btn-secondary">Return to Subject</a>
         </div>
+
+        <div class="card mt-4 border-info">
+            <div class="card-header bg-info text-white">AI Learning Assistant</div>
+            <div class="card-body">
+                <div id="ai-response" class="mb-3 small text-muted">Ask me anything about your learning path...</div>
+                <div class="input-group">
+                    <input type="text" id="ai-input" class="form-control" placeholder="Ask a question...">
+                    <button class="btn btn-info text-white" type="button" onclick="askAI()">Ask</button>
+                </div>
+            </div>
+        </div>
+        <script>
+        async function askAI() {
+            const input = document.getElementById('ai-input');
+            const responseDiv = document.getElementById('ai-response');
+            const message = input.value;
+            if (!message) return;
+
+            responseDiv.innerText = "Thinking...";
+            const response = await fetch('/ai/tutor', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ message: message })
+            });
+            const data = await response.json();
+            responseDiv.innerText = data.response;
+            input.value = '';
+        }
+        </script>
+
         {% else %}
         <h2>{{ lo.name }}</h2>
         <p class="lead">{{ lo.description }}</p>
@@ -51,7 +84,40 @@
                 </form>
             </div>
         </div>
-        {% endif %}
+
+        <div class="card mt-4 border-info">
+            <div class="card-header bg-info text-white">AI Learning Assistant</div>
+            <div class="card-body">
+                <div id="ai-response" class="mb-3 small text-muted">Ask me anything about your learning path...</div>
+                <div class="input-group">
+                    <input type="text" id="ai-input" class="form-control" placeholder="Ask a question...">
+                    <button class="btn btn-info text-white" type="button" onclick="askAI()">Ask</button>
+                </div>
+            </div>
+        </div>
+        <script>
+        async function askAI() {
+            const input = document.getElementById('ai-input');
+            const responseDiv = document.getElementById('ai-response');
+            const message = input.value;
+            if (!message) return;
+
+            responseDiv.innerText = "Thinking...";
+            const res = await fetch('/ai/tutor', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ message: message })
+            });
+            const data = await res.json();
+            responseDiv.innerText = data.response;
+            input.value = '';
+        }
+        </script>
+
+{% endif %}
     </div>
 
     <div class="col-md-4">
@@ -72,17 +138,44 @@
                     <small>{{ explanation }}</small>
                 </div>
 
-                <form action="{{ url_for('take_test', lo_id=lo.id) }}" method="POST" class="mb-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="correct" value="true">
-                    <button type="submit" class="btn btn-success w-100">Simulate Correct Answer</button>
-                </form>
-                <form action="{{ url_for('take_test', lo_id=lo.id) }}" method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="correct" value="false">
-                    <button type="submit" class="btn btn-danger w-100">Simulate Incorrect Answer</button>
-                </form>
+
+
             </div>
         </div>
-        {% endif %}
+
+        <div class="card mt-4 border-info">
+            <div class="card-header bg-info text-white">AI Learning Assistant</div>
+            <div class="card-body">
+                <div id="ai-response" class="mb-3 small text-muted">Ask me anything about your learning path...</div>
+                <div class="input-group">
+                    <input type="text" id="ai-input" class="form-control" placeholder="Ask a question...">
+                    <button class="btn btn-info text-white" type="button" onclick="askAI()">Ask</button>
+                </div>
+            </div>
+        </div>
+        <script>
+        async function askAI() {
+            const input = document.getElementById('ai-input');
+            const responseDiv = document.getElementById('ai-response');
+            const message = input.value;
+            if (!message) return;
+
+            responseDiv.innerText = "Thinking...";
+            const res = await fetch('/ai/tutor', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ message: message })
+            });
+            const data = await res.json();
+            responseDiv.innerText = data.response;
+            input.value = '';
+        }
+        </script>
+
+{% endif %}
     </div>
 </div>
 {% endblock %}

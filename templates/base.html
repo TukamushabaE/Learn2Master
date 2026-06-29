@@ -14,10 +14,20 @@
         <div class="container">
             <a class="navbar-brand" href="/">Learn2Master</a>
             <div class="navbar-nav ms-auto">
+
                 {% if current_user.is_authenticated %}
+                    <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
+                    <a class="nav-link" href="{{ url_for('profile') }}">Profile</a>
+                    {% if current_user.role == 'admin' %}
+                        <a class="nav-link" href="{{ url_for('admin_audit') }}">Audit Log</a>
+                    {% endif %}
                     <span class="nav-link text-light">Welcome, {{ current_user.username }} ({{ current_user.role }})</span>
                     <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+                {% else %}
+                    <a class="nav-link" href="{{ url_for('login') }}">Login</a>
+                    <a class="nav-link" href="{{ url_for('register') }}">Register</a>
                 {% endif %}
+
             </div>
         </div>
     </nav>

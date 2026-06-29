@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>System Usage Analytics</h2>
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h5 class="card-title">Total Users</h5>
+                <h2 class="display-4">{{ total_users }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h5 class="card-title">Total Assessments</h5>
+                <h2 class="display-4">{{ total_attempts }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h5 class="card-title">Evidence Submissions</h5>
+                <h2 class="display-4">{{ total_evidence }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="mt-4">
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+</div>
+{% endblock %}

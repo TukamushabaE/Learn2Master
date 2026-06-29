@@ -10,7 +10,7 @@ from flask_talisman import Talisman
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from whitenoise import WhiteNoise
-from werkzeug.security import check_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 from engine import calculate_bkt, get_recommendation
 from models import db, User, Subject, Topic, LearningOutcome, MasteryRecord, Evidence, RecommendationLog, AttemptLog, LearningResource
 
@@ -32,6 +32,11 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:/
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
 
 db.init_app(app)
+
+@app.template_filter('from_json')
+def from_json_filter(s):
+    return json.loads(s)
+
 migrate = Migrate(app, db)
 
 # Rate Limiting
@@ -90,6 +95,7 @@ def index():
 def health():
     return {"status": "healthy"}, 200
 
+
 @app.route('/sync/assessments', methods=['POST'])
 @login_required
 @role_required('student')
@@ -98,7 +104,6 @@ def sync_assessments():
     if not data or 'attempts' not in data:
         return {"error": "Invalid data format"}, 400
 
-    results = []
     for attempt in data['attempts']:
         lo_id = attempt.get('learning_outcome_id')
         correct = attempt.get('correct')
@@ -107,12 +112,9 @@ def sync_assessments():
         if not lo_id or correct is None:
             continue
 
-        # Check for existing attempt with same timestamp to ensure idempotency
-        # In a real app, we might use a unique client-side UUID for each attempt
-        if timestamp_str:
-            ts = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-            existing = AttemptLog.query.filter_by(user_id=current_user.id, learning_outcome_id=lo_id, timestamp=ts).first()
-            if existing: continue
+        ts = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+        existing = AttemptLog.query.filter_by(user_id=current_user.id, learning_outcome_id=lo_id, timestamp=ts).first()
+        if existing: continue
 
         mastery = MasteryRecord.query.filter_by(user_id=current_user.id, learning_outcome_id=lo_id).first()
         if not mastery:
@@ -126,14 +128,15 @@ def sync_assessments():
         log = RecommendationLog(user_id=current_user.id, learning_outcome_id=lo_id, recommendation=rec, explanation=f"{expl} | Sync")
         db.session.add(log)
 
-        new_attempt = AttemptLog(user_id=current_user.id, learning_outcome_id=lo_id, correct=correct, p_before=p_before, p_after=new_level)
-        if timestamp_str: new_attempt.timestamp = ts
+        new_attempt = AttemptLog(user_id=current_user.id, learning_outcome_id=lo_id, correct=correct, p_before=p_before, p_after=new_level, timestamp=ts)
         db.session.add(new_attempt)
 
         mastery.knowledge_level = new_level
 
+    log_action("Offline synchronization", details=f"Synced {len(data['attempts'])} attempts")
     db.session.commit()
     return {"status": "synced"}, 200
+
 
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.limit('5 per minute')
@@ -152,17 +155,43 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
     if current_user.role == 'student':
         subjects = Subject.query.all()
-        return render_template('student_dashboard.html', subjects=subjects)
+        # Calculate overall mastery
+        masteries = MasteryRecord.query.filter_by(user_id=current_user.id).all()
+        avg_mastery = sum([m.knowledge_level for m in masteries]) / len(masteries) if masteries else 0.0
+
+        # Recent activity
+        recent_attempts = AttemptLog.query.filter_by(user_id=current_user.id).order_by(AttemptLog.timestamp.desc()).limit(5).all()
+
+        return render_template('student_dashboard.html', subjects=subjects, avg_mastery=avg_mastery, recent_attempts=recent_attempts)
     elif current_user.role == 'teacher':
-        return render_template('teacher_dashboard.html')
+        return redirect(url_for('teacher_dashboard_home'))
     elif current_user.role == 'admin':
         return render_template('admin_dashboard.html')
     return "Unknown role"
+
+@app.route('/teacher/dashboard')
+@login_required
+@role_required('teacher')
+def teacher_dashboard_home():
+    # Student mastery overview
+    students = User.query.filter_by(role='student', school=current_user.school).all()
+    student_stats = []
+    for s in students:
+        masteries = MasteryRecord.query.filter_by(user_id=s.id).all()
+        avg = sum([m.knowledge_level for m in masteries]) / len(masteries) if masteries else 0.0
+        student_stats.append({'user': s, 'avg_mastery': avg})
+
+    # At-risk learners (avg mastery < 0.4)
+    at_risk = [s for s in student_stats if s['avg_mastery'] < 0.4]
+
+    return render_template('teacher_dashboard.html', student_stats=student_stats, at_risk=at_risk)
+
 
 @app.route('/subject/<int:subject_id>')
 @login_required
@@ -207,15 +236,52 @@ def view_lo(lo_id):
     rec, expl = get_recommendation(knowledge_level)
     return render_template('learning_outcome.html', lo=lo, knowledge_level=knowledge_level, recommendation=rec, explanation=expl, is_locked=is_locked, resources=resources)
 
-@app.route('/lo/<int:lo_id>/test', methods=['POST'])
-@limiter.limit('10 per minute')
+
+@app.route('/lo/<int:lo_id>/quiz', methods=['GET', 'POST'])
 @login_required
 @role_required('student')
-def take_test(lo_id):
-    correct_val = request.form.get('correct')
-    if correct_val not in ['true', 'false']:
-        flash('Invalid test data')
+def take_quiz(lo_id):
+    lo = db.get_or_404(LearningOutcome, lo_id)
+    questions = Question.query.filter_by(learning_outcome_id=lo_id).all()
+
+    if request.method == 'POST':
+        correct_count = 0
+        total = len(questions)
+        if total == 0:
+            flash('No questions available for this learning outcome.', 'warning')
+            return redirect(url_for('view_lo', lo_id=lo_id))
+
+        for q in questions:
+            answer = request.form.get(f'question_{q.id}')
+            if answer == q.correct_answer:
+                correct_count += 1
+
+        is_correct = (correct_count / total) >= 0.7
+
+        mastery = MasteryRecord.query.filter_by(user_id=current_user.id, learning_outcome_id=lo_id).first()
+        if not mastery:
+            mastery = MasteryRecord(user_id=current_user.id, learning_outcome_id=lo_id, knowledge_level=0.3)
+            db.session.add(mastery)
+
+        p_before = mastery.knowledge_level
+        new_level, reasoning = calculate_bkt(p_before, is_correct)
+        rec, expl = get_recommendation(new_level)
+
+        full_explanation = f"{expl} | Quiz Score: {correct_count}/{total} | AI: {reasoning['message']}"
+        log = RecommendationLog(user_id=current_user.id, learning_outcome_id=lo_id, recommendation=rec, explanation=full_explanation)
+        db.session.add(log)
+
+        attempt = AttemptLog(user_id=current_user.id, learning_outcome_id=lo_id, correct=is_correct, p_before=p_before, p_after=new_level)
+        db.session.add(attempt)
+
+        mastery.knowledge_level = new_level
+        db.session.commit()
+
+        flash(f'Quiz completed! You got {correct_count} out of {total} correct.', 'success')
         return redirect(url_for('view_lo', lo_id=lo_id))
+
+    return render_template('quiz.html', lo=lo, questions=questions)
+
     correct = correct_val == 'true'
     mastery = MasteryRecord.query.filter_by(user_id=current_user.id, learning_outcome_id=lo_id).first()
 
@@ -292,15 +358,41 @@ def submit_evidence(lo_id):
     flash("Evidence submitted successfully and is awaiting teacher review.")
     return redirect(url_for('view_lo', lo_id=lo_id))
 
+
 @app.route('/teacher/evidence/<int:evidence_id>/review', methods=['POST'])
 @login_required
 @role_required('teacher')
 def review_evidence(evidence_id):
     evidence = db.get_or_404(Evidence, evidence_id)
-    status = request.form.get('status') # approved or rejected
+    # Security: Ensure student is in the same school as teacher
+    if evidence.user.school != current_user.school:
+        flash('Unauthorized access to evidence.')
+        return redirect(url_for('teacher_evidence'))
+
+    status = request.form.get('status')
     if status not in ['approved', 'rejected']:
         flash('Invalid status')
         return redirect(url_for('teacher_evidence'))
+    feedback = request.form.get('feedback')
+
+    evidence.status = status
+    evidence.teacher_feedback = feedback
+
+    if status == 'approved':
+        mastery = MasteryRecord.query.filter_by(
+            user_id=evidence.user_id,
+            learning_outcome_id=evidence.learning_outcome_id
+        ).first()
+        if not mastery:
+            mastery = MasteryRecord(user_id=evidence.user_id, learning_outcome_id=evidence.learning_outcome_id)
+            db.session.add(mastery)
+        mastery.knowledge_level = 0.99
+
+    log_action(f"Evidence {status}", resource_type="Evidence", resource_id=evidence.id, details=f"Student ID: {evidence.user_id}")
+    db.session.commit()
+    flash(f"Evidence {status} successfully.")
+    return redirect(url_for('teacher_evidence'))
+
     feedback = request.form.get('feedback')
 
     evidence.status = status
@@ -327,6 +419,137 @@ def review_evidence(evidence_id):
 def view_progress():
     attempts = AttemptLog.query.filter_by(user_id=current_user.id).order_by(AttemptLog.timestamp.desc()).all()
     return render_template('progress.html', attempts=attempts)
+
+
+
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, SelectField, SubmitField, TextAreaField
+from wtforms.validators import DataRequired, Email, EqualTo, Length
+
+class RegistrationForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired(), Length(min=2, max=20)])
+    email = StringField('Email', validators=[DataRequired(), Email()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')])
+    role = SelectField('Role', choices=[('student', 'Student'), ('teacher', 'Teacher'), ('parent', 'Parent')], validators=[DataRequired()])
+    school = StringField('School', validators=[DataRequired()])
+    submit = SubmitField('Sign Up')
+
+class ProfileForm(FlaskForm):
+    full_name = StringField('Full Name', validators=[Length(max=120)])
+    bio = TextAreaField('Bio', validators=[Length(max=500)])
+    submit = SubmitField('Update Profile')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        hashed_password = generate_password_hash(form.password.data)
+        user = User(username=form.username.data, email=form.email.data, password_hash=hashed_password, role=form.role.data, school=form.school.data)
+        db.session.add(user)
+        db.session.commit()
+        flash('Your account has been created! You are now able to log in', 'success')
+        return redirect(url_for('login'))
+    return render_template('register.html', form=form)
+
+@app.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    form = ProfileForm()
+    if form.validate_on_submit():
+        current_user.full_name = form.full_name.data
+        current_user.bio = form.bio.data
+        db.session.commit()
+        flash('Your profile has been updated!', 'success')
+        return redirect(url_for('profile'))
+    elif request.method == 'GET':
+        form.full_name.data = current_user.full_name
+        form.bio.data = current_user.bio
+    return render_template('profile.html', form=form)
+
+@app.route('/admin/audit')
+@login_required
+@role_required('admin')
+def admin_audit():
+    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(100).all()
+    return render_template('admin_audit.html', logs=logs)
+
+def log_action(action, resource_type=None, resource_id=None, details=None):
+    log = AuditLog(
+        user_id=current_user.id if current_user.is_authenticated else None,
+        action=action,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        details=details
+    )
+    db.session.add(log)
+    db.session.commit()
+import csv
+import io
+from flask import make_response
+
+@app.route('/student/report/export')
+@login_required
+@role_required('student')
+def export_student_report():
+    attempts = AttemptLog.query.filter_by(user_id=current_user.id).order_by(AttemptLog.timestamp.desc()).all()
+
+    si = io.StringIO()
+    cw = csv.writer(si)
+    cw.writerow(['Timestamp', 'Learning Outcome', 'Result', 'Mastery Before', 'Mastery After'])
+    for a in attempts:
+        cw.writerow([a.timestamp, a.learning_outcome.name, 'Correct' if a.correct else 'Incorrect', a.p_before, a.p_after])
+
+    output = make_response(si.getvalue())
+    output.headers["Content-Disposition"] = "attachment; filename=my_progress_report.csv"
+    output.headers["Content-type"] = "text/csv"
+    return output
+
+@app.route('/admin/report/usage')
+@login_required
+@role_required('admin')
+def admin_usage_report():
+    # Simple aggregation for admin
+    total_users = User.query.count()
+    total_attempts = AttemptLog.query.count()
+    total_evidence = Evidence.query.count()
+
+    return render_template('admin_report.html', total_users=total_users, total_attempts=total_attempts, total_evidence=total_evidence)
+
+@app.route('/ai/tutor', methods=['POST'])
+@login_required
+def ai_tutor():
+    user_input = request.json.get('message')
+    # Simple rule-based AI tutor as a placeholder for LLM integration
+    response = "I am your Learn2Master AI tutor. "
+    if 'mastery' in user_input.lower():
+        response += "Mastery is calculated using Bayesian Knowledge Tracing, which estimates the probability that you know a concept based on your quiz performance."
+    elif 'progress' in user_input.lower():
+        response += "You can track your progress in the 'My Progress Trail' section of your dashboard."
+    else:
+        response += "Focus on completing your current learning outcome and achieving at least 85% mastery to unlock the next one."
+
+    return {"response": response}
+
+@app.route('/researcher/dashboard')
+@login_required
+@role_required('researcher', 'admin')
+def researcher_dashboard():
+    # Cohort-level metrics
+    subjects = Subject.query.all()
+    stats = []
+    for sub in subjects:
+        lo_ids = [lo.id for t in sub.topics for lo in t.learning_outcomes]
+        if not lo_ids: continue
+        masteries = MasteryRecord.query.filter(MasteryRecord.learning_outcome_id.in_(lo_ids)).all()
+        avg_m = sum([m.knowledge_level for m in masteries]) / len(masteries) if masteries else 0.0
+        stats.append({'subject': sub.name, 'avg_mastery': avg_m, 'total_records': len(masteries)})
+
+    return render_template('researcher_dashboard.html', stats=stats)
+# End of app.py
+
 
 if __name__ == '__main__':
     app.run(debug=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true', port=int(os.environ.get('PORT', 5000)))
