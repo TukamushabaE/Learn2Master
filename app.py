@@ -53,7 +53,7 @@ limiter = Limiter(
 )
 csrf = CSRFProtect(app)
 
-# Security Headers: Allow Chart.js, Google Fonts, and inline styles for the prototype
+# Security Headers
 csp = {
     'default-src': "'self'",
     'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
@@ -66,6 +66,15 @@ Talisman(app, content_security_policy=csp, force_https=not (app.debug or app.con
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+@app.errorhandler(404)
+def not_found_error(error):
+    return render_template('errors/404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return render_template('errors/500.html'), 500
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -81,15 +90,6 @@ def role_required(*roles):
             return f(*args, **kwargs)
         return decorated
     return decorator
-
-@app.errorhandler(404)
-def not_found_error(error):
-    return render_template('errors/404.html'), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    db.session.rollback()
-    return render_template('errors/500.html'), 500
 
 @app.route('/')
 def index():
@@ -109,7 +109,6 @@ def sync_assessments():
     if not data or 'attempts' not in data:
         return {"error": "Invalid data format"}, 400
 
-    results = []
     for attempt in data['attempts']:
         lo_id = attempt.get('learning_outcome_id')
         correct = attempt.get('correct')
@@ -118,13 +117,16 @@ def sync_assessments():
         if not lo_id or correct is None:
             continue
 
-        # Check for existing attempt with same timestamp to ensure idempotency
         if timestamp_str:
             ts = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-            existing = AttemptLog.query.filter_by(user_id=current_user.id, learning_outcome_id=lo_id, timestamp=ts).first()
+            existing = db.session.execute(
+                db.select(AttemptLog).filter_by(user_id=current_user.id, learning_outcome_id=lo_id, timestamp=ts)
+            ).scalar_one_or_none()
             if existing: continue
 
-        mastery = MasteryRecord.query.filter_by(user_id=current_user.id, learning_outcome_id=lo_id).first()
+        mastery = db.session.execute(
+            db.select(MasteryRecord).filter_by(user_id=current_user.id, learning_outcome_id=lo_id)
+        ).scalar_one_or_none()
         if not mastery:
             mastery = MasteryRecord(user_id=current_user.id, learning_outcome_id=lo_id, knowledge_level=0.3)
             db.session.add(mastery)
@@ -187,7 +189,6 @@ def view_subject(subject_id):
 def view_lo(lo_id):
     lo = db.get_or_404(LearningOutcome, lo_id)
 
-    # Check for sequential locking (only for students)
     is_locked = False
     if current_user.role == 'student':
         previous_los = db.session.execute(
@@ -213,7 +214,6 @@ def view_lo(lo_id):
     ).scalar_one_or_none()
     knowledge_level = mastery.knowledge_level if mastery else 0.0
 
-    # Adaptive resource selection
     resources = db.session.execute(
         db.select(LearningResource).filter(
             LearningResource.learning_outcome_id == lo_id,
@@ -240,9 +240,8 @@ def take_test(lo_id):
         db.select(MasteryRecord).filter_by(user_id=current_user.id, learning_outcome_id=lo_id)
     ).scalar_one_or_none()
 
-    # Initialize with p_init if not exists
     if not mastery:
-        p_init = 0.3 # BKT default
+        p_init = 0.3
         mastery = MasteryRecord(user_id=current_user.id, learning_outcome_id=lo_id, knowledge_level=p_init)
         db.session.add(mastery)
 
@@ -250,7 +249,6 @@ def take_test(lo_id):
     new_level, reasoning = calculate_bkt(p_before, correct)
     rec, expl = get_recommendation(new_level)
 
-    # Enrich explanation with AI reasoning for XAI
     full_explanation = f"{expl} | AI Insight: {reasoning['message']}"
 
     log = RecommendationLog(user_id=current_user.id, learning_outcome_id=lo_id, recommendation=rec, explanation=full_explanation)
@@ -273,7 +271,6 @@ def take_test(lo_id):
 @login_required
 @role_required('teacher')
 def teacher_evidence():
-    # Filter by teacher's school for basic multi-tenancy support
     evidences = db.session.execute(
         db.select(Evidence).join(User).filter(User.school == current_user.school)
     ).scalars().all()
@@ -322,7 +319,7 @@ def submit_evidence(lo_id):
 @role_required('teacher')
 def review_evidence(evidence_id):
     evidence = db.get_or_404(Evidence, evidence_id)
-    status = request.form.get('status') # approved or rejected
+    status = request.form.get('status')
     if status not in ['approved', 'rejected']:
         flash('Invalid status')
         return redirect(url_for('teacher_evidence'))
@@ -331,7 +328,6 @@ def review_evidence(evidence_id):
     evidence.status = status
     evidence.teacher_feedback = feedback
 
-    # If approved, boost mastery to 1.0 (or 0.99)
     if status == 'approved':
         mastery = db.session.execute(
             db.select(MasteryRecord).filter_by(
