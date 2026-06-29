@@ -77,12 +77,12 @@ def load_user(user_id):
 def role_required(*roles):
     def decorator(f):
         @wraps(f)
-        def decorated(*args, **kwargs):
-            if current_user.role not in roles:
-                flash("Access denied.")
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated or current_user.role not in roles:
+                flash("You do not have permission to access this page.")
                 return redirect(url_for('dashboard'))
             return f(*args, **kwargs)
-        return decorated
+        return decorated_function
     return decorator
 
 @app.route('/')
@@ -491,6 +491,87 @@ import csv
 import io
 from flask import make_response
 
+from werkzeug.utils import secure_filename
+from engine import get_kb
+
+ALLOWED_EXTENSIONS = {'md', 'json'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+import magic
+import uuid
+from datetime import datetime
+
+ALLOWED_MIME_TYPES = {
+    'text/markdown',
+    'text/plain',
+    'application/json',
+    'text/x-markdown',
+}
+
+@app.route('/admin/kb/upload', methods=['GET', 'POST'])
+@login_required
+@role_required('admin')
+def admin_kb_upload():
+    kb = get_kb()
+    if request.method == 'POST':
+        if 'file' not in request.files:
+            flash('No file part')
+            return redirect(request.url)
+        file = request.files['file']
+        if file.filename == '':
+            flash('No selected file')
+            return redirect(request.url)
+
+        # 1. Size check
+        raw = file.read()
+        if len(raw) > 5 * 1024 * 1024:
+            flash('File too large (max 5MB)')
+            return redirect(request.url)
+
+        # 2. MIME check
+        mime = magic.from_buffer(raw[:2048], mime=True)
+        if mime not in ALLOWED_MIME_TYPES:
+            flash(f'Unsupported file type: {mime}')
+            return redirect(request.url)
+
+        # 3. Save with unique name
+        filename = secure_filename(file.filename)
+        stem = os.path.splitext(filename)[0]
+        ext = os.path.splitext(filename)[1]
+        unique_name = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}_{stem}{ext}"
+
+        filepath = os.path.join(kb.directory, unique_name)
+        with open(filepath, 'wb') as f:
+            f.write(raw)
+
+        # 4. Refresh KB
+        kb.load_and_process()
+
+        # Audit Log
+        app.logger.info(f"KB Upload: user={current_user.id} file={unique_name} size={len(raw)}")
+        flash(f'File uploaded successfully as {unique_name}')
+        return redirect(url_for('admin_kb_upload'))
+
+    files = []
+    if os.path.exists(kb.directory):
+        files = [f for f in os.listdir(kb.directory) if not f.startswith('_')]
+    return render_template('admin_kb_upload.html', files=files)
+
+@app.route('/teacher/kb')
+@login_required
+@role_required('teacher', 'admin')
+def teacher_kb_view():
+    kb = get_kb()
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 50
+    total = len(kb.chunks)
+    start = (page - 1) * per_page
+    chunks = kb.chunks[start : start + per_page]
+    total_pages = (total + per_page - 1) // per_page
+    return render_template('teacher_kb_view.html', chunks=chunks, page=page, total_pages=total_pages)
+
 @app.route('/student/report/export')
 @login_required
 @role_required('student')
@@ -521,8 +602,16 @@ def admin_usage_report():
 
 @app.route('/ai/tutor', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def ai_tutor():
     user_input = request.json.get('message', '')
+
+    # Security: Input validation
+    if not isinstance(user_input, str) or not user_input.strip():
+        return {"response": "I didn't quite catch that. Could you please rephrase your question?"}, 400
+
+    if len(user_input) > 1000:
+        return {"response": "That's a very long question! Could you please shorten it so I can assist you better?"}, 400
 
     # Gather rich context for the AI Engine
     mastery_records = MasteryRecord.query.filter_by(user_id=current_user.id).all()
@@ -531,13 +620,14 @@ def ai_tutor():
     gaps = AIEngine.analyze_knowledge_gaps(mastery_records)
 
     context = {
+        "user_id": current_user.id,
         "username": current_user.username.capitalize(),
-        "avg_mastery": avg_mastery,
+        "avg_mastery": float(avg_mastery),
         "recent_activity": recent,
         "gaps": gaps
     }
 
-    response_text = AIEngine.tutor_response(user_input, context)
+    response_text = AIEngine.tutor_response(user_input.strip(), context)
     return {"response": response_text}
 
 @app.route('/researcher/dashboard')
@@ -586,6 +676,28 @@ def admin_competencies():
 @role_required('admin')
 def admin_settings():
     return render_template('admin_settings.html')
+
+@login_required
+@role_required('admin')
+def update_kb():
+    # Security: Require a secret token for programmatic updates if not from admin UI
+    secret_token = os.environ.get('KB_UPDATE_TOKEN')
+    provided_token = request.headers.get('X-KB-Token')
+
+    if secret_token and provided_token != secret_token:
+        return {"error": "Unauthorized knowledge base update"}, 403
+
+    data = request.json
+    content = data.get('content', '')
+
+    if not content:
+        return {"error": "Missing content"}, 400
+
+    from engine import get_kb
+    kb = get_kb()
+    kb.add_knowledge(content)
+
+    return {"status": "Knowledge base updated successfully"}
 
 if __name__ == '__main__':
     app.run(debug=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true', port=int(os.environ.get('PORT', 5000)))
