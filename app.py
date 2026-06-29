@@ -521,8 +521,16 @@ def admin_usage_report():
 
 @app.route('/ai/tutor', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def ai_tutor():
     user_input = request.json.get('message', '')
+
+    # Security: Input validation
+    if not isinstance(user_input, str) or not user_input.strip():
+        return {"response": "I didn't quite catch that. Could you please rephrase your question?"}, 400
+
+    if len(user_input) > 1000:
+        return {"response": "That's a very long question! Could you please shorten it so I can assist you better?"}, 400
 
     # Gather rich context for the AI Engine
     mastery_records = MasteryRecord.query.filter_by(user_id=current_user.id).all()
@@ -532,12 +540,12 @@ def ai_tutor():
 
     context = {
         "username": current_user.username.capitalize(),
-        "avg_mastery": avg_mastery,
+        "avg_mastery": float(avg_mastery),
         "recent_activity": recent,
         "gaps": gaps
     }
 
-    response_text = AIEngine.tutor_response(user_input, context)
+    response_text = AIEngine.tutor_response(user_input.strip(), context)
     return {"response": response_text}
 
 @app.route('/researcher/dashboard')
