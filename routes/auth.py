@@ -28,6 +28,13 @@ def record_auth_audit(conn, user_id, action, details):
 
 @auth_bp.route("/")
 def home():
+    if "user_id" in session:
+        return redirect(url_for(role_home_endpoint(session.get("role"))))
+    return redirect(url_for("auth.login_view"))
+
+
+@auth_bp.route("/login", methods=["GET"])
+def login_view():
     return render_template("login.html")
 
 
