@@ -9,6 +9,8 @@ from routes.analytics import analytics_bp
 from routes.research import research_bp
 from routes.ai import ai_bp
 from flask import Flask, redirect, request, send_from_directory, session, url_for
+from flask_migrate import Migrate
+from models import db
 
 from routes.auth import auth_bp
 from routes.dashboard import dashboard_bp
@@ -20,6 +22,9 @@ from security import get_csrf_token
 
 app = Flask(__name__)
 app.config.from_object(Config)
+
+db.init_app(app)
+migrate = Migrate(app, db)
 
 
 @app.context_processor
