@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Practical Evidence Review</h2>
+{% if evidences %}
+    <div class="row">
+    {% for evidence in evidences %}
+        <div class="col-md-6 mb-3">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between">
+                    <span>Student ID: {{ evidence.user_id }}</span>
+                    <span class="badge {% if evidence.status == 'pending' %}bg-warning{% elif evidence.status == 'approved' %}bg-success{% else %}bg-danger{% endif %}">{{ evidence.status }}</span>
+                </div>
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">LO: {{ evidence.learning_outcome_id }}</h6>
+                    <p class="card-text">{{ evidence.content }}</p>
+                    <hr>
+                    <form action="{{ url_for('review_evidence', evidence_id=evidence.id) }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label>Teacher Feedback</label>
+                            <textarea name="feedback" class="form-control" rows="2">{{ evidence.teacher_feedback or '' }}</textarea>
+                        </div>
+                        <button type="submit" name="status" value="approved" class="btn btn-success btn-sm">Approve</button>
+                        <button type="submit" name="status" value="rejected" class="btn btn-danger btn-sm">Reject</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+    </div>
+{% else %}
+    <p>No evidence found for your school.</p>
+{% endif %}
+{% endblock %}

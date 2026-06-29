@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Teacher Dashboard</h2>
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-info mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Students</h5>
+                <p class="card-text display-6">{{ student_stats | length }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning mb-3">
+            <div class="card-body">
+                <h5 class="card-title">At Risk</h5>
+                <p class="card-text display-6">{{ at_risk | length }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('teacher_evidence') }}" class="btn btn-primary btn-lg">Review Evidence</a>
+        <a href="{{ url_for('teacher_recommendations') }}" class="btn btn-secondary btn-lg">AI Logs</a>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <h4>Student Mastery Heatmap</h4>
+        <table class="table table-hover mt-3">
+            <thead class="table-dark">
+                <tr>
+                    <th>Student</th>
+                    <th>School</th>
+                    <th>Average Mastery</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in student_stats %}
+                <tr>
+                    <td>{{ stat.user.username }}</td>
+                    <td>{{ stat.user.school }}</td>
+                    <td>
+                        <div class="progress">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: {{ stat.avg_mastery * 100 }}%">
+                                {{ (stat.avg_mastery * 100) | round(1) }}%
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        {% if stat.avg_mastery < 0.4 %}
+                        <span class="badge bg-danger">At Risk</span>
+                        {% elif stat.avg_mastery < 0.85 %}
+                        <span class="badge bg-warning text-dark">Progressing</span>
+                        {% else %}
+                        <span class="badge bg-success">Mastered</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary">View Full Report</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

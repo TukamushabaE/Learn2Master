@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Researcher Insights Dashboard</h2>
+<div class="row mt-4">
+    {% for s in stats %}
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">{{ s.subject }}</h5>
+                <p class="card-text">Average Cohort Mastery: <strong>{{ (s.avg_mastery * 100) | round(1) }}%</strong></p>
+                <p class="text-muted">Total Mastery Records: {{ s.total_records }}</p>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

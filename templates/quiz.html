@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Quiz: {{ lo.name }}</h2>
+<form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for q in questions %}
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">Question {{ loop.index }}</h5>
+            <p class="card-text">{{ q.text }}</p>
+            {% if q.type == 'mcq' %}
+                {% set options = q.options | from_json %}
+                {% for option in options %}
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="question_{{ q.id }}" id="q{{ q.id }}o{{ loop.index }}" value="{{ option }}" required>
+                    <label class="form-check-label" for="q{{ q.id }}o{{ loop.index }}">
+                        {{ option }}
+                    </label>
+                </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    <button type="submit" class="btn btn-primary">Submit Quiz</button>
+</form>
+{% endblock %}
+
+<script src="{{ url_for('static', filename='sync_bridge.js') }}"></script>
+<script>
+document.querySelector('form').addEventListener('submit', function(e) {
+    if (!navigator.onLine) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const questions = [];
+        {% for q in questions %}
+        questions.push({
+            id: {{ q.id }},
+            answer: formData.get('question_{{ q.id }}'),
+            correct_answer: "{{ q.correct_answer }}"
+        });
+        {% endfor %}
+
+        const correctCount = questions.filter(q => q.answer === q.correct_answer).length;
+        const total = questions.length;
+        const is_correct = (correctCount / total) >= 0.7;
+
+        SyncBridge.addToQueue({
+            learning_outcome_id: {{ lo.id }},
+            correct: is_correct,
+            score: `${correctCount}/${total}`
+        });
+
+        alert('You are offline. Your quiz has been saved and will sync when you reconnect.');
+        window.location.href = "{{ url_for('view_lo', lo_id=lo.id) }}";
+    }
+});
+</script>
