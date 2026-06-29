@@ -1,0 +1,94 @@
+{% extends "layouts/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-hero">
+    <div>
+        <h1>Welcome back, {{ user.full_name if user else session.get('full_name','Learner') }} 👋</h1>
+        <p>Learn2Master V3 is the working implementation of an AI-enabled framework for sequential mastery-based learning under CBC.</p>
+    </div>
+    <div class="research-card" style="margin:0;min-width:260px">
+        <strong>Research Identity</strong>
+        <span>MSc Information Systems</span>
+        <small>Teacher-in-the-loop AI • CBC • Mastery tracking</small>
+    </div>
+</div>
+
+<div class="grid grid-4" style="margin-top:22px">
+    <div class="card metric-card"><div class="metric-icon">📈</div><strong>{{ dashboard_data.progress_percentage }}%</strong><span>Overall Mastery Progress</span><div class="progress-track"><div class="progress-fill" style="width:{{ dashboard_data.progress_percentage }}%"></div></div></div>
+    <div class="card metric-card"><div class="metric-icon">📚</div><strong>{{ dashboard_data.total_courses }}</strong><span>Available Courses</span></div>
+    <div class="card metric-card"><div class="metric-icon">🎯</div><strong>{{ dashboard_data.mastered_outcomes }}</strong><span>Mastered Outcomes</span></div>
+    <div class="card metric-card"><div class="metric-icon">🔥</div><strong>5</strong><span>Learning Streak</span></div>
+</div>
+
+<div class="grid grid-2" style="margin-top:22px">
+    <div class="card ai-card">
+        <span class="badge">Learn2Master AI</span>
+        <h3>Explainable Recommendation</h3>
+        <p>Based on your latest mastery record, the system recommends targeted revision before unlocking the next competency.</p>
+        <div class="ai-grid">
+            <div class="ai-item"><small>Weak Area</small><strong>Variables / Practical Application</strong></div>
+            <div class="ai-item"><small>Current Mastery</small><strong>62%</strong></div>
+            <div class="ai-item"><small>Suggested Lesson</small><strong>Introduction to Variables</strong></div>
+            <div class="ai-item"><small>Expected Mastery</small><strong>87%</strong></div>
+        </div>
+    </div>
+    <div class="card">
+        <h3 style="margin-top:0">CBC Mastery Flow</h3>
+        <p style="color:var(--muted)">The system follows the research framework: learner profile → assessment → mastery decision → recommendation → teacher oversight.</p>
+        <div class="lesson-row"><strong>Learner Profiling</strong><span class="status mastered">Active</span></div>
+        <div class="lesson-row"><strong>Sequential Mastery Engine</strong><span class="status in-progress">Running</span></div>
+        <div class="lesson-row"><strong>Teacher Control</strong><span class="status">Next</span></div>
+    </div>
+</div>
+
+<div class="section-title">
+    <div><h2>Select Subject</h2><p>Choose a CBC subject first, then select a course.</p></div>
+</div>
+<div class="grid grid-3">
+    {% for subject in subjects %}
+        <a class="card subject-card {% if selected_subject_id and selected_subject_id|int == subject.subject_id %}active{% endif %}" href="{{ url_for('dashboard.dashboard', subject_id=subject.subject_id) }}">
+            <h3>{% if subject.subject_name|lower == 'ict' %}💻{% elif subject.subject_name|lower == 'physics' %}⚛️{% else %}📘{% endif %} {{ subject.subject_name }}</h3>
+            <p style="color:var(--muted)">View CBC courses and learning outcomes.</p>
+        </a>
+    {% endfor %}
+</div>
+
+{% if selected_subject %}
+<div class="section-title">
+    <div><h2>{{ selected_subject.subject_name }} Courses</h2><p>Select a course to view sequenced lessons and mastery status.</p></div>
+</div>
+<div class="grid grid-3">
+    {% for course in courses %}
+        <a class="card course-card {% if selected_course_id and selected_course_id|int == course.course_id %}active{% endif %}" href="{{ url_for('dashboard.dashboard', subject_id=selected_subject.subject_id, course_id=course.course_id) }}">
+            <h3>{{ course.course_title }}</h3>
+            <p style="color:var(--muted)">{{ course.course_description }}</p>
+            <div class="course-meta"><span class="tag">{{ course.difficulty_level }}</span><span class="tag">CBC aligned</span></div>
+        </a>
+    {% else %}
+        <div class="card empty-state">No courses found for this subject yet.</div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if selected_course %}
+<div class="section-title">
+    <div><h2>{{ selected_course.course_title }} Lessons</h2><p>Lessons unlock progressively after mastery validation.</p></div>
+</div>
+<div class="card">
+    {% for lesson in lessons %}
+        <div class="lesson-row">
+            <div>
+                <strong>{{ lesson.lesson_title }}</strong>
+                <div style="color:var(--muted);font-size:13px">{{ lesson.outcome_code }} — {{ lesson.outcome_name }} • {{ lesson.estimated_minutes }} mins</div>
+            </div>
+            <div style="min-width:160px">
+                <span class="status {% if lesson.mastery_status == 'Mastered' %}mastered{% elif lesson.mastery_score > 0 %}in-progress{% endif %}">{{ lesson.mastery_status }}</span>
+                <div class="progress-track"><div class="progress-fill" style="width:{{ lesson.mastery_score }}%"></div></div>
+            </div>
+        </div>
+    {% else %}
+        <div class="empty-state">No lessons found for this course yet.</div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

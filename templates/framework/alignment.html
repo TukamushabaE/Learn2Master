@@ -1,0 +1,55 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Framework Alignment{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subjects.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Proposal-to-System Traceability</p>
+        <h1>Learn2Master Framework Alignment</h1>
+        <p>This page shows how the working prototype implements the proposal: learner profiling, sequential mastery, assessment, recommendations, teacher support, explainability, analytics and offline-ready design.</p>
+    </div>
+    <div class="hero-badge"><span>Research Artifact</span><strong>MUST-2026-926</strong></div>
+</section>
+
+<div class="evidence-grid">
+    <div><span>Learning Outcomes</span><strong>{{ metrics.total_outcomes }}</strong></div>
+    <div><span>Assessment Attempts</span><strong>{{ metrics.total_attempts }}</strong></div>
+    <div><span>AI Recommendations</span><strong>{{ metrics.total_recommendations }}</strong></div>
+    <div><span>Mastery Rate</span><strong>{{ metrics.mastery_rate }}%</strong></div>
+</div>
+
+<section class="learn-card">
+    <span class="subject-code">Proposal Components</span>
+    <h2>Implemented Framework Modules</h2>
+    <div class="concept-grid">
+        {% for item in components %}
+        <div class="concept-pill good">
+            <span>{{ item.component }}</span>
+            <strong>{{ item.status }}</strong>
+            <small>{{ item.implemented_as }}</small>
+            <small><b>Evidence:</b> {{ item.evidence }}</small>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Objective 3 Evaluation</span>
+    <h2>Evaluation Indicators Supported by the Prototype</h2>
+    <div class="concept-grid">
+        {% for item in indicators %}
+        <div class="concept-pill {% if item.implemented == True %}good{% else %}weak{% endif %}">
+            <span>{{ item.indicator }}</span>
+            <strong>{{ item.implemented }}</strong>
+            <small>{{ item.source }}</small>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

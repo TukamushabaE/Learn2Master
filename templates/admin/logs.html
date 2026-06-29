@@ -1,0 +1,52 @@
+{% extends "layouts/base.html" %}
+{% block title %}Audit Logs{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">{% endblock %}
+{% block content %}
+<section class="learn-card">
+    <span class="subject-code">Security Audit Trail</span>
+    <h1>Administrative Actions</h1>
+    <div class="concept-grid">
+        {% for log in audit_rows %}
+        <div class="concept-pill">
+            <span>{{ log.actor_name or "System" }} | {{ log.action }}</span>
+            <strong>{{ log.created_at }}</strong>
+            <small>{{ log.entity_type }} #{{ log.entity_id }} | {{ log.details }}</small>
+        </div>
+        {% else %}
+        <p>No administrative actions recorded yet.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Learner Activity</span>
+    <h2>Activity Logs</h2>
+    <div class="concept-grid">
+        {% for a in activity %}
+        <div class="concept-pill">
+            <span>{{ a.full_name }} | {{ a.activity_type }}</span>
+            <strong>{{ a.created_at }}</strong>
+            <small>{{ a.activity_description }}</small>
+        </div>
+        {% else %}
+        <p>No activity yet.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Offline Sync Foundation</span>
+    <h2>Offline Queue</h2>
+    <div class="concept-grid">
+        {% for s in sync %}
+        <div class="concept-pill">
+            <span>{{ s.event_type }}</span>
+            <strong>{{ s.sync_status }}</strong>
+            <small>{{ s.payload }}</small>
+        </div>
+        {% else %}
+        <p>No offline events yet.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

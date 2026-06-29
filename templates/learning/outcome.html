@@ -1,0 +1,344 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}{{ outcome.outcome_name }}{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subjects.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+
+{% macro assessment_form(assessment, question_items, button_text) %}
+<form method="POST" action="{{ url_for('learning.submit_assessment', assessment_id=assessment.assessment_id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for item in question_items %}
+    <div class="question-card">
+        <h3>{{ loop.index }}. {{ item.question.question_text }}</h3>
+        <small>Concept: {{ item.question.concept_tag.replace('_', ' ')|title }}</small>
+        {% for option in item.options %}
+        <label class="option-row">
+            <input type="radio" name="question_{{ item.question.question_id }}" value="{{ option.option_id }}" required>
+            <span>{{ option.option_text }}</span>
+        </label>
+        {% endfor %}
+    </div>
+    {% endfor %}
+    <button class="btn-primary" type="submit">{{ button_text }}</button>
+</form>
+{% endmacro %}
+
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">{{ outcome.subject_name }} • {{ outcome.course_title }} • Sequential Mastery</p>
+        <h1>{{ outcome.outcome_name }}</h1>
+        <p>{{ outcome.outcome_description }}</p>
+    </div>
+    <div class="hero-badge"><span>AI Confidence</span><strong>{{ outcome.mastery_score }}%</strong></div>
+</section>
+
+<section class="mastery-flow-card">
+    <div class="flow-step {% if pretest_attempt %}done{% else %}active{% endif %}">1<br><span>Pre-test</span></div>
+    <div class="flow-line"></div>
+    <div class="flow-step {% if pretest_attempt and not posttest_attempt %}active{% elif practice_attempt or posttest_attempt %}done{% endif %}">2<br><span>Adaptive Learning</span></div>
+    <div class="flow-line"></div>
+    <div class="flow-step {% if practice_attempt and not posttest_attempt %}active{% elif posttest_attempt %}done{% endif %}">3<br><span>Post-test</span></div>
+    <div class="flow-line"></div>
+    <div class="flow-step {% if outcome.mastery_status == 'Mastered' %}done{% elif posttest_attempt %}active{% endif %}">4<br><span>Mastery</span></div>
+</section>
+
+<div class="two-column-learning">
+    <section class="learn-card">
+        <span class="subject-code">Evidence-Based Mastery Record</span>
+        <h2>Current Learning Evidence</h2>
+        <div class="evidence-grid">
+            <div><span>Pre-test</span><strong>{{ outcome.pretest_score }}%</strong></div>
+            <div><span>Practice</span><strong>{{ outcome.practice_score }}%</strong></div>
+            <div><span>Post-test</span><strong>{{ outcome.posttest_score }}%</strong></div>
+            <div><span>Mastery Status</span><strong>{{ outcome.mastery_status }}</strong></div>
+            <div><span>Competency Level</span><strong>{{ outcome.mastery_level }}</strong></div>
+            <div><span>AI Confidence</span><strong>{{ outcome.mastery_score }}%</strong></div>
+        </div>
+
+        <h3>Evidence Checklist</h3>
+        <div class="concept-grid">
+            {% for key, value in evidence.items() %}
+            <div class="concept-pill {% if value %}good{% else %}weak{% endif %}">
+                <span>{{ key.replace('_', ' ')|title }}</span>
+                <strong>{% if value %}Done{% else %}Pending{% endif %}</strong>
+                <small>Evidence-based CBC mastery requirement</small>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if concept_map %}
+        <h3>Concept-Level Mastery</h3>
+        <div class="concept-grid">
+            {% for concept in required_concepts %}
+                {% set cm = concept_map.get(concept) %}
+                <div class="concept-pill {% if cm and cm.latest_score >= practice_threshold %}good{% else %}weak{% endif %}">
+                    <span>{{ concept.replace('_', ' ')|title }}</span>
+                    <strong>{% if cm %}{{ cm.latest_score }}%{% else %}0%{% endif %}</strong>
+                    <small>{% if cm %}{{ cm.concept_status }}{% else %}Not Practiced{% endif %}</small>
+                </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if bkt_rows %}
+        <h3>AI Knowledge Tracing Probability</h3>
+        <div class="concept-grid">
+            {% for row in bkt_rows %}
+            <div class="concept-pill {% if row.probability_mastery >= 0.7 %}good{% else %}weak{% endif %}">
+                <span>{{ row.concept_tag.replace('_', ' ')|title }}</span>
+                <strong>{{ (row.probability_mastery * 100)|round(1) }}%</strong>
+                <small>{{ row.observations }} observation(s) - Confidence {{ row.confidence_score }}% - Gain {{ row.learning_gain }}% - Time {{ row.time_spent_minutes }} min - Predicted {{ row.predicted_mastery }}%</small>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="learn-card ai-panel">
+        <span class="subject-code">Explainable AI Coach</span>
+        <h2>Recommendation</h2>
+        {% if latest_recommendation %}
+            <p>{{ latest_recommendation.recommendation_reason }}</p>
+            <div class="info-row"><span>Type</span><strong>{{ latest_recommendation.recommendation_type }}</strong></div>
+            <div class="info-row"><span>Evidence</span><strong>{{ latest_recommendation.evidence_used }}</strong></div>
+            <div class="info-row"><span>Expected Mastery</span><strong>{{ latest_recommendation.expected_mastery }}%</strong></div>
+            <div class="info-row"><span>Study Time</span><strong>{{ latest_recommendation.estimated_study_minutes }} minutes</strong></div>
+            <div class="info-row"><span>Resource</span><strong>{{ latest_recommendation.recommended_resource }}</strong></div>
+            <div class="info-row"><span>Teacher Status</span><strong>{{ latest_recommendation.teacher_status }}</strong></div>
+        {% else %}
+            <p>Start with the pre-test. The system will identify weak concepts and select adaptive notes, videos, and practice questions.</p>
+        {% endif %}
+    </section>
+</div>
+
+{% if not pretest_attempt %}
+<section class="assessment-panel">
+    <div class="assessment-header">
+        <p class="eyebrow">Diagnostic Stage</p>
+        <h2>{{ pretest.assessment_title }}</h2>
+        <p>Attempt the pre-test first. It identifies weak concepts and determines which notes and videos should be recommended.</p>
+    </div>
+    {{ assessment_form(pretest, pretest_items, 'Submit Pre-test and Generate Adaptive Path') }}
+</section>
+{% endif %}
+
+<section class="assessment-panel competence-panel">
+    <div class="assessment-header">
+        <p class="eyebrow">Competency-Based Mission</p>
+        <h2>Apply This Outcome in a Real Setting</h2>
+        <p>Use the learning resources to produce evidence that shows what you can do, explain, decide, measure, create or improve in a real classroom, home or community situation.</p>
+    </div>
+    <div class="activity-grid">
+        {% for item in performance_resources %}
+        <div class="activity-card competence-task">
+            <span>{{ item.resource_type.replace('_', ' ')|title }}</span>
+            <h3>{{ item.resource_title }}</h3>
+            <p>{{ item.resource_body }}</p>
+            <small>Evidence time: {{ item.estimated_minutes }} minutes</small>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+{% if pretest_attempt %}
+<div class="two-column-learning">
+    <section class="learn-card">
+        <span class="subject-code">Adaptive Notes</span>
+        <h2>{{ outcome.lesson_title }}</h2>
+        <p>{{ outcome.lesson_content }}</p>
+        <div class="info-row"><span>Estimated Study Time</span><strong>{{ outcome.estimated_minutes }} minutes</strong></div>
+        <h3>Recommended Notes Based on Weak Concepts</h3>
+        {% if weak_concepts %}
+        <p class="adaptive-alert">Current focus: {{ weak_concepts|join(', ')|replace('_', ' ')|title }}</p>
+        {% endif %}
+        {% for note in notes %}
+        <div class="adaptive-item">
+            <strong>{{ note.note_title }}</strong>
+            <p>{{ note.note_body }}</p>
+            <small>Concept: {{ note.concept_tag.replace('_', ' ')|title }}</small>
+        </div>
+        {% endfor %}
+
+        <h3>Worked Examples</h3>
+        {% for example in worked_examples %}
+        <div class="adaptive-item">
+            <strong>{{ example.example_title }}</strong>
+            <p>{{ example.example_body }}</p>
+            <small>{{ example.step_by_step_solution }}</small>
+        </div>
+        {% endfor %}
+    </section>
+
+    <section class="learn-card">
+        <span class="subject-code">Illustrations and Diagrams</span>
+        <h2>Visual Concept Support</h2>
+        {% for item in illustrations %}
+        <div class="adaptive-item visual-resource">
+            <strong>{{ item.resource_title }}</strong>
+            {% if item.resource_url %}
+            <img src="{{ url_for('static', filename=item.resource_url) }}" alt="{{ item.resource_title }}">
+            {% endif %}
+            <p>{{ item.resource_body }}</p>
+            <small>Concept: {{ item.concept_tag.replace('_', ' ')|title }}</small>
+        </div>
+        {% else %}
+        <p>Visual resources will appear after the diagnostic pre-test identifies the current concept focus.</p>
+        {% endfor %}
+    </section>
+
+    <section class="learn-card">
+        <span class="subject-code">Recommended Videos</span>
+        <h2>Video Support</h2>
+        {% for video in videos %}
+        <div class="adaptive-item">
+            <strong>{{ video.video_title }}</strong>
+            <p>{{ video.video_description }}</p>
+            <a href="{{ video.video_url }}" target="_blank" class="small-link">Open Video Search →</a>
+        </div>
+        {% endfor %}
+    </section>
+</div>
+
+<section class="assessment-panel">
+    <div class="assessment-header">
+        <p class="eyebrow">Learning Activities</p>
+        <h2>CBC Practice Activities</h2>
+        <p>These activities help the learner master the concept before post-test evidence is collected.</p>
+    </div>
+    <div class="activity-grid">
+        {% for activity in activities %}
+        <div class="activity-card">
+            <span>{{ activity.activity_type }}</span>
+            <h3>{{ activity.activity_title }}</h3>
+            <p>{{ activity.activity_description }}</p>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="assessment-panel">
+    <div class="assessment-header">
+        <p class="eyebrow">Practical Evidence Portfolio</p>
+        <h2>Upload Practical / Project Evidence</h2>
+        <p>For Physics and ICT, learners may submit experiment photos, screenshots, code files, or short reports. Teacher review supports CBC practical-skill evidence.</p>
+    </div>
+    {% if practical_evidence %}
+        <div class="adaptive-item">
+            <strong>{{ practical_evidence.evidence_title }}</strong>
+            <p>{{ practical_evidence.evidence_description }}</p>
+            <small>Teacher status: {{ practical_evidence.teacher_status }}</small>
+        </div>
+    {% endif %}
+    <form method="POST" enctype="multipart/form-data" action="{{ url_for('learning.submit_practical_evidence', outcome_id=outcome.outcome_id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="question-card">
+            <h3>Evidence title</h3>
+            <input name="evidence_title" required placeholder="e.g. Vernier caliper practical report" style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;">
+            <h3>Evidence description</h3>
+            <textarea name="evidence_description" rows="3" placeholder="Describe what you did and what this evidence proves..." style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;"></textarea>
+            <h3>Optional file</h3>
+            <input type="file" name="evidence_file">
+        </div>
+        <button class="btn-primary" type="submit">Submit Practical Evidence</button>
+    </form>
+</section>
+
+<section class="assessment-panel">
+    <div class="assessment-header">
+        <p class="eyebrow">CBC Reflection Evidence</p>
+        <h2>Learner Reflection</h2>
+        <p>Before the post-test opens, briefly explain what you have learned and how confident you feel. This supports CBC evidence-based mastery.</p>
+    </div>
+    {% if reflection %}
+        <div class="adaptive-item">
+            <strong>Reflection submitted</strong>
+            <p>{{ reflection.reflection_text }}</p>
+            <small>Confidence level: {{ reflection.confidence_level }}/5</small>
+        </div>
+    {% else %}
+        <form method="POST" action="{{ url_for('learning.submit_reflection', outcome_id=outcome.outcome_id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="question-card">
+                <h3>What have you understood from this learning activity?</h3>
+                <textarea name="reflection_text" rows="4" required placeholder="Write your reflection here..." style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;"></textarea>
+                <label class="option-row" style="margin-top:12px;">
+                    <span>Confidence level</span>
+                    <select name="confidence_level" style="margin-left:12px;padding:8px;border-radius:10px;">
+                        <option value="1">1 - Not confident</option>
+                        <option value="2">2 - Slightly confident</option>
+                        <option value="3" selected>3 - Fairly confident</option>
+                        <option value="4">4 - Confident</option>
+                        <option value="5">5 - Very confident</option>
+                    </select>
+                </label>
+            </div>
+            <button class="btn-primary" type="submit">Save Reflection Evidence</button>
+        </form>
+    {% endif %}
+</section>
+
+<section class="assessment-panel">
+    <div class="assessment-header">
+        <p class="eyebrow">Adaptive Practice Stage</p>
+        <h2>{{ practice.assessment_title }}</h2>
+        {% if posttest_unlocked %}
+            <p>All concept practice scores are at least {{ practice_threshold }}%. The post-test is now unlocked.</p>
+        {% else %}
+            <p>The system has changed the question set to focus on weak concept(s):
+                <strong>{{ weak_concepts|join(', ')|replace('_', ' ')|title }}</strong>.
+                Master each concept at {{ practice_threshold }}% or above before the post-test opens.</p>
+        {% endif %}
+    </div>
+    {% if not posttest_unlocked %}
+        {{ assessment_form(practice, practice_items, 'Submit Adaptive Practice') }}
+    {% endif %}
+</section>
+{% endif %}
+
+
+{% if pretest_attempt and not posttest_unlocked %}
+<section class="assessment-panel remediation-panel">
+    <div class="assessment-header">
+        <p class="eyebrow">Post-test Locked</p>
+        <h2>Master Weak Concepts First</h2>
+        <p>The post-test will open after these concept(s) reach {{ practice_threshold }}% in practice: <strong>{{ concepts_not_ready|join(', ')|replace('_', ' ')|title }}</strong>.</p>
+    </div>
+</section>
+{% endif %}
+
+{% if posttest_unlocked %}
+<section class="assessment-panel posttest-panel">
+    <div class="assessment-header">
+        <p class="eyebrow">Post-test Stage</p>
+        <h2>{{ posttest.assessment_title }}</h2>
+        <p>The mastery algorithm uses CBC evidence: pre-test completion, learning practice, weak-concept resolution, and post-test performance. Next outcome unlocks only after evidence-based mastery is achieved.</p>
+    </div>
+    {{ assessment_form(posttest, posttest_items, 'Submit Post-test and Calculate Mastery') }}
+</section>
+{% endif %}
+
+{% if posttest_attempt and outcome.mastery_status != 'Mastered' %}
+<section class="assessment-panel remediation-panel">
+    <div class="assessment-header">
+        <p class="eyebrow">Remediation Required</p>
+        <h2>Next Learning Outcome Remains Locked</h2>
+        <p>Your mastery is below the threshold. Review the recommended notes and videos, redo the practice, then attempt the post-test again.</p>
+    </div>
+</section>
+{% endif %}
+
+{% if outcome.mastery_status == 'Mastered' %}
+<section class="assessment-panel mastered-panel">
+    <div class="assessment-header">
+        <p class="eyebrow">Mastery Achieved</p>
+        <h2>Next Learning Outcome Unlocked</h2>
+        <p>You have attained mastery. Return to the pathway to continue to the next outcome.</p>
+        <a class="btn-primary" href="{{ url_for('learning.pathway', course_id=outcome.course_id) }}">Back to Pathway →</a>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

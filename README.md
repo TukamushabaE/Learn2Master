@@ -1,48 +1,73 @@
-# Learn2Master V8 — Final Dissertation Edition
+# Learn2Master V8 Dissertation Final Edition
 
-AI-enabled Information System prototype for mastery-based learning under Uganda CBC, aligned to the MSc proposal: **An AI-Enabled Framework for Mastery-Based Learning under CBC**.
+Learn2Master is an AI-enabled Flask and SQLite information system prototype for the MSc Information Systems dissertation:
 
-## Run
+**An AI-Enabled Framework for Mastery-Based Learning under CBC**
 
-```bash
+The system is aligned to Uganda Lower Secondary CBC principles and demonstrates learner profiling, sequential adaptive content, assessment and feedback, explainable recommendations, teacher decision support, offline readiness, evidence-based mastery and research analytics.
+
+## Quick Start
+
+```powershell
 pip install -r requirements.txt
 python init_db.py
 python seed_data.py
 python app.py
 ```
 
-Open: `http://127.0.0.1:5000`
+Open:
 
-## Default accounts
+```text
+http://127.0.0.1:5000
+```
 
-Check `seed_data.py` for seeded usernames/passwords. Common demo accounts in recent builds are:
+## Demo Accounts
 
-- Student: `elijah` / `12345`
+- Learner: `elijah` / `12345`
 - Teacher: `teacher` / `12345`
-- Admin: `admin` / `12345`
+- School Administrator: `admin` / `12345`
+- Super Administrator: `superadmin` / `12345`
 
-## V8 proposal-aligned modules
+## Core Modules
 
-- Authentication and role-based access
-- Student, Teacher, Admin dashboards
-- CBC learning pathway for Physics and ICT prototype topics
-- Sequential learning outcome locking/unlocking
-- Pre-test, adaptive practice, reflection, practical evidence, post-test
-- Evidence-based mastery engine
-- Adaptive notes, videos, worked examples and concept-based questions
-- Simplified Bayesian Knowledge Tracing engine
-- Explainable AI recommendation logging
-- Teacher decision support: approve/override recommendations and review practical evidence
-- Admin information system: users, schools, curriculum, questions, settings, reports, audit/offline logs
-- Research dashboard for Chapter Four metrics
-- Offline-ready foundation using SQLite, service worker and sync queue
+- Standard roles: Super Administrator, School Administrator, Teacher and Learner
+- Admin user, role, school, curriculum, settings, backup, report and audit management
+- CBC curriculum structure: subjects, terms, strands, sub-strands, topics, competencies, outcomes, indicators and success criteria
+- Sequential mastery pathway: pre-test, adaptive content, reflection, practical evidence, practice, post-test and unlocks
+- Evidence-based mastery engine with teacher review support
+- Simplified Bayesian Knowledge Tracing for concept probability updates
+- Explainable AI recommendation records and learner AI coach
+- Practical evidence upload and rubric-based teacher review
+- Learner and teacher competency portfolios
+- Research dashboard with printable and CSV reports
+- Offline foundation with sync queue, cached resources and service worker route
+
+## Important Routes
+
+- `/admin`
+- `/admin/users`
+- `/admin/roles`
+- `/admin/curriculum`
+- `/admin/settings`
+- `/admin/backups`
+- `/teacher`
+- `/teacher/learners`
+- `/teacher/portfolio/<learner_id>`
+- `/learner/ai-coach`
+- `/learner/portfolio`
+- `/ai/explanations`
+- `/research/dashboard`
+- `/research/reports`
+
+## Verification
+
+```powershell
+python init_db.py
+python seed_data.py
+python -m compileall routes services tests app.py seed_data.py
+python -m pytest -q --basetemp .tmp_pytest -p no:cacheprovider
+```
 
 ## Documentation
 
-See the `docs/` folder, especially:
-
-- `V8_INCLUDED_MISSING_FEATURES.md`
-- `V8_FINAL_ALIGNMENT.md`
-- `FINAL_PROPOSAL_ALIGNMENT.md`
-- `PROPOSAL_ALIGNMENT.md`
-"# Learn2Master" 
+See `docs/` for proposal alignment, curriculum alignment, architecture, database dictionary, guides, testing protocol and demo script.

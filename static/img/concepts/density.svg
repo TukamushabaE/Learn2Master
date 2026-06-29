@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">Density relationship</title>
+  <desc id="desc">Density is mass divided by volume.</desc>
+  <rect width="720" height="360" fill="#fbfcff"/>
+  <circle cx="360" cy="170" r="92" fill="#fff0d9" stroke="#d17b00" stroke-width="3"/>
+  <text x="360" y="142" text-anchor="middle" font-family="Inter,Arial" font-size="24" font-weight="800" fill="#6f4200">Density</text>
+  <line x1="302" y1="168" x2="418" y2="168" stroke="#6f4200" stroke-width="3"/>
+  <text x="360" y="164" text-anchor="middle" font-family="Inter,Arial" font-size="20" fill="#6f4200">mass</text>
+  <text x="360" y="204" text-anchor="middle" font-family="Inter,Arial" font-size="20" fill="#6f4200">volume</text>
+  <rect x="74" y="120" width="150" height="92" rx="12" fill="#dff3ff" stroke="#2a7fb8" stroke-width="3"/>
+  <text x="149" y="158" text-anchor="middle" font-family="Inter,Arial" font-size="18" font-weight="800" fill="#17486a">Measure Mass</text>
+  <text x="149" y="184" text-anchor="middle" font-family="Inter,Arial" font-size="14" fill="#17486a">balance</text>
+  <rect x="496" y="120" width="150" height="92" rx="12" fill="#e8f8ed" stroke="#2d8a48" stroke-width="3"/>
+  <text x="571" y="158" text-anchor="middle" font-family="Inter,Arial" font-size="18" font-weight="800" fill="#175225">Measure Volume</text>
+  <text x="571" y="184" text-anchor="middle" font-family="Inter,Arial" font-size="14" fill="#175225">dimensions/displacement</text>
+  <text x="360" y="312" text-anchor="middle" font-family="Inter,Arial" font-size="16" font-weight="700" fill="#26394f">Use density to compare materials and identify substances.</text>
+</svg>

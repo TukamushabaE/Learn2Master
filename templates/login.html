@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login | Learn2Master</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-page">
+
+<div class="login-wrapper">
+
+    <div class="login-card">
+
+        <div class="login-form-side">
+            <div class="login-brand">
+                <div class="brand-mark">🎓</div>
+                <h2>Learn<span>2Master</span></h2>
+            </div>
+
+            <h1>Welcome Back</h1>
+            <p class="login-subtitle">Login to continue mastering your CBC competencies.</p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="{{ url_for('auth.login') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="input-group">
+                    <label>Username</label>
+                    <input type="text" name="username" placeholder="Enter your username" required>
+                </div>
+
+                <div class="input-group">
+                    <label>Password</label>
+                    <input type="password" name="password" placeholder="Enter your password" required>
+                </div>
+
+                <div class="login-options">
+                    <label>
+                        <input type="checkbox">
+                        Remember me
+                    </label>
+                    <a href="#">Forgot password?</a>
+                </div>
+
+                <button type="submit" class="login-btn">Sign In</button>
+            </form>
+
+            <p class="signup-text">
+                Don’t have an account?
+                <a href="{{ url_for('auth.register') }}">Sign up</a>
+            </p>
+
+            <p class="demo-login">
+                Demo: <strong>elijah</strong> / <strong>12345</strong>
+            </p>
+        </div>
+
+        <div class="login-image-side">
+            <div class="image-overlay">
+                <h2>Welcome back!</h2>
+                <p>Learn at your pace. Master every competency.</p>
+                <a href="{{ url_for('auth.register') }}">Start now</a>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+</body>
+</html>

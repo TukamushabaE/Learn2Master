@@ -1,0 +1,37 @@
+{% extends "layouts/base.html" %}
+{% block title %}Competency Portfolio{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div><p class="eyebrow">Competency Evidence Portfolio</p><h1>My Mastery Evidence</h1><p>Evidence per learning outcome: pre-test, adaptive practice, reflection, practical evidence, post-test, AI recommendations, teacher feedback and mastery status.</p></div>
+  <div class="hero-badge"><span>Outcomes</span><strong>{{ rows|length }}</strong></div>
+</section>
+<section class="learn-card">
+  <div class="concept-grid">
+  {% for row in rows %}
+    <div class="concept-pill {% if row.mastery_status == 'Mastered' %}good{% elif row.mastery_status == 'Not Started' %}{% else %}weak{% endif %}">
+      <span>{{ row.subject_name }} | {{ row.outcome_code }}</span>
+      <strong>{{ row.mastery_status }} | {{ row.mastery_score }}%</strong>
+      <small>{{ row.outcome_name }}</small>
+      <small>Pre-test {{ row.pretest_done }} | Practice {{ row.practice_done }} | Reflection {{ row.reflections }} | Practical {{ row.practical_evidence }} | Post-test {{ row.posttest_done }}</small>
+      <small>AI recs {{ row.recommendations }} | Teacher feedback {{ row.teacher_feedback }} | Teacher reviews {{ row.teacher_reviews }}</small>
+    </div>
+  {% endfor %}
+  </div>
+</section>
+<section class="learn-card">
+  <span class="subject-code">Teacher Feedback</span>
+  <h2>Latest Guidance</h2>
+  <div class="concept-grid">
+  {% for item in latest_feedback %}
+    <div class="concept-pill good">
+      <span>{{ item.outcome_code }} | {{ item.teacher_name }}</span>
+      <strong>{{ item.feedback_type }}</strong>
+      <small>{{ item.feedback_text }}</small>
+    </div>
+  {% else %}
+    <p>No teacher feedback has been recorded yet.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}

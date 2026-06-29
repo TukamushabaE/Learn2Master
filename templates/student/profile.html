@@ -1,0 +1,56 @@
+{% extends "layouts/base.html" %}
+{% block title %}AI Learner Profile{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subjects.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div>
+    <p class="eyebrow">Learner Profiling Module</p>
+    <h1>{{ user.full_name }}'s AI Learner Profile</h1>
+    <p>{{ ai_summary }}</p>
+  </div>
+  <div class="hero-badge"><span>Learning Pace</span><strong>{{ learning_pace }}</strong></div>
+</section>
+
+<div class="evidence-grid">
+  <div><span>Class Level</span><strong>{% if profile %}{{ profile.class_level }}{% else %}Senior One{% endif %}</strong></div>
+  <div><span>School</span><strong>{{ user.school_name or 'Not set' }}</strong></div>
+  <div><span>Assessment Attempts</span><strong>{{ attempts }}</strong></div>
+  <div><span>Mastered Outcomes</span><strong>{{ mastered }}</strong></div>
+  <div><span>AI Confidence Avg</span><strong>{{ avg_mastery }}%</strong></div>
+  <div><span>Support Mode</span><strong>Notes + Video + Practice</strong></div>
+</div>
+
+<div class="two-column-learning">
+  <section class="learn-card">
+    <span class="subject-code">Weak Concepts</span>
+    <h2>Concepts Requiring Support</h2>
+    <div class="concept-grid">
+      {% for c in weak_concepts %}
+      <div class="concept-pill weak"><span>{{ c.concept_tag.replace('_',' ')|title }}</span><strong>{{ c.latest_score }}%</strong><small>{{ c.concept_status }}</small></div>
+      {% else %}<p>No weak concepts recorded yet.</p>{% endfor %}
+    </div>
+  </section>
+  <section class="learn-card">
+    <span class="subject-code">Strong Concepts</span>
+    <h2>Evidence of Strength</h2>
+    <div class="concept-grid">
+      {% for c in strong_concepts %}
+      <div class="concept-pill good"><span>{{ c.concept_tag.replace('_',' ')|title }}</span><strong>{{ c.latest_score }}%</strong><small>{{ c.concept_status }}</small></div>
+      {% else %}<p>No mastered concepts yet.</p>{% endfor %}
+    </div>
+  </section>
+</div>
+
+<section class="learn-card">
+  <span class="subject-code">Learning History</span>
+  <h2>Recent System Logs</h2>
+  <div class="concept-grid">
+  {% for log in logs %}
+    <div class="concept-pill"><span>{{ log.activity_type }}</span><strong>{{ log.created_at }}</strong><small>{{ log.activity_description }}</small></div>
+  {% else %}<p>No activity recorded yet.</p>{% endfor %}
+  </div>
+</section>
+{% endblock %}

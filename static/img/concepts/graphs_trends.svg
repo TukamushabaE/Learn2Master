@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">Graphs and trends</title>
+  <desc id="desc">A graph helps learners identify patterns and trends in measured data.</desc>
+  <rect width="720" height="360" fill="#fbfcff"/>
+  <rect x="95" y="55" width="530" height="255" rx="16" fill="#ffffff" stroke="#7c8da0" stroke-width="3"/>
+  <line x1="160" y1="260" x2="560" y2="260" stroke="#26394f" stroke-width="4"/>
+  <line x1="160" y1="260" x2="160" y2="100" stroke="#26394f" stroke-width="4"/>
+  <polyline points="180,232 245,205 310,184 375,148 440,128 520,96" fill="none" stroke="#2b65c8" stroke-width="5"/>
+  <circle cx="180" cy="232" r="6" fill="#2b65c8"/><circle cx="245" cy="205" r="6" fill="#2b65c8"/><circle cx="310" cy="184" r="6" fill="#2b65c8"/><circle cx="375" cy="148" r="6" fill="#2b65c8"/><circle cx="440" cy="128" r="6" fill="#2b65c8"/><circle cx="520" cy="96" r="6" fill="#2b65c8"/>
+  <text x="360" y="333" text-anchor="middle" font-family="Inter,Arial" font-size="16" font-weight="800" fill="#26394f">Graphs turn measurements into evidence for conclusions.</text>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">Choosing measuring instruments</title>
+  <desc id="desc">Different physical quantities require different measuring instruments.</desc>
+  <rect width="720" height="360" fill="#f7fbff"/>
+  <g font-family="Inter,Arial" fill="#26394f" font-size="15" font-weight="700">
+    <rect x="50" y="62" width="130" height="88" rx="12" fill="#dff3ff" stroke="#2a7fb8" stroke-width="2"/><text x="115" y="112" text-anchor="middle">Metre rule</text><text x="115" y="134" text-anchor="middle" font-size="12">length</text>
+    <rect x="210" y="62" width="130" height="88" rx="12" fill="#fff0d9" stroke="#d17b00" stroke-width="2"/><text x="275" y="112" text-anchor="middle">Stopwatch</text><text x="275" y="134" text-anchor="middle" font-size="12">time</text>
+    <rect x="370" y="62" width="130" height="88" rx="12" fill="#e8f8ed" stroke="#2d8a48" stroke-width="2"/><text x="435" y="112" text-anchor="middle">Balance</text><text x="435" y="134" text-anchor="middle" font-size="12">mass</text>
+    <rect x="530" y="62" width="140" height="88" rx="12" fill="#f5eaff" stroke="#7a4cc2" stroke-width="2"/><text x="600" y="112" text-anchor="middle">Cylinder</text><text x="600" y="134" text-anchor="middle" font-size="12">volume</text>
+  </g>
+  <rect x="105" y="225" width="510" height="66" rx="15" fill="#ffffff" stroke="#7c8da0" stroke-width="2"/>
+  <text x="360" y="252" text-anchor="middle" font-family="Inter,Arial" font-size="18" font-weight="800" fill="#26394f">Choose by quantity, size and required accuracy</text>
+  <text x="360" y="278" text-anchor="middle" font-family="Inter,Arial" font-size="15" fill="#26394f">Small dimensions may need vernier callipers or a micrometer screw gauge.</text>
+</svg>

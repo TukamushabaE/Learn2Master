@@ -1,0 +1,21 @@
+{% extends "layouts/base.html" %}
+{% block title %}My Assessments{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="learn-card">
+    <span class="subject-code">Learner</span>
+    <h1>My Assessments</h1>
+    <p>Pre-test, adaptive practice and post-test evidence for mastery learning.</p>
+    <div class="concept-grid">
+        {% for r in rows %}
+        <div class="concept-pill {% if r.best_score and r.best_score >= 80 %}good{% else %}weak{% endif %}">
+            <span>{{ r.subject_name }} - {{ r.outcome_code }} - {{ r.assessment_type|title }}</span>
+            <strong>{% if r.best_score is not none %}{{ r.best_score }}%{% else %}Not Attempted{% endif %}</strong>
+            <small>{{ r.assessment_title }} - Attempts: {{ r.attempts }}</small>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

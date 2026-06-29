@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">Area and volume measurement</title>
+  <desc id="desc">Area is length times width; volume is length times width times height.</desc>
+  <rect width="720" height="360" fill="#f7fbff"/>
+  <rect x="88" y="96" width="190" height="120" fill="#dff3ff" stroke="#2a7fb8" stroke-width="3"/>
+  <text x="183" y="154" text-anchor="middle" font-family="Inter,Arial" font-size="22" font-weight="800" fill="#17486a">Area</text>
+  <text x="183" y="187" text-anchor="middle" font-family="Inter,Arial" font-size="17" fill="#17486a">length x width</text>
+  <path d="M410 216 L565 216 L620 165 L465 165 Z" fill="#e8f8ed" stroke="#2d8a48" stroke-width="3"/>
+  <path d="M465 165 V80 L620 80 V165" fill="#d9f3df" stroke="#2d8a48" stroke-width="3"/>
+  <path d="M410 216 V132 L465 80" fill="none" stroke="#2d8a48" stroke-width="3"/>
+  <text x="515" y="258" text-anchor="middle" font-family="Inter,Arial" font-size="22" font-weight="800" fill="#175225">Volume</text>
+  <text x="515" y="286" text-anchor="middle" font-family="Inter,Arial" font-size="17" fill="#175225">length x width x height</text>
+  <text x="360" y="330" text-anchor="middle" font-family="Inter,Arial" font-size="16" font-weight="700" fill="#26394f">Use measurements to solve classroom and community problems.</text>
+</svg>

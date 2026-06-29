@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">SI units table</title>
+  <desc id="desc">Examples of physical quantities and their SI units.</desc>
+  <rect width="720" height="360" fill="#f7fbff"/>
+  <rect x="95" y="48" width="530" height="264" rx="16" fill="#ffffff" stroke="#7c8da0" stroke-width="3"/>
+  <text x="360" y="86" text-anchor="middle" font-family="Inter,Arial" font-size="24" font-weight="800" fill="#26394f">Standard SI Units</text>
+  <g font-family="Inter,Arial" font-size="18">
+    <rect x="140" y="115" width="440" height="42" fill="#dff3ff"/><text x="180" y="142" font-weight="700" fill="#17486a">Quantity</text><text x="410" y="142" font-weight="700" fill="#17486a">Unit and Symbol</text>
+    <text x="180" y="186" fill="#26394f">Length</text><text x="410" y="186" fill="#26394f">metre (m)</text>
+    <text x="180" y="226" fill="#26394f">Mass</text><text x="410" y="226" fill="#26394f">kilogram (kg)</text>
+    <text x="180" y="266" fill="#26394f">Time</text><text x="410" y="266" fill="#26394f">second (s)</text>
+  </g>
+</svg>

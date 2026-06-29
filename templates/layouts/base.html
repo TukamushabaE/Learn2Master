@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Learn2Master{% endblock %} | AI-Enabled CBC Mastery Learning</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/variables.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/cards.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive.css') }}">
+    {% block styles %}{% endblock %}
+</head>
+<body>
+    <div class="app-shell">
+        {% if session.get("role") == "learner" %}
+    {% include "partials/sidebar_student.html" %}
+{% elif session.get("role") == "teacher" %}
+    {% include "partials/sidebar_teacher.html" %}
+{% elif session.get("role") in ["school_admin", "super_admin"] %}
+    {% include "partials/sidebar_admin.html" %}
+{% else %}
+    {% include "partials/sidebar.html" %}
+{% endif %}
+        <main class="main-area">
+            {% include 'partials/topbar.html' %}
+            <section class="content-area">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="flash-wrap">
+                            {% for category, message in messages %}
+                                <div class="flash flash-{{ category }}">{{ message }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+                {% block content %}{% endblock %}
+            </section>
+            {% include 'partials/footer.html' %}
+        </main>
+    </div>
+    <script src="{{ url_for('static', filename='js/offline.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

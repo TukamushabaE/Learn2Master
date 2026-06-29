@@ -1,0 +1,56 @@
+{% extends "layouts/base.html" %}
+{% block title %}{{ school.school_name }} Report{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>
+.print-actions{display:flex;gap:10px;justify-content:flex-end;margin-bottom:14px}.print-button{border:1px solid #143d73;border-radius:8px;background:#143d73;color:#fff;padding:10px 14px;font-weight:800;cursor:pointer;text-decoration:none}.report-table{width:100%;border-collapse:collapse;margin-top:12px}.report-table th,.report-table td{border-bottom:1px solid #e5eaf2;padding:9px;text-align:left;vertical-align:top}.report-table th{font-size:12px;text-transform:uppercase;color:#5b677a}@media print{.sidebar,.topbar,.footer,.print-actions,.flash-wrap{display:none!important}.app-shell{display:block}.main-area,.content-area{padding:0;margin:0}.learn-card,.hero-panel{box-shadow:none;border:0;break-inside:avoid}.report-table th,.report-table td{font-size:11px}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="print-actions">
+    <a class="print-button" href="{{ url_for('admin.reports') }}">Back</a>
+    <button class="print-button" onclick="window.print()">Print Report</button>
+</div>
+
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Institution Management Report</p>
+        <h1>{{ school.school_name }}</h1>
+        <p>School-wide account structure, security levels, learner mastery evidence and administrative accountability.</p>
+    </div>
+    <div class="hero-badge"><span>School ID</span><strong>{{ school.school_id }}</strong></div>
+</section>
+
+<section class="learn-card">
+    <h2>Account Structure</h2>
+    <div class="evidence-grid">
+        {% for role in role_counts %}
+        <div><span>{{ role.display_name }}</span><strong>{{ role.total }}</strong></div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <h2>Subject Mastery</h2>
+    <table class="report-table">
+        <thead><tr><th>Subject</th><th>Average Mastery</th><th>Mastered Records</th><th>Total Records</th></tr></thead>
+        <tbody>
+        {% for row in mastery %}
+        <tr><td>{{ row.subject_name }}</td><td>{{ row.avg_mastery or 0 }}%</td><td>{{ row.mastered or 0 }}</td><td>{{ row.records or 0 }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="learn-card">
+    <h2>Security Register</h2>
+    <table class="report-table">
+        <thead><tr><th>Name</th><th>Role</th><th>Username</th><th>Status</th><th>Security Level</th></tr></thead>
+        <tbody>
+        {% for user in users %}
+        <tr><td>{{ user.full_name }}</td><td>{{ user.display_name }}</td><td>{{ user.username }}</td><td>{{ user.account_status }}</td><td>Level {{ user.security_level }} - {{ security_label(user.security_level) }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

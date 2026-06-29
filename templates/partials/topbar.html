@@ -1,0 +1,18 @@
+<header class="topbar">
+    <div class="topbar-search">
+        <span>🔎</span>
+        <input type="search" placeholder="Search subjects, competencies, lessons...">
+    </div>
+    <div class="topbar-actions">
+        <span class="pill">CBC</span>
+        <span class="icon-button">🔔</span>
+        <div class="user-chip">
+            <div class="avatar">{{ (session.get('full_name','U')[:1]).upper() }}</div>
+            <div>
+                <strong>{{ session.get('full_name','Learner') }}</strong>
+                <small>{{ role_label(session.get('role', 'learner')) }}</small>
+            </div>
+        </div>
+        <a class="logout-link" href="{{ url_for('auth.logout') }}">Logout</a>
+    </div>
+</header>

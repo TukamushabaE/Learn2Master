@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Learn2Master | Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="sidebar">
+        <h2>Learn2Master</h2>
+        <ul>
+            <li><a href="/dashboard">🏠 Dashboard</a></li>
+            <li><a href="#">📘 My Topics</a></li>
+            <li><a href="#">📈 Progress</a></li>
+            <li><a href="#">🚪 Logout</a></li>
+        </ul>
+    </div>
+
+    <div class="main-content">
+        <div class="topbar">
+            <h3>Welcome, {{ user['full_name'] }} | {{ user['school_name'] }}</h3>
+        </div>
+
+        <div class="card-container">
+            <div class="card">
+                <h4>📊 Your Progress</h4>
+                <ul>
+                    {% for item in progress %}
+                        <li><strong>{{ item['topic_name'] }}</strong>: {{ item['completion_status'] }} ({{ item['score'] or 'N/A' }})</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div class="card">
+                <h4>🧠 Recommended Topic</h4>
+                {% if recommended %}
+                    <p><strong>{{ recommended['topic_name'] }}</strong> ({{ recommended['difficulty_level'] }})</p>
+                    <a class="button" href="{{ recommended['content_url'] }}">Start Learning</a>
+                {% else %}
+                    <p>No new recommendations yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

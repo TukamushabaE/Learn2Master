@@ -1,0 +1,21 @@
+{% extends "layouts/base.html" %}
+{% block title %}Roles{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div><p class="eyebrow">Role-Based Access Control</p><h1>Standard User Roles</h1><p>Learn2Master uses four standard roles only: Super Administrator, School Administrator, Teacher and Learner.</p></div>
+  <div class="hero-badge"><span>Roles</span><strong>{{ roles|length }}</strong></div>
+</section>
+<section class="learn-card">
+  <h2>Permissions Matrix</h2>
+  <div class="concept-grid">
+    {% for role in roles %}
+    <div class="concept-pill {% if role.role_name in ['super_admin','school_admin'] %}weak{% else %}good{% endif %}">
+      <span>{{ role.display_name }}</span>
+      <strong>{{ role.users }} account(s)</strong>
+      <small>{{ permissions[role.role_name] }}</small>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

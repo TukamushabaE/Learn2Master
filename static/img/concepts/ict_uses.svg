@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">Uses of ICT in society</title>
+  <desc id="desc">ICT supports education, health, agriculture, banking and communication.</desc>
+  <rect width="720" height="360" fill="#fbfcff"/>
+  <circle cx="360" cy="180" r="62" fill="#e7f0ff" stroke="#2b65c8" stroke-width="3"/>
+  <text x="360" y="174" text-anchor="middle" font-family="Inter,Arial" font-size="24" font-weight="800" fill="#173a78">ICT</text>
+  <text x="360" y="202" text-anchor="middle" font-family="Inter,Arial" font-size="14" fill="#173a78">supports work</text>
+  <g font-family="Inter,Arial" font-size="15" font-weight="700">
+    <rect x="75" y="60" width="150" height="58" rx="12" fill="#dff3ff" stroke="#2a7fb8" stroke-width="2"/><text x="150" y="96" text-anchor="middle" fill="#17486a">Education</text>
+    <rect x="495" y="60" width="150" height="58" rx="12" fill="#e8f8ed" stroke="#2d8a48" stroke-width="2"/><text x="570" y="96" text-anchor="middle" fill="#175225">Health</text>
+    <rect x="75" y="242" width="150" height="58" rx="12" fill="#fff0d9" stroke="#d17b00" stroke-width="2"/><text x="150" y="278" text-anchor="middle" fill="#6f4200">Agriculture</text>
+    <rect x="495" y="242" width="150" height="58" rx="12" fill="#f5eaff" stroke="#7a4cc2" stroke-width="2"/><text x="570" y="278" text-anchor="middle" fill="#452675">Banking</text>
+    <rect x="285" y="32" width="150" height="48" rx="12" fill="#ffe8e6" stroke="#c04435" stroke-width="2"/><text x="360" y="63" text-anchor="middle" fill="#752017">Communication</text>
+  </g>
+  <g stroke="#607080" stroke-width="3">
+    <line x1="305" y1="150" x2="225" y2="105"/><line x1="415" y1="150" x2="495" y2="105"/>
+    <line x1="360" y1="118" x2="360" y2="80"/><line x1="305" y1="210" x2="225" y2="252"/><line x1="415" y1="210" x2="495" y2="252"/>
+  </g>
+</svg>

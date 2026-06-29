@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">Physical quantities</title>
+  <desc id="desc">Physical quantities can be measured with instruments and units.</desc>
+  <rect width="720" height="360" fill="#fbfcff"/>
+  <rect x="60" y="72" width="260" height="210" rx="16" fill="#e8f8ed" stroke="#2d8a48" stroke-width="3"/>
+  <text x="190" y="112" text-anchor="middle" font-family="Inter,Arial" font-size="22" font-weight="800" fill="#175225">Measurable</text>
+  <text x="190" y="152" text-anchor="middle" font-family="Inter,Arial" font-size="18" fill="#175225">length</text>
+  <text x="190" y="187" text-anchor="middle" font-family="Inter,Arial" font-size="18" fill="#175225">mass</text>
+  <text x="190" y="222" text-anchor="middle" font-family="Inter,Arial" font-size="18" fill="#175225">time</text>
+  <text x="190" y="257" text-anchor="middle" font-family="Inter,Arial" font-size="18" fill="#175225">temperature</text>
+  <rect x="400" y="72" width="260" height="210" rx="16" fill="#ffe8e6" stroke="#c04435" stroke-width="3"/>
+  <text x="530" y="112" text-anchor="middle" font-family="Inter,Arial" font-size="22" font-weight="800" fill="#752017">Not Measurable</text>
+  <text x="530" y="164" text-anchor="middle" font-family="Inter,Arial" font-size="18" fill="#752017">happiness</text>
+  <text x="530" y="205" text-anchor="middle" font-family="Inter,Arial" font-size="18" fill="#752017">beauty</text>
+  <text x="530" y="246" text-anchor="middle" font-family="Inter,Arial" font-size="18" fill="#752017">fear</text>
+  <text x="360" y="326" text-anchor="middle" font-family="Inter,Arial" font-size="16" font-weight="700" fill="#26394f">A physical quantity has a value and a unit.</text>
+</svg>

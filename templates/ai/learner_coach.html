@@ -1,0 +1,55 @@
+{% extends "layouts/base.html" %}
+{% block title %}AI Coach{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div><p class="eyebrow">Personal AI Learning Coach</p><h1>Adaptive Guidance</h1><p>Recommendations are generated from diagnostic attempts, weak concepts, BKT probabilities, practice evidence and mastery status.</p></div>
+  <div class="hero-badge"><span>Recommendations</span><strong>{{ recommendations|length }}</strong></div>
+</section>
+<section class="learn-card">
+  <span class="subject-code">Current Recommendations</span>
+  <h2>What to Do Next</h2>
+  <div class="concept-grid">
+  {% for rec in recommendations %}
+    <div class="concept-pill weak">
+      <span>{{ rec.subject_name }} | {{ rec.outcome_code }}</span>
+      <strong>{{ rec.recommendation_type }}</strong>
+      <small>{{ rec.recommendation_reason }}</small>
+      <small><b>Resource:</b> {{ rec.recommended_resource }} | <b>Time:</b> {{ rec.estimated_study_minutes }} minutes | <b>Expected mastery:</b> {{ rec.expected_mastery }}%</small>
+    </div>
+  {% else %}
+    <p>No recommendation yet. Start with a diagnostic pre-test.</p>
+  {% endfor %}
+  </div>
+</section>
+<section class="learn-card">
+  <span class="subject-code">Concept Probabilities</span>
+  <h2>BKT Mastery Model</h2>
+  <div class="concept-grid">
+  {% for row in bkt %}
+    <div class="concept-pill {% if row.probability_mastery >= 0.7 %}good{% else %}weak{% endif %}">
+      <span>{{ row.outcome_code }} | {{ row.concept_tag.replace('_',' ')|title }}</span>
+      <strong>{{ (row.probability_mastery * 100)|round(1) }}%</strong>
+      <small>Attempts {{ row.attempts or row.observations }} | Correct {{ row.correct_attempts or 0 }} | Incorrect {{ row.incorrect_attempts or 0 }} | Confidence {{ row.confidence_score }}%</small>
+    </div>
+  {% else %}
+    <p>No BKT records yet.</p>
+  {% endfor %}
+  </div>
+</section>
+<section class="learn-card">
+  <span class="subject-code">Explainability</span>
+  <h2>Why the AI Made Its Decisions</h2>
+  <div class="concept-grid">
+  {% for exp in explanations %}
+    <div class="concept-pill">
+      <span>{{ exp.outcome_code }} | {{ exp.decision_type }}</span>
+      <strong>{{ exp.confidence_score }}%</strong>
+      <small>{{ exp.explanation_text }}</small>
+    </div>
+  {% else %}
+    <p>No AI explanation records yet.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "layouts/base.html" %}
+{% block title %}AI Explanations{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div><p class="eyebrow">Explainable AI</p><h1>AI Decision Explanations</h1><p>Transparent records showing evidence used, learner outcome, confidence and reason for every AI decision.</p></div>
+  <div class="hero-badge"><span>Records</span><strong>{{ rows|length }}</strong></div>
+</section>
+<section class="learn-card">
+  <div class="concept-grid">
+  {% for row in rows %}
+    <div class="concept-pill {% if row.confidence_score and row.confidence_score >= 80 %}good{% else %}weak{% endif %}">
+      <span>{{ row.learner_name if row.learner_name else "My AI record" }} | {{ row.subject_name }} | {{ row.outcome_code }}</span>
+      <strong>{{ row.decision_type }} | {{ row.confidence_score }}%</strong>
+      <small><b>Evidence:</b> {{ row.evidence_used }}</small>
+      <small>{{ row.explanation_text }}</small>
+    </div>
+  {% else %}
+    <p>No AI explanations have been generated yet. Submit assessments to create explainable AI records.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}{{ course.course_title }}{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subjects.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">{{ course.subject_name }} • Senior One • Adaptive Mastery Pathway</p>
+        <h1>{{ course.course_title }}</h1>
+        <p>{{ course.course_description }}</p>
+    </div>
+    <div class="hero-badge"><span>Unlock Rule</span><strong>Mastery ≥80%</strong></div>
+</section>
+
+<div class="learning-timeline">
+    {% for card in cards %}
+    {% set outcome = card.outcome %}
+    <article class="outcome-card {% if not card.unlocked %}locked-card{% endif %}">
+        <div class="step-badge">LO {{ loop.index }}</div>
+        <div class="outcome-main">
+            <div class="subject-topline">
+                <span class="subject-code">{{ outcome.outcome_code }}</span>
+                {% if not card.unlocked %}
+                    <span class="lock-badge">🔒 Locked</span>
+                {% elif outcome.mastery_status == 'Mastered' %}
+                    <span class="success-badge">✅ Mastered</span>
+                {% else %}
+                    <span class="ai-badge">{{ outcome.mastery_status }}</span>
+                {% endif %}
+            </div>
+            <h2>{{ outcome.outcome_name }}</h2>
+            <p>{{ outcome.outcome_description }}</p>
+
+            <div class="evidence-grid mini-evidence">
+                <div><span>Pre-test</span><strong>{{ outcome.pretest_score }}%</strong></div>
+                <div><span>Practice</span><strong>{{ outcome.practice_score }}%</strong></div>
+                <div><span>Post-test</span><strong>{{ outcome.posttest_score }}%</strong></div>
+                <div><span>Mastery</span><strong>{{ outcome.mastery_score }}%</strong></div>
+            </div>
+
+            <div class="progress-bar"><div class="progress-fill" style="width: {{ outcome.mastery_score }}%;"></div></div>
+
+            {% if card.unlocked %}
+                <a class="btn-primary" href="{{ url_for('learning.outcome', outcome_id=outcome.outcome_id) }}">Open Learning Outcome →</a>
+            {% else %}
+                <button class="btn-disabled" disabled>Locked until previous outcome is mastered</button>
+            {% endif %}
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% endblock %}
