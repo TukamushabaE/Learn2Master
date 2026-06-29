@@ -11,7 +11,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from whitenoise import WhiteNoise
 from werkzeug.security import generate_password_hash, check_password_hash
-from engine import calculate_bkt, get_recommendation
+from engine import calculate_bkt, get_recommendation, AIEngine
 from models import db, User, Subject, Topic, LearningOutcome, MasteryRecord, Evidence, RecommendationLog, AttemptLog, LearningResource
 
 app = Flask(__name__)
@@ -522,33 +522,23 @@ def admin_usage_report():
 @app.route('/ai/tutor', methods=['POST'])
 @login_required
 def ai_tutor():
-    user_input = request.json.get('message').lower()
+    user_input = request.json.get('message', '')
 
-    # Context-aware logic using student's mastery data
+    # Gather rich context for the AI Engine
     mastery_records = MasteryRecord.query.filter_by(user_id=current_user.id).all()
     avg_mastery = sum([m.knowledge_level for m in mastery_records]) / len(mastery_records) if mastery_records else 0.0
+    recent = AttemptLog.query.filter_by(user_id=current_user.id).order_by(AttemptLog.timestamp.desc()).first()
+    gaps = AIEngine.analyze_knowledge_gaps(mastery_records)
 
-    response = "Hello " + current_user.username.capitalize() + "! I'm your Learn2Master Assistant. "
+    context = {
+        "username": current_user.username.capitalize(),
+        "avg_mastery": avg_mastery,
+        "recent_activity": recent,
+        "gaps": gaps
+    }
 
-    if 'mastery' in user_input:
-        response += f"Your current average mastery across all subjects is {avg_mastery:.1%}. We use Bayesian Knowledge Tracing (BKT) to accurately track your learning progress."
-    elif 'help' in user_input or 'struggling' in user_input:
-        low_mastery = [m for m in mastery_records if m.knowledge_level < 0.5]
-        if low_mastery:
-            lo_name = low_mastery[0].learning_outcome.name
-            response += f"I noticed you're finding '{lo_name}' a bit challenging. I recommend reviewing the foundational notes and attempting some practice questions to boost your understanding."
-        else:
-            response += "You're doing great! Keep focusing on your current learning outcomes. Is there a specific topic you'd like to discuss?"
-    elif 'progress' in user_input:
-        recent = AttemptLog.query.filter_by(user_id=current_user.id).order_by(AttemptLog.timestamp.desc()).first()
-        if recent:
-            response += f"Your last activity was on '{recent.learning_outcome.name}', where you achieved a mastery level of {recent.p_after:.1%}. You're on the right track!"
-        else:
-            response += "You haven't started any assessments yet. Pick a subject from your dashboard to begin your journey!"
-    else:
-        response += "I'm here to support your learning under the Ugandan CBC. You can ask me about your mastery, progress, or for help with specific topics."
-
-    return {"response": response}
+    response_text = AIEngine.tutor_response(user_input, context)
+    return {"response": response_text}
 
 @app.route('/researcher/dashboard')
 @login_required
