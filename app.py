@@ -539,6 +539,7 @@ def ai_tutor():
     gaps = AIEngine.analyze_knowledge_gaps(mastery_records)
 
     context = {
+        "user_id": current_user.id,
         "username": current_user.username.capitalize(),
         "avg_mastery": float(avg_mastery),
         "recent_activity": recent,
@@ -594,6 +595,28 @@ def admin_competencies():
 @role_required('admin')
 def admin_settings():
     return render_template('admin_settings.html')
+
+@login_required
+@role_required('admin')
+def update_kb():
+    # Security: Require a secret token for programmatic updates if not from admin UI
+    secret_token = os.environ.get('KB_UPDATE_TOKEN')
+    provided_token = request.headers.get('X-KB-Token')
+
+    if secret_token and provided_token != secret_token:
+        return {"error": "Unauthorized knowledge base update"}, 403
+
+    data = request.json
+    content = data.get('content', '')
+
+    if not content:
+        return {"error": "Missing content"}, 400
+
+    from engine import get_kb
+    kb = get_kb()
+    kb.add_knowledge(content)
+
+    return {"status": "Knowledge base updated successfully"}
 
 if __name__ == '__main__':
     app.run(debug=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true', port=int(os.environ.get('PORT', 5000)))
