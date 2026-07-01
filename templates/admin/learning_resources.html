@@ -1,0 +1,23 @@
+{% extends "layouts/base.html" %}
+{% block title %}Learning Resources{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="learn-card">
+    <span class="subject-code">Adaptive Content Library</span>
+    <h1>Learning Resources</h1>
+    <div class="concept-grid">
+        {% for row in rows %}
+        <div class="concept-pill {% if row.offline_available %}good{% else %}weak{% endif %}">
+            <span>{{ row.subject_name }} - {{ row.outcome_code }} - {{ row.resource_type.replace('_',' ')|title }}</span>
+            <strong>{{ row.resource_title }}</strong>
+            <small>{{ row.resource_body }}</small>
+            <small>Offline: {% if row.offline_available %}Available{% else %}Not cached{% endif %} - {{ row.estimated_minutes }} min</small>
+        </div>
+        {% else %}
+        <p>No learning resources found.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

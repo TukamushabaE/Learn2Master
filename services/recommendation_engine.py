@@ -8,6 +8,11 @@ def build_recommendation(outcome_name, assessment_type, score, weak_concepts, ma
     expected_mastery = min(100, max(score, confidence) + (10 if weak_concepts else 5))
     estimated_study_minutes = 25 if weak_concepts else 10
     recommended_resource = "adaptive notes, worked examples, video support and concept practice"
+    recommended_activity = (
+        "complete targeted remediation activity and five adaptive questions"
+        if weak_concepts else
+        "continue with enrichment task or next learning outcome"
+    )
     evidence_used = (
         f"{assessment_type.title()} score {score}%; weak concept evidence: {weak}; "
         f"algorithm confidence {confidence}%."
@@ -28,6 +33,8 @@ def build_recommendation(outcome_name, assessment_type, score, weak_concepts, ma
             "expected_mastery": expected_mastery,
             "estimated_study_minutes": estimated_study_minutes,
             "recommended_resource": recommended_resource,
+            "recommended_activity": recommended_activity,
+            "teacher_action_required": bool(score < 50 or weak_concepts),
         }
 
     if assessment_type == "practice":
@@ -44,6 +51,8 @@ def build_recommendation(outcome_name, assessment_type, score, weak_concepts, ma
             "expected_mastery": expected_mastery,
             "estimated_study_minutes": estimated_study_minutes,
             "recommended_resource": recommended_resource,
+            "recommended_activity": recommended_activity,
+            "teacher_action_required": bool(score < 70 or weak_concepts),
         }
 
     if mastery_score is not None and mastery_score >= 80:
@@ -60,6 +69,8 @@ def build_recommendation(outcome_name, assessment_type, score, weak_concepts, ma
             "expected_mastery": 100,
             "estimated_study_minutes": 0,
             "recommended_resource": "next unlocked learning outcome",
+            "recommended_activity": "start the next competency-based learning mission",
+            "teacher_action_required": False,
         }
 
     return {
@@ -76,4 +87,6 @@ def build_recommendation(outcome_name, assessment_type, score, weak_concepts, ma
         "expected_mastery": expected_mastery,
         "estimated_study_minutes": estimated_study_minutes,
         "recommended_resource": recommended_resource,
+        "recommended_activity": "teacher-guided remediation, worked example review and targeted practice",
+        "teacher_action_required": True,
     }

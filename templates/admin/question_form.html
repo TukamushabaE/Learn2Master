@@ -1,0 +1,93 @@
+{% extends "layouts/base.html" %}
+{% block title %}{% if question %}Edit{% else %}Create{% endif %} Question{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+{% set option_list = options if options is defined else [] %}
+<section class="learn-card">
+    <span class="subject-code">Question Intelligence</span>
+    <h1>{% if question %}Edit Question{% else %}Create Question{% endif %}</h1>
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="question-card">
+            <h3>Assessment</h3>
+            <select name="assessment_id" required style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;">
+                {% for item in assessments %}
+                <option value="{{ item.assessment_id }}" {% if question and question.assessment_id == item.assessment_id %}selected{% endif %}>
+                    {{ item.subject_name }} - {{ item.outcome_code }} - {{ item.assessment_type|title }} - {{ item.assessment_title }}
+                </option>
+                {% endfor %}
+            </select>
+
+            <h3>Concept</h3>
+            <select name="concept_tag" required style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;">
+                {% for concept in concepts %}
+                <option value="{{ concept.concept_tag }}" {% if question and question.concept_tag == concept.concept_tag %}selected{% endif %}>
+                    {{ concept.subject_name }} - {{ concept.outcome_code }} - {{ concept.concept_title }}
+                </option>
+                {% endfor %}
+            </select>
+
+            <h3>Question text</h3>
+            <textarea name="question_text" rows="4" required style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;">{{ question.question_text if question else '' }}</textarea>
+
+            <div class="evidence-grid">
+                <div>
+                    <span>Question Type</span>
+                    <select name="question_type">
+                        {% for value in question_types %}
+                        <option value="{{ value }}" {% if question and question.question_type == value %}selected{% endif %}>{{ value.replace('_',' ')|title }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <span>Bloom Level</span>
+                    <select name="bloom_level">
+                        {% for value in bloom_levels %}
+                        <option value="{{ value }}" {% if question and question.bloom_level == value %}selected{% endif %}>{{ value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <span>Difficulty</span>
+                    <select name="difficulty_level">
+                        {% for value in difficulty_levels %}
+                        <option value="{{ value }}" {% if question and question.difficulty_level == value %}selected{% endif %}>{{ value|title }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <span>Marks</span>
+                    <input name="marks" type="number" min="1" value="{{ question.marks if question else 1 }}">
+                </div>
+                <div>
+                    <span>Estimated Time</span>
+                    <input name="estimated_time" type="number" min="1" value="{{ question.estimated_time if question else 2 }}">
+                </div>
+            </div>
+
+            <h3>Multiple-choice options</h3>
+            {% for label in ['A', 'B', 'C', 'D'] %}
+            {% set existing = option_list[loop.index0] if option_list|length > loop.index0 else none %}
+            <label class="option-row">
+                <span>{{ label }}</span>
+                <input name="option_{{ label|lower }}" value="{{ existing.option_text if existing else '' }}" style="flex:1;padding:8px;border-radius:10px;border:1px solid #dbe3ef;">
+                <input type="radio" name="correct_option" value="{{ label }}" {% if existing and existing.is_correct %}checked{% elif not question and label == 'A' %}checked{% endif %}>
+            </label>
+            {% endfor %}
+
+            <h3>Correct answer for non-MCQ items</h3>
+            <input name="correct_answer" value="{{ question.correct_answer if question else '' }}" style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;">
+            <h3>Explanation</h3>
+            <textarea name="explanation" rows="3" style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;">{{ question.explanation if question else '' }}</textarea>
+            <h3>Feedback</h3>
+            <textarea name="feedback" rows="3" style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;">{{ question.feedback if question else '' }}</textarea>
+            <h3>Resource link or hint</h3>
+            <input name="resource_link" value="{{ question.resource_link if question else '' }}" style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;">
+        </div>
+        <button class="btn-primary" type="submit">Save Question</button>
+        <a href="{{ url_for('admin.question_bank') }}">Cancel</a>
+    </form>
+</section>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "layouts/base.html" %}
+{% block title %}Create Teacher Question{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="learn-card">
+    <span class="subject-code">Adaptive Assessment Item</span>
+    <h1>Create Question</h1>
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="question-card">
+            <h3>Assessment</h3>
+            <select name="assessment_id" required style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;">
+                {% for item in assessments %}
+                <option value="{{ item.assessment_id }}">{{ item.subject_name }} - {{ item.outcome_code }} - {{ item.assessment_type|title }}</option>
+                {% endfor %}
+            </select>
+            <h3>Concept</h3>
+            <select name="concept_tag" required style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;">
+                {% for concept in concepts %}
+                <option value="{{ concept.concept_tag }}">{{ concept.subject_name }} - {{ concept.outcome_code }} - {{ concept.concept_title }}</option>
+                {% endfor %}
+            </select>
+            <h3>Question text</h3>
+            <textarea name="question_text" rows="4" required style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;"></textarea>
+            <div class="evidence-grid">
+                <div><span>Type</span><select name="question_type">{% for value in question_types %}<option value="{{ value }}">{{ value.replace('_',' ')|title }}</option>{% endfor %}</select></div>
+                <div><span>Bloom</span><select name="bloom_level">{% for value in bloom_levels %}<option value="{{ value }}">{{ value }}</option>{% endfor %}</select></div>
+                <div><span>Difficulty</span><select name="difficulty_level">{% for value in difficulty_levels %}<option value="{{ value }}">{{ value|title }}</option>{% endfor %}</select></div>
+                <div><span>Marks</span><input name="marks" type="number" min="1" value="1"></div>
+                <div><span>Time</span><input name="estimated_time" type="number" min="1" value="2"></div>
+            </div>
+            {% for label in ['A', 'B', 'C', 'D'] %}
+            <label class="option-row">
+                <span>{{ label }}</span>
+                <input name="option_{{ label|lower }}" style="flex:1;padding:8px;border-radius:10px;border:1px solid #dbe3ef;">
+                <input type="radio" name="correct_option" value="{{ label }}" {% if label == 'A' %}checked{% endif %}>
+            </label>
+            {% endfor %}
+            <h3>Correct answer for non-MCQ</h3>
+            <input name="correct_answer" style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;">
+            <h3>Explanation</h3>
+            <textarea name="explanation" rows="3" style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;"></textarea>
+            <h3>Feedback</h3>
+            <textarea name="feedback" rows="3" style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;"></textarea>
+            <h3>Resource hint</h3>
+            <input name="resource_link" style="width:100%;padding:12px;border-radius:10px;border:1px solid #dbe3ef;">
+        </div>
+        <button class="btn-primary" type="submit">Save Question</button>
+        <a href="{{ url_for('teacher.question_bank') }}">Cancel</a>
+    </form>
+</section>
+{% endblock %}

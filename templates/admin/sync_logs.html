@@ -1,0 +1,57 @@
+{% extends "layouts/base.html" %}
+{% block title %}Offline Sync Logs{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Administration</p>
+        <h1>Offline Sync Logs</h1>
+        <p>Monitor cached content, pending sync items, failures, and sync attempts for low-connectivity deployment readiness.</p>
+    </div>
+    <div class="hero-badge"><span>Failed</span><strong>{{ summary.get('Failed', 0) }}</strong></div>
+</section>
+
+<div class="evidence-grid">
+    <div><span>Cached</span><strong>{{ summary.get('Cached', 0) }}</strong></div>
+    <div><span>Pending</span><strong>{{ summary.get('Pending', 0) }}</strong></div>
+    <div><span>Synced</span><strong>{{ summary.get('Synced', 0) }}</strong></div>
+    <div><span>Failed</span><strong>{{ summary.get('Failed', 0) }}</strong></div>
+    <div><span>Events</span><strong>{{ summary.get('Events', 0) }}</strong></div>
+</div>
+
+<section class="learn-card">
+    <span class="subject-code">Queue</span>
+    <h2>Pending and Completed Sync Items</h2>
+    <div class="concept-grid">
+        {% for item in queue %}
+        <div class="concept-pill {% if item.sync_status == 'Synced' %}good{% else %}weak{% endif %}">
+            <span>{{ item.learner_name or 'System' }}</span>
+            <strong>{{ item.queue_type }}</strong>
+            <small>{{ item.sync_status }} - Attempts {{ item.attempts }} - Last attempt {{ item.last_attempt_at or 'No attempt yet' }}</small>
+            <small>{{ item.error_message or item.payload }}</small>
+        </div>
+        {% else %}
+        <p>No sync queue records yet.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Events</span>
+    <h2>Sync Attempt History</h2>
+    <div class="concept-grid">
+        {% for event in events %}
+        <div class="concept-pill {% if event.event_status == 'Synced' %}good{% else %}weak{% endif %}">
+            <span>{{ event.actor_name or 'System' }}</span>
+            <strong>{{ event.event_type }} - {{ event.event_status }}</strong>
+            <small>{{ event.attempted_at }}</small>
+            <small>{{ event.details }}</small>
+        </div>
+        {% else %}
+        <p>No sync events yet.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

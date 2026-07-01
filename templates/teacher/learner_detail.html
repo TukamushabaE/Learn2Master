@@ -1,0 +1,62 @@
+{% extends "layouts/base.html" %}
+{% block title %}Learner Review{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Learner Decision Support</p>
+        <h1>{{ learner.full_name }}</h1>
+        <p>{{ learner.school_name or 'School not assigned' }} - {{ learner.email or learner.username }}</p>
+    </div>
+    <div class="hero-badge"><span>Status</span><strong>{{ learner.account_status }}</strong></div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Mastery Evidence</span>
+    <h2>Learning Outcomes</h2>
+    <div class="concept-grid">
+        {% for row in mastery %}
+        <div class="concept-pill {% if row.mastery_status == 'Mastered' %}good{% else %}weak{% endif %}">
+            <span>{{ row.subject_name }} - {{ row.outcome_code }}</span>
+            <strong>{{ row.mastery_status }}</strong>
+            <small>Pre {{ row.pretest_score }}%, practice {{ row.practice_score }}%, post {{ row.posttest_score }}%, AI confidence {{ row.mastery_score }}%</small>
+            <a href="{{ url_for('teacher.learner_portfolio', learner_id=learner.user_id) }}">Open portfolio</a>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Concept Probabilities</span>
+    <h2>BKT Evidence</h2>
+    <div class="concept-grid">
+        {% for row in concept_rows %}
+        <div class="concept-pill {% if row.probability_mastery >= 0.7 %}good{% else %}weak{% endif %}">
+            <span>{{ row.outcome_code }} - {{ row.concept_tag.replace('_',' ')|title }}</span>
+            <strong>{{ (row.probability_mastery * 100)|round(1) }}%</strong>
+            <small>{{ row.attempts }} attempts, confidence {{ row.confidence_score }}%</small>
+        </div>
+        {% else %}
+        <p>No concept-tracing evidence yet.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Intervention History</span>
+    <h2>Teacher Actions</h2>
+    <div class="concept-grid">
+        {% for item in interventions %}
+        <div class="concept-pill">
+            <span>{{ item.outcome_code }} - {{ item.status }}</span>
+            <strong>{{ item.intervention_type }}</strong>
+            <small>{{ item.intervention_note }}</small>
+        </div>
+        {% else %}
+        <p>No interventions recorded yet.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

@@ -30,6 +30,9 @@ def research_metrics(conn):
         "bkt_observations": one(conn, "SELECT COALESCE(SUM(observations),0) FROM bkt_mastery"),
         "avg_bkt_mastery": one(conn, "SELECT ROUND(AVG(probability_mastery)*100,1) FROM bkt_mastery"),
         "offline_pending": one(conn, "SELECT COUNT(*) FROM offline_sync_queue WHERE sync_status='Pending'"),
+        "offline_synced": one(conn, "SELECT COUNT(*) FROM sync_queue WHERE sync_status='Synced'"),
+        "offline_failed": one(conn, "SELECT COUNT(*) FROM sync_queue WHERE sync_status='Failed'"),
+        "cached_resources": one(conn, "SELECT COUNT(*) FROM cached_resources WHERE cache_status='Cached'"),
         "avg_attempts_to_mastery": one(conn, """
             SELECT ROUND(AVG(attempt_count),1)
             FROM (
@@ -47,12 +50,49 @@ def research_metrics(conn):
             FROM teacher_mastery_reviews
         """),
         "avg_ai_confidence": one(conn, "SELECT ROUND(AVG(confidence_score),1) FROM ai_explanations"),
+        "time_to_mastery_hours": one(conn, """
+            SELECT ROUND(AVG((julianday(mr.updated_at) - julianday(first_attempt.first_attempt_at)) * 24), 1)
+            FROM mastery_records mr
+            JOIN (
+                SELECT aa.learner_id, l.outcome_id, MIN(aa.attempted_at) AS first_attempt_at
+                FROM assessment_attempts aa
+                JOIN assessments a ON a.assessment_id=aa.assessment_id
+                JOIN lessons l ON l.lesson_id=a.lesson_id
+                GROUP BY aa.learner_id, l.outcome_id
+            ) first_attempt
+              ON first_attempt.learner_id=mr.learner_id
+             AND first_attempt.outcome_id=mr.outcome_id
+            WHERE mr.mastery_status='Mastered'
+        """),
+        "feedback_response_hours": one(conn, """
+            SELECT ROUND(AVG((julianday(reviewed_at) - julianday(created_at)) * 24), 1)
+            FROM practical_evidence
+            WHERE reviewed_at IS NOT NULL
+        """),
+        "system_usage": one(conn, """
+            SELECT
+                (SELECT COUNT(*) FROM activity_logs) +
+                (SELECT COUNT(*) FROM assessment_attempts) +
+                (SELECT COUNT(*) FROM recommendations) +
+                (SELECT COUNT(*) FROM practical_evidence) +
+                (SELECT COUNT(*) FROM activity_submissions)
+        """),
     }
     metrics["learning_gain"] = round(float(metrics["avg_posttest"] or 0) - float(metrics["avg_pretest"] or 0), 1)
     metrics["mastery_rate"] = round((metrics["mastered"] / metrics["mastery_records"] * 100), 1) if metrics["mastery_records"] else 0
     required_evidence = max(1, metrics["learners"] * one(conn, "SELECT COUNT(*) FROM learning_outcomes"))
     completed_evidence = metrics["reflections"] + metrics["practical_evidence"]
     metrics["evidence_completion_rate"] = round((completed_evidence / required_evidence) * 100, 1) if required_evidence else 0
+    metrics["practical_evidence_approval_rate"] = round(
+        (metrics["approved_practical"] / metrics["practical_evidence"] * 100), 1
+    ) if metrics["practical_evidence"] else 0
+    metrics["reflection_completion_rate"] = round(
+        (metrics["reflections"] / required_evidence * 100), 1
+    ) if required_evidence else 0
+    total_sync = metrics["offline_synced"] + metrics["offline_failed"] + metrics["offline_pending"]
+    metrics["offline_sync_success_rate"] = round(
+        (metrics["offline_synced"] / total_sync * 100), 1
+    ) if total_sync else 0
     return metrics
 
 
@@ -74,6 +114,7 @@ def research_dashboard():
 
 
 @research_bp.route("/research/reports")
+@research_bp.route("/research/export/csv")
 @role_required("school_admin", "super_admin", "teacher")
 def research_reports():
     conn = get_db()
@@ -84,7 +125,7 @@ def research_reports():
         GROUP BY concept_tag
         ORDER BY avg_score ASC
     """).fetchall()
-    if request.args.get("format") == "csv":
+    if request.args.get("format") == "csv" or request.path.endswith("/export/csv"):
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(["metric", "value"])

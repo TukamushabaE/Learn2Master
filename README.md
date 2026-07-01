@@ -41,6 +41,9 @@ http://127.0.0.1:5000
 - Learner and teacher competency portfolios
 - Research dashboard with printable and CSV reports
 - Offline foundation with sync queue, cached resources and service worker route
+- Admin question-bank create/edit with concept, competency, Bloom level, difficulty and resource metadata
+- Teacher pending-review queue, intervention history, learner detail review and teacher question creation
+- Activity evidence submissions with teacher feedback
 
 ## Important Routes
 
@@ -49,15 +52,28 @@ http://127.0.0.1:5000
 - `/admin/roles`
 - `/admin/curriculum`
 - `/admin/settings`
+- `/admin/ai-configuration`
 - `/admin/backups`
+- `/admin/question-bank`
+- `/admin/learning-resources`
+- `/admin/rubrics`
+- `/admin/sync-logs`
 - `/teacher`
+- `/teacher/dashboard`
 - `/teacher/learners`
+- `/teacher/learner/<learner_id>`
+- `/teacher/pending-reviews`
+- `/teacher/interventions`
+- `/teacher/question-bank`
 - `/teacher/portfolio/<learner_id>`
+- `/offline/status`
+- `/offline/sync-queue`
 - `/learner/ai-coach`
 - `/learner/portfolio`
 - `/ai/explanations`
 - `/research/dashboard`
 - `/research/reports`
+- `/research/export/csv`
 
 ## Verification
 
@@ -71,3 +87,14 @@ python -m pytest -q --basetemp .tmp_pytest -p no:cacheprovider
 ## Documentation
 
 See `docs/` for proposal alignment, curriculum alignment, architecture, database dictionary, guides, testing protocol and demo script.
+
+## GitHub Workflow
+
+```powershell
+git status
+git add .
+git commit -m "Improve proposal alignment and research dashboards"
+git push
+```
+
+Do not commit local databases, caches, uploads, or virtual environments. They are excluded in `.gitignore`.

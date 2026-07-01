@@ -13,6 +13,7 @@ from services.evidence_engine import has_reflection, latest_reflection, evidence
 from services.ai_explainability_engine import build_ai_explanation
 from services.bkt_engine import update_bkt_record, bkt_summary
 from services.learner_profile_engine import refresh_learner_profile
+from services.offline_engine import queue_offline_event
 
 learning_bp = Blueprint("learning", __name__)
 
@@ -238,7 +239,8 @@ def prepare_question_items(conn, assessment_id, concept_tags=None, limit=6, lear
         params.extend([learner_id, assessment_id])
 
     questions = conn.execute(f"""
-        SELECT q.question_id, q.question_text, q.concept_tag, q.marks
+        SELECT q.question_id, q.question_text, q.concept_tag, q.question_type,
+               q.correct_answer, q.marks, q.bloom_level, q.difficulty_level
         FROM questions q
         WHERE q.assessment_id = ?
         {concept_filter}
@@ -257,7 +259,8 @@ def prepare_question_items(conn, assessment_id, concept_tags=None, limit=6, lear
             params.extend(concept_tags)
 
         questions = conn.execute(f"""
-            SELECT question_id, question_text, concept_tag, marks
+            SELECT question_id, question_text, concept_tag, question_type,
+                   correct_answer, marks, bloom_level, difficulty_level
             FROM questions
             WHERE assessment_id = ?
             {concept_filter}
@@ -463,7 +466,9 @@ def outcome(outcome_id):
     bkt_rows = bkt_summary(conn, learner_id, outcome_id)
 
     latest_recommendation = conn.execute("""
-        SELECT recommendation_reason, recommendation_type, teacher_status, created_at
+        SELECT recommendation_reason, recommendation_type, evidence_used, expected_mastery,
+               estimated_study_minutes, recommended_resource, recommended_activity,
+               teacher_action_required, teacher_status, created_at
         FROM recommendations
         WHERE learner_id = ? AND outcome_id = ?
         ORDER BY created_at DESC
@@ -541,6 +546,10 @@ def outcome(outcome_id):
 def submit_reflection(outcome_id):
     learner_id = session["user_id"]
     reflection_text = (request.form.get("reflection_text") or "").strip()
+    difficult_concept = (request.form.get("difficult_concept") or "").strip()
+    helpful_strategy = (request.form.get("helpful_strategy") or "").strip()
+    real_life_application = (request.form.get("real_life_application") or "").strip()
+    support_needed = (request.form.get("support_needed") or "").strip()
     confidence_level = int(request.form.get("confidence_level") or 3)
 
     if not reflection_text:
@@ -549,9 +558,20 @@ def submit_reflection(outcome_id):
 
     conn = get_db()
     conn.execute("""
-        INSERT INTO learning_reflections (learner_id, outcome_id, reflection_text, confidence_level)
-        VALUES (?, ?, ?, ?)
-    """, (learner_id, outcome_id, reflection_text, confidence_level))
+        INSERT INTO learning_reflections
+        (learner_id, outcome_id, reflection_text, difficult_concept, helpful_strategy,
+         real_life_application, support_needed, confidence_level)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        learner_id,
+        outcome_id,
+        reflection_text,
+        difficult_concept,
+        helpful_strategy,
+        real_life_application,
+        support_needed,
+        confidence_level,
+    ))
     conn.execute("""
         INSERT INTO activity_logs (learner_id, activity_type, activity_description)
         VALUES (?, ?, ?)
@@ -624,10 +644,68 @@ def submit_practical_evidence(outcome_id):
         INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
         VALUES (?, 'RESOURCE_UPLOAD', 'practical_evidence', ?, ?)
     """, (learner_id, practical_id, f"Uploaded practical evidence '{title}' for outcome {outcome_id}"))
+    if request.form.get("simulate_offline"):
+        queue_offline_event(conn, learner_id, "practical_evidence_submission", {
+            "practical_id": practical_id,
+            "outcome_id": outcome_id,
+            "title": title,
+        })
     conn.commit()
     conn.close()
     flash("Practical evidence submitted for teacher review.", "success")
     return redirect(url_for("learning.outcome", outcome_id=outcome_id))
+
+
+@learning_bp.route("/activity/<int:activity_id>/submit", methods=["POST"])
+@role_required("learner")
+@csrf_protect
+def submit_activity(activity_id):
+    learner_id = session["user_id"]
+    submission_text = (request.form.get("submission_text") or "").strip()
+    simulate_offline = bool(request.form.get("simulate_offline"))
+    if not submission_text:
+        flash("Please describe the evidence you produced for the activity.", "warning")
+        return redirect(request.referrer or url_for("student.student_dashboard"))
+
+    conn = get_db()
+    activity = conn.execute("""
+        SELECT activity_id, outcome_id, activity_title, activity_type
+        FROM learning_activities
+        WHERE activity_id=?
+    """, (activity_id,)).fetchone()
+    if not activity:
+        conn.close()
+        flash("Activity was not found.", "warning")
+        return redirect(url_for("student.student_dashboard"))
+
+    cur = conn.execute("""
+        INSERT INTO activity_submissions
+        (learner_id, activity_id, outcome_id, submission_text, submission_status)
+        VALUES (?, ?, ?, ?, 'Submitted')
+    """, (learner_id, activity_id, activity["outcome_id"], submission_text))
+    submission_id = cur.lastrowid
+    conn.execute("""
+        INSERT INTO evidence_portfolio (learner_id, outcome_id, evidence_type, evidence_status, evidence_note)
+        VALUES (?, ?, 'Learning Activity', 'Submitted', ?)
+    """, (learner_id, activity["outcome_id"], activity["activity_title"]))
+    conn.execute("""
+        INSERT INTO activity_logs (learner_id, activity_type, activity_description)
+        VALUES (?, ?, ?)
+    """, (learner_id, "Activity Submitted", activity["activity_title"]))
+    conn.execute("""
+        INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
+        VALUES (?, 'ACTIVITY_SUBMISSION', 'activity_submission', ?, ?)
+    """, (learner_id, submission_id, f"Submitted activity evidence for {activity['activity_title']}"))
+    if simulate_offline:
+        queue_offline_event(conn, learner_id, "activity_submission", {
+            "submission_id": submission_id,
+            "activity_id": activity_id,
+            "outcome_id": activity["outcome_id"],
+        })
+    conn.commit()
+    conn.close()
+    flash("Activity evidence submitted for teacher review.", "success")
+    return redirect(url_for("learning.outcome", outcome_id=activity["outcome_id"]))
 
 
 @learning_bp.route("/assessment/<int:assessment_id>/submit", methods=["POST"])
@@ -659,7 +737,7 @@ def submit_assessment(assessment_id):
             return redirect(url_for("learning.outcome", outcome_id=assessment["outcome_id"]))
 
     questions = conn.execute("""
-        SELECT question_id, question_text, concept_tag, marks
+        SELECT question_id, question_text, concept_tag, question_type, correct_answer, marks
         FROM questions
         WHERE assessment_id = ?
         ORDER BY question_id
@@ -681,13 +759,20 @@ def submit_assessment(assessment_id):
         if selected is None:
             continue
 
-        selected_option_id = int(selected)
-        correct_option = conn.execute("""
-            SELECT option_id FROM question_options
-            WHERE question_id = ? AND is_correct = 1
-            LIMIT 1
-        """, (q["question_id"],)).fetchone()
-        is_correct = bool(correct_option and selected_option_id == correct_option["option_id"])
+        question_type = q["question_type"] or "multiple_choice"
+        selected_option_id = None
+        if question_type == "multiple_choice" and str(selected).isdigit():
+            selected_option_id = int(selected)
+            correct_option = conn.execute("""
+                SELECT option_id FROM question_options
+                WHERE question_id = ? AND is_correct = 1
+                LIMIT 1
+            """, (q["question_id"],)).fetchone()
+            is_correct = bool(correct_option and selected_option_id == correct_option["option_id"])
+        else:
+            expected = (q["correct_answer"] or "").strip().lower()
+            observed = str(selected or "").strip().lower()
+            is_correct = bool(expected and observed == expected)
         answered_questions.append(q)
         concept_stats[q["concept_tag"]]["total"] += 1
         if is_correct:
@@ -697,9 +782,9 @@ def submit_assessment(assessment_id):
             weak_concepts.append(q["concept_tag"])
 
         conn.execute("""
-            INSERT INTO attempt_answers (attempt_id, question_id, selected_option_id, is_correct)
-            VALUES (?, ?, ?, ?)
-        """, (attempt_id, q["question_id"], selected_option_id, 1 if is_correct else 0))
+            INSERT INTO attempt_answers (attempt_id, question_id, selected_option_id, selected_response, is_correct)
+            VALUES (?, ?, ?, ?, ?)
+        """, (attempt_id, q["question_id"], selected_option_id, str(selected), 1 if is_correct else 0))
 
         # V8: update simplified Bayesian Knowledge Tracing probability for the concept.
         update_bkt_record(conn, learner_id, assessment["outcome_id"], q["concept_tag"], is_correct)
@@ -725,12 +810,12 @@ def submit_assessment(assessment_id):
 
     if assessment["assessment_type"] == "pretest":
         pre = score
-        status = "Adaptive Practice Required"
+        status = "Practice Required"
         level = mastery_level(score)
     elif assessment["assessment_type"] == "practice":
         practice = score
         unlocked, not_ready = posttest_unlock_status(conn, learner_id, assessment["outcome_id"], required_concepts)
-        status = "Ready for Post-test" if unlocked else "Concept Practice Required"
+        status = "Ready for Post-test" if unlocked else "Practice Required"
         level = mastery_level(score)
         weak_concepts = not_ready
     elif assessment["assessment_type"] == "posttest":
@@ -786,8 +871,8 @@ def submit_assessment(assessment_id):
         INSERT INTO recommendations
         (learner_id, lesson_id, outcome_id, recommendation_reason, recommendation_type,
          evidence_used, weak_concepts, strong_concepts, confidence_score, expected_mastery,
-         estimated_study_minutes, recommended_resource)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         estimated_study_minutes, recommended_resource, recommended_activity, teacher_action_required)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         learner_id,
         assessment["lesson_id"],
@@ -801,6 +886,8 @@ def submit_assessment(assessment_id):
         rec.get("expected_mastery", 0),
         rec.get("estimated_study_minutes", 0),
         rec.get("recommended_resource"),
+        rec.get("recommended_activity"),
+        1 if rec.get("teacher_action_required") else 0,
     ))
     recommendation_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 

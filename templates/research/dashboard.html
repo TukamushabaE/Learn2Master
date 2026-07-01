@@ -25,6 +25,10 @@
   <div class="stat-card"><h3>Average Post-test</h3><p class="stat-number">{{ metrics.avg_posttest }}%</p></div>
   <div class="stat-card"><h3>AI Recommendations</h3><p class="stat-number">{{ metrics.ai_recommendations }}</p></div>
   <div class="stat-card"><h3>Teacher Interventions</h3><p class="stat-number">{{ metrics.teacher_interventions }}</p></div>
+  <div class="stat-card"><h3>Time to Mastery</h3><p class="stat-number">{{ metrics.time_to_mastery_hours }}h</p></div>
+  <div class="stat-card"><h3>Feedback Response</h3><p class="stat-number">{{ metrics.feedback_response_hours }}h</p></div>
+  <div class="stat-card"><h3>System Usage</h3><p class="stat-number">{{ metrics.system_usage }}</p></div>
+  <div class="stat-card"><h3>Offline Success</h3><p class="stat-number">{{ metrics.offline_sync_success_rate }}%</p></div>
 </div>
 
 <section class="learn-card">
@@ -37,6 +41,10 @@
     <div><span>BKT Observations</span><strong>{{ metrics.bkt_observations }}</strong></div>
     <div><span>Avg BKT Mastery</span><strong>{{ metrics.avg_bkt_mastery }}%</strong></div>
     <div><span>Offline Pending Sync</span><strong>{{ metrics.offline_pending }}</strong></div>
+    <div><span>Evidence Completion</span><strong>{{ metrics.evidence_completion_rate }}%</strong></div>
+    <div><span>Reflection Completion</span><strong>{{ metrics.reflection_completion_rate }}%</strong></div>
+    <div><span>Practical Approval Rate</span><strong>{{ metrics.practical_evidence_approval_rate }}%</strong></div>
+    <div><span>Cached Resources</span><strong>{{ metrics.cached_resources }}</strong></div>
   </div>
 </section>
 
@@ -59,6 +67,6 @@
   <span class="subject-code">Proposal Traceability</span>
   <h2>How this supports Chapter Four</h2>
   <p>The values above can be used to report mastery attainment rate, learning gain, learner response to feedback, teacher oversight effectiveness, and technical readiness for low-resource deployment.</p>
-  <p><a href="{{ url_for('research.research_reports') }}">Open printable research report</a> | <a href="{{ url_for('research.research_reports', format='csv') }}">Export CSV</a></p>
+  <p><a href="{{ url_for('research.research_reports') }}">Open printable research report</a> | <a href="{{ url_for('research.research_reports', format='csv') }}">Export CSV</a> | <a href="/research/export/csv">Direct CSV route</a></p>
 </section>
 {% endblock %}

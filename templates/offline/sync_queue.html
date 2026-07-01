@@ -1,0 +1,52 @@
+{% extends "layouts/base.html" %}
+{% block title %}Offline Sync Queue{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="learn-card">
+    <span class="subject-code">Offline Prototype Queue</span>
+    <h1>Sync Queue</h1>
+    <p>These records demonstrate what would be synchronized after connectivity returns.</p>
+    <div class="concept-grid">
+        {% for item in queue %}
+        <div class="concept-pill {% if item.sync_status == 'Synced' %}good{% else %}weak{% endif %}">
+            <span>{{ item.learner_name or 'System' }}</span>
+            <strong>{{ item.queue_type }}</strong>
+            <small>Status: {{ item.sync_status }} - Attempts: {{ item.attempts }} - Created: {{ item.created_at }}</small>
+            <small>{{ item.payload }}</small>
+            {% if session.get('role') in ['teacher', 'school_admin', 'super_admin'] and item.sync_status == 'Pending' %}
+            <form method="POST" action="{{ url_for('offline.update_sync_queue', queue_id=item.queue_id, action='synced') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn-primary" type="submit">Mark Synced</button>
+            </form>
+            <form method="POST" action="{{ url_for('offline.update_sync_queue', queue_id=item.queue_id, action='failed') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input name="error_message" placeholder="Failure note" style="width:100%;padding:8px;border-radius:10px;border:1px solid #dbe3ef;margin:8px 0;">
+                <button class="btn-primary" type="submit">Mark Failed</button>
+            </form>
+            {% endif %}
+        </div>
+        {% else %}
+        <p>No queued sync records yet.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Sync Attempts</span>
+    <h2>Event Log</h2>
+    <div class="concept-grid">
+        {% for event in events %}
+        <div class="concept-pill {% if event.event_status == 'Synced' %}good{% else %}weak{% endif %}">
+            <span>{{ event.actor_name or 'System' }}</span>
+            <strong>{{ event.event_type }} - {{ event.event_status }}</strong>
+            <small>Queued {{ event.queued_count }}, synced {{ event.synced_count }}, failed {{ event.failed_count }}</small>
+            <small>{{ event.details }}</small>
+        </div>
+        {% else %}
+        <p>No sync attempts recorded yet.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

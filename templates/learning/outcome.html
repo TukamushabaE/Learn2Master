@@ -13,13 +13,17 @@
     {% for item in question_items %}
     <div class="question-card">
         <h3>{{ loop.index }}. {{ item.question.question_text }}</h3>
-        <small>Concept: {{ item.question.concept_tag.replace('_', ' ')|title }}</small>
-        {% for option in item.options %}
-        <label class="option-row">
-            <input type="radio" name="question_{{ item.question.question_id }}" value="{{ option.option_id }}" required>
-            <span>{{ option.option_text }}</span>
-        </label>
-        {% endfor %}
+        <small>Concept: {{ item.question.concept_tag.replace('_', ' ')|title }} - {{ item.question.question_type.replace('_',' ')|title }} - Bloom: {{ item.question.bloom_level }}</small>
+        {% if item.options and item.question.question_type == 'multiple_choice' %}
+            {% for option in item.options %}
+            <label class="option-row">
+                <input type="radio" name="question_{{ item.question.question_id }}" value="{{ option.option_id }}" required>
+                <span>{{ option.option_text }}</span>
+            </label>
+            {% endfor %}
+        {% else %}
+            <textarea name="question_{{ item.question.question_id }}" rows="3" required placeholder="Type your answer, evidence note, code idea, or reflection here..." style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;"></textarea>
+        {% endif %}
     </div>
     {% endfor %}
     <button class="btn-primary" type="submit">{{ button_text }}</button>
@@ -108,6 +112,7 @@
             <div class="info-row"><span>Expected Mastery</span><strong>{{ latest_recommendation.expected_mastery }}%</strong></div>
             <div class="info-row"><span>Study Time</span><strong>{{ latest_recommendation.estimated_study_minutes }} minutes</strong></div>
             <div class="info-row"><span>Resource</span><strong>{{ latest_recommendation.recommended_resource }}</strong></div>
+            <div class="info-row"><span>Activity</span><strong>{{ latest_recommendation.recommended_activity or 'Targeted practice' }}</strong></div>
             <div class="info-row"><span>Teacher Status</span><strong>{{ latest_recommendation.teacher_status }}</strong></div>
         {% else %}
             <p>Start with the pre-test. The system will identify weak concepts and select adaptive notes, videos, and practice questions.</p>
@@ -215,6 +220,15 @@
             <span>{{ activity.activity_type }}</span>
             <h3>{{ activity.activity_title }}</h3>
             <p>{{ activity.activity_description }}</p>
+            <form method="POST" action="{{ url_for('learning.submit_activity', activity_id=activity.activity_id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <textarea name="submission_text" rows="3" required placeholder="Describe what you did, observed, created, discussed, or solved..." style="width:100%;border-radius:14px;padding:12px;border:1px solid #dbe3ef;"></textarea>
+                <label class="option-row">
+                    <input type="checkbox" name="simulate_offline" value="1">
+                    <span>Queue as offline evidence</span>
+                </label>
+                <button class="btn-primary" type="submit">Submit Activity Evidence</button>
+            </form>
         </div>
         {% endfor %}
     </div>
@@ -242,6 +256,10 @@
             <textarea name="evidence_description" rows="3" placeholder="Describe what you did and what this evidence proves..." style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;"></textarea>
             <h3>Optional file</h3>
             <input type="file" name="evidence_file">
+            <label class="option-row" style="margin-top:12px;">
+                <input type="checkbox" name="simulate_offline" value="1">
+                <span>Queue this evidence as an offline submission</span>
+            </label>
         </div>
         <button class="btn-primary" type="submit">Submit Practical Evidence</button>
     </form>
@@ -257,6 +275,10 @@
         <div class="adaptive-item">
             <strong>Reflection submitted</strong>
             <p>{{ reflection.reflection_text }}</p>
+            {% if reflection.difficult_concept %}<small>Difficult concept: {{ reflection.difficult_concept }}</small>{% endif %}
+            {% if reflection.helpful_strategy %}<small>What helped: {{ reflection.helpful_strategy }}</small>{% endif %}
+            {% if reflection.real_life_application %}<small>Real-life application: {{ reflection.real_life_application }}</small>{% endif %}
+            {% if reflection.support_needed %}<small>Support needed: {{ reflection.support_needed }}</small>{% endif %}
             <small>Confidence level: {{ reflection.confidence_level }}/5</small>
         </div>
     {% else %}
@@ -265,6 +287,14 @@
             <div class="question-card">
                 <h3>What have you understood from this learning activity?</h3>
                 <textarea name="reflection_text" rows="4" required placeholder="Write your reflection here..." style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;"></textarea>
+                <h3>What concept was most difficult?</h3>
+                <input name="difficult_concept" placeholder="e.g. Reading the smallest scale division" style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;">
+                <h3>What helped you understand?</h3>
+                <input name="helpful_strategy" placeholder="e.g. Worked example, group discussion, diagram, practical activity" style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;">
+                <h3>How can you apply this in real life?</h3>
+                <textarea name="real_life_application" rows="3" placeholder="Connect the concept to school, home or community use..." style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;"></textarea>
+                <h3>What support do you still need?</h3>
+                <input name="support_needed" placeholder="e.g. More practice, teacher demonstration, peer support" style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;">
                 <label class="option-row" style="margin-top:12px;">
                     <span>Confidence level</span>
                     <select name="confidence_level" style="margin-left:12px;padding:8px;border-radius:10px;">

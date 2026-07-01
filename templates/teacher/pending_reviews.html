@@ -1,0 +1,88 @@
+{% extends "layouts/base.html" %}
+{% block title %}Pending Reviews{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Teacher Review Queue</p>
+        <h1>Pending Reviews</h1>
+        <p>Review practical evidence, activity submissions, AI recommendations, and mastery approvals.</p>
+    </div>
+    <div class="hero-badge"><span>Practical</span><strong>{{ practical|length }}</strong></div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Practical Evidence</span>
+    <h2>Evidence Awaiting Review</h2>
+    <div class="concept-grid">
+        {% for item in practical %}
+        <div class="concept-pill weak">
+            <span>{{ item.learner_name }} - {{ item.outcome_code }}</span>
+            <strong>{{ item.evidence_title }}</strong>
+            <small>{{ item.evidence_description }}</small>
+            <form method="POST" action="{{ url_for('teacher.review_practical_evidence', practical_id=item.practical_id, action='approve') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input name="teacher_comment" placeholder="Teacher comment" style="width:100%;padding:8px;border-radius:10px;border:1px solid #dbe3ef;margin:8px 0;">
+                <button class="btn-primary" type="submit">Approve</button>
+            </form>
+            <form method="POST" action="{{ url_for('teacher.review_practical_evidence', practical_id=item.practical_id, action='reject') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn-primary" type="submit">Reject</button>
+            </form>
+        </div>
+        {% else %}
+        <p>No practical evidence is waiting for review.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Activities</span>
+    <h2>Activity Submissions</h2>
+    <div class="concept-grid">
+        {% for item in activity_submissions %}
+        <div class="concept-pill weak">
+            <span>{{ item.learner_name }} - {{ item.outcome_code }}</span>
+            <strong>{{ item.activity_title }}</strong>
+            <small>{{ item.submission_text }}</small>
+            <form method="POST" action="{{ url_for('teacher.review_activity_submission', submission_id=item.submission_id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input name="feedback_text" required placeholder="Feedback" style="width:100%;padding:8px;border-radius:10px;border:1px solid #dbe3ef;margin:8px 0;">
+                <select name="rubric_level">
+                    <option>Beginning</option>
+                    <option>Developing</option>
+                    <option selected>Proficient</option>
+                    <option>Advanced</option>
+                </select>
+                <button class="btn-primary" type="submit">Save Feedback</button>
+            </form>
+        </div>
+        {% else %}
+        <p>No activity submissions are waiting for review.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">AI and Mastery</span>
+    <h2>Other Review Signals</h2>
+    <div class="concept-grid">
+        {% for rec in recommendations %}
+        <div class="concept-pill {% if rec.teacher_status == 'Approved' %}good{% else %}weak{% endif %}">
+            <span>{{ rec.full_name }} - {{ rec.outcome_name }}</span>
+            <strong>{{ rec.recommendation_type }}</strong>
+            <small>{{ rec.teacher_status }} - {{ rec.recommendation_reason }}</small>
+        </div>
+        {% endfor %}
+        {% for row in mastery %}
+        <div class="concept-pill weak">
+            <span>{{ row.learner_name }} - {{ row.outcome_code }}</span>
+            <strong>{{ row.mastery_status }}</strong>
+            <small>AI confidence {{ row.mastery_score }}%</small>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

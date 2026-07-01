@@ -1,0 +1,25 @@
+{% extends "layouts/base.html" %}
+{% block title %}Teacher Question Bank{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="learn-card">
+    <span class="subject-code">Teacher Assessment Design</span>
+    <h1>Question Bank</h1>
+    <p><a class="btn-primary" href="{{ url_for('teacher.create_question') }}">Create Question</a></p>
+    <div class="concept-grid">
+        {% for q in rows %}
+        <div class="concept-pill">
+            <span>{{ q.subject_name }} - {{ q.outcome_code }} - {{ q.assessment_type|title }}</span>
+            <strong>{{ q.concept_tag.replace('_',' ')|title }}</strong>
+            <small>{{ q.question_text }}</small>
+            <small>{{ q.question_type.replace('_',' ')|title }} - {{ q.difficulty_level }} - {{ q.bloom_level }}</small>
+            <small>{{ q.feedback or 'No feedback yet' }}</small>
+        </div>
+        {% else %}
+        <p>No question bank records yet.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

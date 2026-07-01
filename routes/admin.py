@@ -578,6 +578,92 @@ def save_user_assignments(conn, user_id, role_name, school_id, subject_id=None, 
         """, (user_id, subject_id, class_id, school_id, session.get("user_id")))
 
 
+QUESTION_TYPES = (
+    "multiple_choice",
+    "short_answer",
+    "fill_blank",
+    "matching",
+    "practical_task",
+    "coding_task",
+    "investigation_task",
+    "reflection_question",
+)
+BLOOM_LEVELS = ("Remember", "Understand", "Apply", "Analyse", "Evaluate", "Create")
+DIFFICULTY_LEVELS = ("basic", "standard", "intermediate", "advanced")
+
+
+def question_form_lists(conn):
+    return {
+        "assessments": conn.execute("""
+            SELECT a.assessment_id, a.assessment_title, a.assessment_type,
+                   lo.outcome_code, lo.outcome_name, subjects.subject_name
+            FROM assessments a
+            JOIN lessons l ON l.lesson_id=a.lesson_id
+            JOIN learning_outcomes lo ON lo.outcome_id=l.outcome_id
+            JOIN competencies c ON c.competency_id=lo.competency_id
+            JOIN subjects ON subjects.subject_id=c.subject_id
+            ORDER BY subjects.subject_name, lo.sequence_order, a.assessment_type
+        """).fetchall(),
+        "concepts": conn.execute("""
+            SELECT concepts.*, lo.outcome_code, subjects.subject_name
+            FROM concepts
+            JOIN learning_outcomes lo ON lo.outcome_id=concepts.outcome_id
+            JOIN competencies c ON c.competency_id=lo.competency_id
+            JOIN subjects ON subjects.subject_id=c.subject_id
+            ORDER BY subjects.subject_name, lo.sequence_order, concepts.concept_tag
+        """).fetchall(),
+        "question_types": QUESTION_TYPES,
+        "bloom_levels": BLOOM_LEVELS,
+        "difficulty_levels": DIFFICULTY_LEVELS,
+    }
+
+
+def metadata_for_assessment(conn, assessment_id, concept_tag=None):
+    row = conn.execute("""
+        SELECT a.assessment_id, lo.outcome_id, lo.topic_id, lo.competency_id, c.subject_id
+        FROM assessments a
+        JOIN lessons l ON l.lesson_id=a.lesson_id
+        JOIN learning_outcomes lo ON lo.outcome_id=l.outcome_id
+        JOIN competencies c ON c.competency_id=lo.competency_id
+        WHERE a.assessment_id=?
+    """, (assessment_id,)).fetchone()
+    if not row:
+        return None
+    concept = None
+    if concept_tag:
+        concept = conn.execute("""
+            SELECT concept_id
+            FROM concepts
+            WHERE outcome_id=? AND concept_tag=?
+        """, (row["outcome_id"], concept_tag)).fetchone()
+    return {
+        "subject_id": row["subject_id"],
+        "topic_id": row["topic_id"],
+        "learning_outcome_id": row["outcome_id"],
+        "competency_id": row["competency_id"],
+        "concept_id": concept["concept_id"] if concept else None,
+    }
+
+
+def save_question_options(conn, question_id, form):
+    conn.execute("DELETE FROM question_options WHERE question_id=?", (question_id,))
+    options = [
+        form.get("option_a", "").strip(),
+        form.get("option_b", "").strip(),
+        form.get("option_c", "").strip(),
+        form.get("option_d", "").strip(),
+    ]
+    correct = (form.get("correct_option") or "A").upper()
+    labels = ("A", "B", "C", "D")
+    for label, text in zip(labels, options):
+        if not text:
+            continue
+        conn.execute("""
+            INSERT INTO question_options (question_id, option_text, is_correct)
+            VALUES (?, ?, ?)
+        """, (question_id, text, 1 if label == correct else 0))
+
+
 @admin_bp.app_template_global()
 def security_label(level):
     labels = {
@@ -1268,25 +1354,209 @@ def competencies():
     return render_template("admin/competencies.html", rows=rows)
 
 
-@admin_bp.route("/admin/questions")
+@admin_bp.route("/admin/teachers")
 @role_required("school_admin", "super_admin")
-def questions():
+def teachers():
+    return redirect(url_for("admin.users", role="teacher"))
+
+
+@admin_bp.route("/admin/learners")
+@role_required("school_admin", "super_admin")
+def learners():
+    return redirect(url_for("admin.users", role="learner"))
+
+
+@admin_bp.route("/admin/learning-resources")
+@role_required("school_admin", "super_admin")
+def learning_resources():
     conn = get_db()
     rows = conn.execute("""
-        SELECT subjects.subject_name, assessments.assessment_type, assessments.assessment_title,
-               questions.question_text, questions.concept_tag, questions.difficulty_level,
-               questions.bloom_level, questions.feedback, questions.resource_hint,
-               questions.estimated_time_minutes, questions.marks
+        SELECT lr.*, lo.outcome_code, lo.outcome_name, subjects.subject_name
+        FROM learning_resources lr
+        JOIN learning_outcomes lo ON lo.outcome_id=lr.outcome_id
+        JOIN competencies c ON c.competency_id=lo.competency_id
+        JOIN subjects ON subjects.subject_id=c.subject_id
+        ORDER BY subjects.subject_name, lo.sequence_order, lr.resource_type, lr.resource_title
+        LIMIT 250
+    """).fetchall()
+    conn.close()
+    return render_template("admin/learning_resources.html", rows=rows)
+
+
+@admin_bp.route("/admin/rubrics")
+@role_required("school_admin", "super_admin")
+def rubrics():
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT rc.*, lo.outcome_code, lo.outcome_name, subjects.subject_name
+        FROM rubric_criteria rc
+        JOIN learning_outcomes lo ON lo.outcome_id=rc.outcome_id
+        JOIN competencies c ON c.competency_id=lo.competency_id
+        JOIN subjects ON subjects.subject_id=c.subject_id
+        ORDER BY subjects.subject_name, lo.sequence_order,
+                 CASE rc.level
+                    WHEN 'Beginning' THEN 1
+                    WHEN 'Developing' THEN 2
+                    WHEN 'Proficient' THEN 3
+                    WHEN 'Advanced' THEN 4
+                    ELSE 5
+                 END
+    """).fetchall()
+    conn.close()
+    return render_template("admin/rubrics.html", rows=rows)
+
+
+@admin_bp.route("/admin/questions", endpoint="questions")
+@admin_bp.route("/admin/question-bank")
+@role_required("school_admin", "super_admin")
+def question_bank():
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT questions.question_id, subjects.subject_name, assessments.assessment_type,
+               assessments.assessment_title, lo.outcome_code, lo.outcome_name,
+               questions.question_text, questions.concept_tag, questions.question_type,
+               questions.difficulty_level, questions.bloom_level, questions.feedback,
+               questions.resource_link, questions.estimated_time, questions.marks,
+               COUNT(question_options.option_id) AS options
         FROM questions
         JOIN assessments ON questions.assessment_id = assessments.assessment_id
         JOIN lessons ON assessments.lesson_id = lessons.lesson_id
+        JOIN learning_outcomes lo ON lo.outcome_id=lessons.outcome_id
         JOIN courses ON lessons.course_id = courses.course_id
         JOIN subjects ON courses.subject_id = subjects.subject_id
+        LEFT JOIN question_options ON question_options.question_id=questions.question_id
+        GROUP BY questions.question_id
         ORDER BY subjects.subject_name, assessments.assessment_type, questions.concept_tag, questions.question_id
         LIMIT 200
     """).fetchall()
     conn.close()
-    return render_template("admin/questions.html", rows=rows)
+    return render_template("admin/question_bank.html", rows=rows)
+
+
+@admin_bp.route("/admin/question-bank/create", methods=["GET", "POST"])
+@role_required("school_admin", "super_admin")
+@csrf_protect
+def create_question():
+    conn = get_db()
+    if request.method == "POST":
+        assessment_id = request.form.get("assessment_id")
+        concept_tag = request.form.get("concept_tag", "").strip()
+        meta = metadata_for_assessment(conn, assessment_id, concept_tag)
+        if not meta:
+            conn.close()
+            flash("Select a valid assessment before saving the question.", "danger")
+            return redirect(url_for("admin.create_question"))
+        question_type = request.form.get("question_type") or "multiple_choice"
+        if question_type not in QUESTION_TYPES:
+            question_type = "multiple_choice"
+        bloom_level = request.form.get("bloom_level") or "Understand"
+        if bloom_level not in BLOOM_LEVELS:
+            bloom_level = "Understand"
+        cur = conn.execute("""
+            INSERT INTO questions
+            (assessment_id, subject_id, topic_id, learning_outcome_id, competency_id, concept_id,
+             question_text, concept_tag, difficulty_level, question_type, marks, correct_answer,
+             bloom_level, explanation, feedback, resource_link, resource_hint,
+             estimated_time_minutes, estimated_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            assessment_id,
+            meta["subject_id"],
+            meta["topic_id"],
+            meta["learning_outcome_id"],
+            meta["competency_id"],
+            meta["concept_id"],
+            request.form.get("question_text", "").strip(),
+            concept_tag,
+            request.form.get("difficulty_level") or "standard",
+            question_type,
+            int(request.form.get("marks") or 1),
+            request.form.get("correct_answer", "").strip(),
+            bloom_level,
+            request.form.get("explanation", "").strip(),
+            request.form.get("feedback", "").strip(),
+            request.form.get("resource_link", "").strip(),
+            request.form.get("resource_link", "").strip(),
+            int(request.form.get("estimated_time") or 2),
+            int(request.form.get("estimated_time") or 2),
+        ))
+        question_id = cur.lastrowid
+        if question_type == "multiple_choice":
+            save_question_options(conn, question_id, request.form)
+        audit(conn, "CREATE_QUESTION", "question", question_id, "Created metadata-rich CBC question bank item")
+        conn.commit()
+        conn.close()
+        flash("Question created with CBC/AI metadata.", "success")
+        return redirect(url_for("admin.question_bank"))
+    lists = question_form_lists(conn)
+    conn.close()
+    return render_template("admin/question_form.html", question=None, **lists)
+
+
+@admin_bp.route("/admin/question-bank/<int:question_id>/edit", methods=["GET", "POST"])
+@role_required("school_admin", "super_admin")
+@csrf_protect
+def edit_question(question_id):
+    conn = get_db()
+    question = conn.execute("SELECT * FROM questions WHERE question_id=?", (question_id,)).fetchone()
+    if not question:
+        conn.close()
+        flash("Question was not found.", "warning")
+        return redirect(url_for("admin.question_bank"))
+    if request.method == "POST":
+        assessment_id = request.form.get("assessment_id")
+        concept_tag = request.form.get("concept_tag", "").strip()
+        meta = metadata_for_assessment(conn, assessment_id, concept_tag)
+        if not meta:
+            conn.close()
+            flash("Select a valid assessment before saving the question.", "danger")
+            return redirect(url_for("admin.edit_question", question_id=question_id))
+        conn.execute("""
+            UPDATE questions
+            SET assessment_id=?, subject_id=?, topic_id=?, learning_outcome_id=?,
+                competency_id=?, concept_id=?, question_text=?, concept_tag=?,
+                difficulty_level=?, question_type=?, marks=?, correct_answer=?,
+                bloom_level=?, explanation=?, feedback=?, resource_link=?,
+                resource_hint=?, estimated_time_minutes=?, estimated_time=?
+            WHERE question_id=?
+        """, (
+            assessment_id,
+            meta["subject_id"],
+            meta["topic_id"],
+            meta["learning_outcome_id"],
+            meta["competency_id"],
+            meta["concept_id"],
+            request.form.get("question_text", "").strip(),
+            concept_tag,
+            request.form.get("difficulty_level") or "standard",
+            request.form.get("question_type") or "multiple_choice",
+            int(request.form.get("marks") or 1),
+            request.form.get("correct_answer", "").strip(),
+            request.form.get("bloom_level") or "Understand",
+            request.form.get("explanation", "").strip(),
+            request.form.get("feedback", "").strip(),
+            request.form.get("resource_link", "").strip(),
+            request.form.get("resource_link", "").strip(),
+            int(request.form.get("estimated_time") or 2),
+            int(request.form.get("estimated_time") or 2),
+            question_id,
+        ))
+        if request.form.get("question_type") == "multiple_choice":
+            save_question_options(conn, question_id, request.form)
+        audit(conn, "EDIT_QUESTION", "question", question_id, "Updated CBC question bank metadata")
+        conn.commit()
+        conn.close()
+        flash("Question updated.", "success")
+        return redirect(url_for("admin.question_bank"))
+    lists = question_form_lists(conn)
+    options = conn.execute("""
+        SELECT option_text, is_correct
+        FROM question_options
+        WHERE question_id=?
+        ORDER BY option_id
+    """, (question_id,)).fetchall()
+    conn.close()
+    return render_template("admin/question_form.html", question=question, options=options, **lists)
 
 
 @admin_bp.route("/admin/settings", methods=["GET", "POST"])
@@ -1406,6 +1676,45 @@ def settings():
         thresholds=thresholds,
         settings_groups=settings_groups,
         can_edit_settings=admin["role_name"] == "super_admin",
+    )
+
+
+@admin_bp.route("/admin/ai-configuration")
+@role_required("school_admin", "super_admin")
+def ai_configuration():
+    conn = get_db()
+    ensure_system_settings(conn)
+    settings_rows = conn.execute("""
+        SELECT *
+        FROM system_settings
+        WHERE setting_category LIKE 'AI%'
+           OR setting_key IN ('bkt_model', 'at_risk_threshold', 'teacher_review_required')
+        ORDER BY setting_category, setting_key
+    """).fetchall()
+    bkt = conn.execute("""
+        SELECT
+            ROUND(AVG(prior_mastery_probability), 3) AS avg_prior,
+            ROUND(AVG(learn_probability), 3) AS avg_learn,
+            ROUND(AVG(guess_probability), 3) AS avg_guess,
+            ROUND(AVG(slip_probability), 3) AS avg_slip,
+            ROUND(AVG(probability_mastery) * 100, 1) AS avg_mastery,
+            ROUND(AVG(confidence_score), 1) AS avg_confidence,
+            COUNT(*) AS records
+        FROM bkt_mastery
+    """).fetchone()
+    recommendations = conn.execute("""
+        SELECT recommendation_type, teacher_status, COUNT(*) AS total,
+               ROUND(AVG(confidence_score), 1) AS avg_confidence
+        FROM recommendations
+        GROUP BY recommendation_type, teacher_status
+        ORDER BY total DESC
+    """).fetchall()
+    conn.close()
+    return render_template(
+        "admin/ai_configuration.html",
+        settings_rows=settings_rows,
+        bkt=bkt,
+        recommendations=recommendations,
     )
 
 

@@ -1,9 +1,13 @@
 PRAGMA foreign_keys = ON;
 
 DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS sync_events;
+DROP TABLE IF EXISTS offline_activity_logs;
+DROP TABLE IF EXISTS sync_queue;
 DROP TABLE IF EXISTS system_settings;
 DROP TABLE IF EXISTS backups;
 DROP TABLE IF EXISTS cached_resources;
+DROP TABLE IF EXISTS offline_sync_queue;
 DROP TABLE IF EXISTS rubric_assessments;
 DROP TABLE IF EXISTS rubric_criteria;
 DROP TABLE IF EXISTS teacher_mastery_reviews;
@@ -22,9 +26,16 @@ DROP TABLE IF EXISTS terms;
 DROP TABLE IF EXISTS bkt_mastery;
 DROP TABLE IF EXISTS practical_evidence;
 DROP TABLE IF EXISTS worked_examples;
+DROP TABLE IF EXISTS ai_explanations;
+DROP TABLE IF EXISTS evidence_portfolio;
 DROP TABLE IF EXISTS teacher_feedback;
+DROP TABLE IF EXISTS teacher_interventions;
+DROP TABLE IF EXISTS learning_reflections;
+DROP TABLE IF EXISTS learner_profiles;
 DROP TABLE IF EXISTS learning_resources;
 DROP TABLE IF EXISTS concepts;
+DROP TABLE IF EXISTS activity_feedback;
+DROP TABLE IF EXISTS activity_submissions;
 DROP TABLE IF EXISTS activity_logs;
 DROP TABLE IF EXISTS recommendations;
 DROP TABLE IF EXISTS concept_mastery;
@@ -291,6 +302,9 @@ CREATE TABLE learning_activities (
     activity_title TEXT NOT NULL,
     activity_description TEXT NOT NULL,
     activity_type TEXT DEFAULT 'Practice',
+    activity_stage TEXT DEFAULT 'Learning',
+    estimated_minutes INTEGER DEFAULT 20,
+    evidence_required INTEGER DEFAULT 1,
     FOREIGN KEY (outcome_id) REFERENCES learning_outcomes(outcome_id)
 );
 
@@ -324,6 +338,9 @@ CREATE TABLE learning_resources (
     resource_url TEXT,
     estimated_minutes INTEGER DEFAULT 10,
     resource_status TEXT DEFAULT 'Active',
+    offline_available INTEGER DEFAULT 0,
+    cache_key TEXT,
+    last_cached_at TEXT,
     FOREIGN KEY (outcome_id) REFERENCES learning_outcomes(outcome_id)
 );
 
@@ -389,6 +406,7 @@ CREATE TABLE attempt_answers (
     attempt_id INTEGER NOT NULL,
     question_id INTEGER NOT NULL,
     selected_option_id INTEGER,
+    selected_response TEXT,
     is_correct INTEGER DEFAULT 0,
     FOREIGN KEY (attempt_id) REFERENCES assessment_attempts(attempt_id),
     FOREIGN KEY (question_id) REFERENCES questions(question_id),
@@ -442,6 +460,8 @@ CREATE TABLE recommendations (
     expected_mastery REAL DEFAULT 0,
     estimated_study_minutes INTEGER DEFAULT 0,
     recommended_resource TEXT,
+    recommended_activity TEXT,
+    teacher_action_required INTEGER DEFAULT 0,
     teacher_status TEXT DEFAULT 'Pending Review',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (learner_id) REFERENCES users(user_id),
@@ -456,6 +476,34 @@ CREATE TABLE activity_logs (
     activity_description TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (learner_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS activity_submissions (
+    submission_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    learner_id INTEGER NOT NULL,
+    activity_id INTEGER NOT NULL,
+    outcome_id INTEGER NOT NULL,
+    submission_text TEXT,
+    evidence_path TEXT,
+    submission_status TEXT DEFAULT 'Submitted',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TEXT,
+    FOREIGN KEY (learner_id) REFERENCES users(user_id),
+    FOREIGN KEY (activity_id) REFERENCES learning_activities(activity_id),
+    FOREIGN KEY (outcome_id) REFERENCES learning_outcomes(outcome_id)
+);
+
+CREATE TABLE IF NOT EXISTS activity_feedback (
+    feedback_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    submission_id INTEGER NOT NULL,
+    teacher_id INTEGER NOT NULL,
+    feedback_text TEXT NOT NULL,
+    rubric_level TEXT DEFAULT 'Developing',
+    score INTEGER DEFAULT 0,
+    feedback_status TEXT DEFAULT 'Reviewed',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (submission_id) REFERENCES activity_submissions(submission_id),
+    FOREIGN KEY (teacher_id) REFERENCES users(user_id)
 );
 
 
@@ -484,6 +532,10 @@ CREATE TABLE IF NOT EXISTS learning_reflections (
     learner_id INTEGER NOT NULL,
     outcome_id INTEGER NOT NULL,
     reflection_text TEXT NOT NULL,
+    difficult_concept TEXT,
+    helpful_strategy TEXT,
+    real_life_application TEXT,
+    support_needed TEXT,
     confidence_level INTEGER DEFAULT 3,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (learner_id) REFERENCES users(user_id),
@@ -509,6 +561,7 @@ CREATE TABLE IF NOT EXISTS teacher_feedback (
     teacher_id INTEGER NOT NULL,
     learner_id INTEGER NOT NULL,
     outcome_id INTEGER NOT NULL,
+    feedback_type TEXT DEFAULT 'General',
     feedback_text TEXT NOT NULL,
     mastery_approval TEXT DEFAULT 'Pending',
     remediation_assigned TEXT,
@@ -551,7 +604,45 @@ CREATE TABLE IF NOT EXISTS offline_sync_queue (
     sync_status TEXT DEFAULT 'Pending',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     synced_at TEXT,
+    last_error TEXT,
     FOREIGN KEY (learner_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS sync_queue (
+    queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    learner_id INTEGER,
+    queue_type TEXT NOT NULL,
+    payload TEXT,
+    sync_status TEXT DEFAULT 'Pending',
+    attempts INTEGER DEFAULT 0,
+    last_attempt_at TEXT,
+    synced_at TEXT,
+    error_message TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (learner_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS offline_activity_logs (
+    offline_log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor_id INTEGER,
+    action TEXT NOT NULL,
+    details TEXT,
+    offline_status TEXT DEFAULT 'Recorded',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (actor_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS sync_events (
+    sync_event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor_id INTEGER,
+    event_type TEXT NOT NULL,
+    event_status TEXT NOT NULL,
+    queued_count INTEGER DEFAULT 0,
+    synced_count INTEGER DEFAULT 0,
+    failed_count INTEGER DEFAULT 0,
+    details TEXT,
+    attempted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (actor_id) REFERENCES users(user_id)
 );
 
 CREATE TABLE IF NOT EXISTS cached_resources (

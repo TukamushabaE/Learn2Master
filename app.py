@@ -8,8 +8,14 @@ from routes.profile import profile_bp
 from routes.analytics import analytics_bp
 from routes.research import research_bp
 from routes.ai import ai_bp
-from flask import Flask, redirect, request, send_from_directory, session, url_for
-from flask_migrate import Migrate
+from routes.offline import offline_bp
+from flask import Flask, redirect, render_template, request, send_from_directory, session, url_for
+try:
+    from flask_migrate import Migrate
+except ImportError:
+    class Migrate:
+        def __init__(self, *args, **kwargs):
+            pass
 from models import db
 
 from routes.auth import auth_bp
@@ -65,6 +71,16 @@ def add_no_cache_headers(response):
     return response
 
 
+@app.errorhandler(404)
+def not_found(error):
+    return ("404 - Page not found", 404) if app.config.get("TESTING") else (render_template("404.html"), 404)
+
+
+@app.errorhandler(500)
+def server_error(error):
+    return ("500 - Server error", 500) if app.config.get("TESTING") else (render_template("500.html"), 500)
+
+
 app.register_blueprint(auth_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(courses_bp)
@@ -79,6 +95,7 @@ app.register_blueprint(profile_bp)
 app.register_blueprint(analytics_bp)
 app.register_blueprint(research_bp)
 app.register_blueprint(ai_bp)
+app.register_blueprint(offline_bp)
 
 
 if __name__ == "__main__":

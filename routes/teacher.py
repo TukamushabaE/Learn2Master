@@ -6,6 +6,87 @@ from services.analytics_engine import teacher_overview, recent_ai_recommendation
 
 teacher_bp = Blueprint("teacher", __name__)
 
+QUESTION_TYPES = (
+    "multiple_choice",
+    "short_answer",
+    "fill_blank",
+    "matching",
+    "practical_task",
+    "coding_task",
+    "investigation_task",
+    "reflection_question",
+)
+BLOOM_LEVELS = ("Remember", "Understand", "Apply", "Analyse", "Evaluate", "Create")
+DIFFICULTY_LEVELS = ("basic", "standard", "intermediate", "advanced")
+
+
+def question_form_lists(conn):
+    return {
+        "assessments": conn.execute("""
+            SELECT a.assessment_id, a.assessment_title, a.assessment_type,
+                   lo.outcome_code, lo.outcome_name, subjects.subject_name
+            FROM assessments a
+            JOIN lessons l ON l.lesson_id=a.lesson_id
+            JOIN learning_outcomes lo ON lo.outcome_id=l.outcome_id
+            JOIN competencies c ON c.competency_id=lo.competency_id
+            JOIN subjects ON subjects.subject_id=c.subject_id
+            ORDER BY subjects.subject_name, lo.sequence_order, a.assessment_type
+        """).fetchall(),
+        "concepts": conn.execute("""
+            SELECT concepts.*, lo.outcome_code, subjects.subject_name
+            FROM concepts
+            JOIN learning_outcomes lo ON lo.outcome_id=concepts.outcome_id
+            JOIN competencies c ON c.competency_id=lo.competency_id
+            JOIN subjects ON subjects.subject_id=c.subject_id
+            ORDER BY subjects.subject_name, lo.sequence_order, concepts.concept_tag
+        """).fetchall(),
+        "question_types": QUESTION_TYPES,
+        "bloom_levels": BLOOM_LEVELS,
+        "difficulty_levels": DIFFICULTY_LEVELS,
+    }
+
+
+def metadata_for_assessment(conn, assessment_id, concept_tag=None):
+    row = conn.execute("""
+        SELECT a.assessment_id, lo.outcome_id, lo.topic_id, lo.competency_id, c.subject_id
+        FROM assessments a
+        JOIN lessons l ON l.lesson_id=a.lesson_id
+        JOIN learning_outcomes lo ON lo.outcome_id=l.outcome_id
+        JOIN competencies c ON c.competency_id=lo.competency_id
+        WHERE a.assessment_id=?
+    """, (assessment_id,)).fetchone()
+    if not row:
+        return None
+    concept = None
+    if concept_tag:
+        concept = conn.execute(
+            "SELECT concept_id FROM concepts WHERE outcome_id=? AND concept_tag=?",
+            (row["outcome_id"], concept_tag),
+        ).fetchone()
+    return {
+        "subject_id": row["subject_id"],
+        "topic_id": row["topic_id"],
+        "learning_outcome_id": row["outcome_id"],
+        "competency_id": row["competency_id"],
+        "concept_id": concept["concept_id"] if concept else None,
+    }
+
+
+def save_question_options(conn, question_id, form):
+    options = [
+        form.get("option_a", "").strip(),
+        form.get("option_b", "").strip(),
+        form.get("option_c", "").strip(),
+        form.get("option_d", "").strip(),
+    ]
+    correct = (form.get("correct_option") or "A").upper()
+    for label, text in zip(("A", "B", "C", "D"), options):
+        if text:
+            conn.execute("""
+                INSERT INTO question_options (question_id, option_text, is_correct)
+                VALUES (?, ?, ?)
+            """, (question_id, text, 1 if label == correct else 0))
+
 
 def learner_rows(conn):
     return conn.execute("""
@@ -26,6 +107,7 @@ def learner_rows(conn):
     """).fetchall()
 
 
+@teacher_bp.route("/teacher/dashboard")
 @teacher_bp.route("/teacher")
 @role_required("teacher", "school_admin", "super_admin")
 def teacher_dashboard():
@@ -57,6 +139,57 @@ def learners():
     rows = learner_rows(conn)
     conn.close()
     return render_template("teacher/learners.html", learners=rows)
+
+
+@teacher_bp.route("/teacher/learner/<int:learner_id>")
+@role_required("teacher", "school_admin", "super_admin")
+def learner_detail(learner_id):
+    conn = get_db()
+    learner = conn.execute("""
+        SELECT users.*, schools.school_name
+        FROM users
+        LEFT JOIN schools ON schools.school_id=users.school_id
+        WHERE users.user_id=?
+    """, (learner_id,)).fetchone()
+    if not learner:
+        conn.close()
+        flash("Learner was not found.", "warning")
+        return redirect(url_for("teacher.learners"))
+    mastery = conn.execute("""
+        SELECT subjects.subject_name, lo.outcome_code, lo.outcome_name,
+               COALESCE(mr.pretest_score,0) AS pretest_score,
+               COALESCE(mr.practice_score,0) AS practice_score,
+               COALESCE(mr.posttest_score,0) AS posttest_score,
+               COALESCE(mr.mastery_score,0) AS mastery_score,
+               COALESCE(mr.mastery_status,'Not Started') AS mastery_status
+        FROM learning_outcomes lo
+        JOIN competencies c ON c.competency_id=lo.competency_id
+        JOIN subjects ON subjects.subject_id=c.subject_id
+        LEFT JOIN mastery_records mr ON mr.outcome_id=lo.outcome_id AND mr.learner_id=?
+        ORDER BY subjects.subject_name, lo.sequence_order
+    """, (learner_id,)).fetchall()
+    concept_rows = conn.execute("""
+        SELECT bkt.*, lo.outcome_code
+        FROM bkt_mastery bkt
+        JOIN learning_outcomes lo ON lo.outcome_id=bkt.outcome_id
+        WHERE bkt.learner_id=?
+        ORDER BY bkt.probability_mastery ASC, bkt.last_updated DESC
+    """, (learner_id,)).fetchall()
+    interventions = conn.execute("""
+        SELECT ti.*, lo.outcome_code, lo.outcome_name
+        FROM teacher_interventions ti
+        JOIN learning_outcomes lo ON lo.outcome_id=ti.outcome_id
+        WHERE ti.learner_id=?
+        ORDER BY ti.created_at DESC
+    """, (learner_id,)).fetchall()
+    conn.close()
+    return render_template(
+        "teacher/learner_detail.html",
+        learner=learner,
+        mastery=mastery,
+        concept_rows=concept_rows,
+        interventions=interventions,
+    )
 
 
 @teacher_bp.route("/teacher/portfolio/<int:learner_id>")
@@ -146,6 +279,10 @@ def mastery_decision(learner_id, outcome_id, action):
         ON CONFLICT(learner_id, outcome_id)
         DO UPDATE SET mastery_status=excluded.mastery_status, updated_at=CURRENT_TIMESTAMP
     """, (learner_id, outcome_id, score, level, status))
+    conn.execute("""
+        INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
+        VALUES (?, ?, 'mastery_review', ?, ?)
+    """, (session["user_id"], "TEACHER_" + action.upper(), outcome_id, comment))
     conn.commit()
     conn.close()
     flash(f"Mastery decision recorded: {decision}.", "success")
@@ -192,6 +329,193 @@ def ai_insights():
     return render_template("teacher/ai_insights.html", recommendations=recommendations, explanations=explanations)
 
 
+@teacher_bp.route("/teacher/pending-reviews")
+@role_required("teacher", "school_admin", "super_admin")
+def pending_reviews():
+    conn = get_db()
+    practical = conn.execute("""
+        SELECT pe.*, learner.full_name AS learner_name, lo.outcome_code, lo.outcome_name
+        FROM practical_evidence pe
+        JOIN users learner ON learner.user_id=pe.learner_id
+        JOIN learning_outcomes lo ON lo.outcome_id=pe.outcome_id
+        WHERE pe.teacher_status IN ('Pending Review', 'Needs Revision')
+        ORDER BY pe.created_at DESC
+    """).fetchall()
+    activity_submissions = conn.execute("""
+        SELECT sub.*, learner.full_name AS learner_name, act.activity_title, act.activity_type,
+               lo.outcome_code, lo.outcome_name
+        FROM activity_submissions sub
+        JOIN users learner ON learner.user_id=sub.learner_id
+        JOIN learning_activities act ON act.activity_id=sub.activity_id
+        JOIN learning_outcomes lo ON lo.outcome_id=sub.outcome_id
+        WHERE sub.submission_status='Submitted'
+        ORDER BY sub.created_at DESC
+    """).fetchall()
+    recommendations = recent_ai_recommendations(conn, limit=20)
+    mastery = conn.execute("""
+        SELECT mr.*, learner.full_name AS learner_name, lo.outcome_code, lo.outcome_name
+        FROM mastery_records mr
+        JOIN users learner ON learner.user_id=mr.learner_id
+        JOIN learning_outcomes lo ON lo.outcome_id=mr.outcome_id
+        WHERE mr.mastery_status='Awaiting Teacher Review'
+        ORDER BY mr.updated_at DESC
+    """).fetchall()
+    conn.close()
+    return render_template(
+        "teacher/pending_reviews.html",
+        practical=practical,
+        activity_submissions=activity_submissions,
+        recommendations=recommendations,
+        mastery=mastery,
+    )
+
+
+@teacher_bp.route("/teacher/activity-submissions/<int:submission_id>/review", methods=["POST"])
+@role_required("teacher", "school_admin", "super_admin")
+@csrf_protect
+def review_activity_submission(submission_id):
+    feedback_text = request.form.get("feedback_text", "").strip()
+    rubric_level = request.form.get("rubric_level") or "Proficient"
+    score_map = {"Beginning": 1, "Developing": 2, "Proficient": 3, "Advanced": 4}
+    if not feedback_text:
+        flash("Feedback text is required.", "warning")
+        return redirect(url_for("teacher.pending_reviews"))
+    conn = get_db()
+    submission = conn.execute("""
+        SELECT sub.*, act.activity_title
+        FROM activity_submissions sub
+        JOIN learning_activities act ON act.activity_id=sub.activity_id
+        WHERE sub.submission_id=?
+    """, (submission_id,)).fetchone()
+    if not submission:
+        conn.close()
+        flash("Activity submission was not found.", "warning")
+        return redirect(url_for("teacher.pending_reviews"))
+    conn.execute("""
+        INSERT INTO activity_feedback
+        (submission_id, teacher_id, feedback_text, rubric_level, score, feedback_status)
+        VALUES (?, ?, ?, ?, ?, 'Reviewed')
+    """, (submission_id, session["user_id"], feedback_text, rubric_level, score_map.get(rubric_level, 3)))
+    conn.execute("""
+        UPDATE activity_submissions
+        SET submission_status='Reviewed', reviewed_at=CURRENT_TIMESTAMP
+        WHERE submission_id=?
+    """, (submission_id,))
+    conn.execute("""
+        INSERT INTO teacher_feedback
+        (teacher_id, learner_id, outcome_id, feedback_type, feedback_text, mastery_approval)
+        VALUES (?, ?, ?, 'Activity Evidence', ?, 'Reviewed')
+    """, (session["user_id"], submission["learner_id"], submission["outcome_id"], feedback_text))
+    conn.execute("""
+        INSERT INTO teacher_interventions
+        (teacher_id, learner_id, outcome_id, intervention_type, intervention_note, status)
+        VALUES (?, ?, ?, 'Activity Feedback', ?, 'Reviewed')
+    """, (session["user_id"], submission["learner_id"], submission["outcome_id"], feedback_text))
+    conn.execute("""
+        INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
+        VALUES (?, 'ACTIVITY_FEEDBACK', 'activity_submission', ?, ?)
+    """, (session["user_id"], submission_id, feedback_text))
+    conn.commit()
+    conn.close()
+    flash("Activity feedback saved.", "success")
+    return redirect(url_for("teacher.pending_reviews"))
+
+
+@teacher_bp.route("/teacher/interventions")
+@role_required("teacher", "school_admin", "super_admin")
+def interventions():
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT ti.*, learner.full_name AS learner_name, lo.outcome_code, lo.outcome_name
+        FROM teacher_interventions ti
+        JOIN users learner ON ti.learner_id = learner.user_id
+        JOIN learning_outcomes lo ON ti.outcome_id = lo.outcome_id
+        ORDER BY ti.created_at DESC
+        LIMIT 100
+    """).fetchall()
+    conn.close()
+    return render_template("teacher/interventions.html", rows=rows)
+
+
+@teacher_bp.route("/teacher/question-bank")
+@role_required("teacher", "school_admin", "super_admin")
+def question_bank():
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT questions.question_id, subjects.subject_name, assessments.assessment_type,
+               lo.outcome_code, questions.question_text, questions.concept_tag,
+               questions.question_type, questions.difficulty_level, questions.bloom_level,
+               questions.feedback
+        FROM questions
+        JOIN assessments ON assessments.assessment_id=questions.assessment_id
+        JOIN learning_outcomes lo ON lo.outcome_id=questions.learning_outcome_id
+        JOIN competencies c ON c.competency_id=lo.competency_id
+        JOIN subjects ON subjects.subject_id=c.subject_id
+        ORDER BY subjects.subject_name, lo.sequence_order, questions.concept_tag
+        LIMIT 200
+    """).fetchall()
+    conn.close()
+    return render_template("teacher/question_bank.html", rows=rows)
+
+
+@teacher_bp.route("/teacher/question-bank/create", methods=["GET", "POST"])
+@role_required("teacher", "school_admin", "super_admin")
+@csrf_protect
+def create_question():
+    conn = get_db()
+    if request.method == "POST":
+        assessment_id = request.form.get("assessment_id")
+        concept_tag = request.form.get("concept_tag", "").strip()
+        meta = metadata_for_assessment(conn, assessment_id, concept_tag)
+        if not meta:
+            conn.close()
+            flash("Select a valid assessment.", "danger")
+            return redirect(url_for("teacher.create_question"))
+        question_type = request.form.get("question_type") or "multiple_choice"
+        cur = conn.execute("""
+            INSERT INTO questions
+            (assessment_id, subject_id, topic_id, learning_outcome_id, competency_id, concept_id,
+             question_text, concept_tag, difficulty_level, question_type, marks, correct_answer,
+             bloom_level, explanation, feedback, resource_link, resource_hint,
+             estimated_time_minutes, estimated_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            assessment_id,
+            meta["subject_id"],
+            meta["topic_id"],
+            meta["learning_outcome_id"],
+            meta["competency_id"],
+            meta["concept_id"],
+            request.form.get("question_text", "").strip(),
+            concept_tag,
+            request.form.get("difficulty_level") or "standard",
+            question_type,
+            int(request.form.get("marks") or 1),
+            request.form.get("correct_answer", "").strip(),
+            request.form.get("bloom_level") or "Understand",
+            request.form.get("explanation", "").strip(),
+            request.form.get("feedback", "").strip(),
+            request.form.get("resource_link", "").strip(),
+            request.form.get("resource_link", "").strip(),
+            int(request.form.get("estimated_time") or 2),
+            int(request.form.get("estimated_time") or 2),
+        ))
+        question_id = cur.lastrowid
+        if question_type == "multiple_choice":
+            save_question_options(conn, question_id, request.form)
+        conn.execute("""
+            INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
+            VALUES (?, 'TEACHER_CREATE_QUESTION', 'question', ?, 'Teacher created CBC question bank item')
+        """, (session["user_id"], question_id))
+        conn.commit()
+        conn.close()
+        flash("Question created.", "success")
+        return redirect(url_for("teacher.question_bank"))
+    lists = question_form_lists(conn)
+    conn.close()
+    return render_template("teacher/question_form.html", **lists)
+
+
 @teacher_bp.route("/teacher/reports")
 @role_required("teacher", "school_admin", "super_admin")
 def reports():
@@ -225,6 +549,10 @@ def review_recommendation(recommendation_id, action):
             INSERT INTO teacher_interventions (teacher_id, learner_id, outcome_id, intervention_type, intervention_note, status)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (session["user_id"], rec["learner_id"], rec["outcome_id"], status, note, "Recorded"))
+        conn.execute("""
+            INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
+            VALUES (?, ?, 'recommendation', ?, ?)
+        """, (session["user_id"], "AI_RECOMMENDATION_" + status.upper(), recommendation_id, note))
     conn.commit(); conn.close()
     flash(f"Recommendation {status.lower()} and teacher intervention recorded.", "success")
     return redirect(url_for("teacher.teacher_dashboard"))
@@ -251,11 +579,13 @@ def practical_evidence():
 @role_required("teacher", "school_admin", "super_admin")
 @csrf_protect
 def review_practical_evidence(practical_id, action):
-    if action not in {"approve", "revise"}:
+    if action not in {"approve", "revise", "reject"}:
         flash("Unsupported evidence action.", "danger")
         return redirect(url_for("teacher.practical_evidence"))
-    status = "Approved" if action == "approve" else "Needs Revision"
-    comment = request.form.get("teacher_comment") or ("Evidence approved." if action == "approve" else "Revise and resubmit evidence.")
+    status = {"approve": "Approved", "revise": "Needs Revision", "reject": "Rejected"}[action]
+    comment = request.form.get("teacher_comment") or (
+        "Evidence approved." if action == "approve" else "Revise and resubmit evidence."
+    )
     rubric_level = request.form.get("rubric_level") or ("Proficient" if action == "approve" else "Developing")
     try:
         rubric_score = int(request.form.get("rubric_score") or (3 if action == "approve" else 2))
@@ -283,6 +613,10 @@ def review_practical_evidence(practical_id, action):
             INSERT INTO teacher_interventions (teacher_id, learner_id, outcome_id, intervention_type, intervention_note, status)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (session["user_id"], row["learner_id"], row["outcome_id"], "Practical Evidence Review", comment, status))
+        conn.execute("""
+            INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
+            VALUES (?, 'PRACTICAL_EVIDENCE_REVIEW', 'practical_evidence', ?, ?)
+        """, (session["user_id"], practical_id, f"Evidence marked {status}: {comment}"))
     conn.commit(); conn.close()
     flash(f"Practical evidence marked as {status}.", "success")
     return redirect(url_for("teacher.practical_evidence"))

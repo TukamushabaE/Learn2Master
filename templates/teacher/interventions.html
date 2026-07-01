@@ -1,0 +1,23 @@
+{% extends "layouts/base.html" %}
+{% block title %}Interventions{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="learn-card">
+    <span class="subject-code">Teacher Support Evidence</span>
+    <h1>Intervention History</h1>
+    <div class="concept-grid">
+        {% for row in rows %}
+        <div class="concept-pill {% if row.status in ['Approved', 'Mastered', 'Reviewed'] %}good{% else %}weak{% endif %}">
+            <span>{{ row.learner_name }} - {{ row.outcome_code }}</span>
+            <strong>{{ row.intervention_type }}</strong>
+            <small>Status: {{ row.status }} - {{ row.created_at }}</small>
+            <small>{{ row.intervention_note }}</small>
+        </div>
+        {% else %}
+        <p>No teacher interventions have been recorded yet.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

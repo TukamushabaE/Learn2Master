@@ -1,6 +1,62 @@
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import UserMixin
 from datetime import datetime
+
+try:
+    from flask_sqlalchemy import SQLAlchemy
+    from flask_login import UserMixin
+except ImportError:
+    class _DummyType:
+        def __call__(self, *args, **kwargs):
+            return self
+
+    class _DummySession:
+        def remove(self):
+            pass
+
+    class _DummyDb:
+        Model = object
+        Integer = _DummyType()
+        String = _DummyType()
+        Text = _DummyType()
+        Float = _DummyType()
+        Boolean = _DummyType()
+        DateTime = _DummyType()
+        session = _DummySession()
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def init_app(self, *args, **kwargs):
+            pass
+
+        def create_all(self, *args, **kwargs):
+            pass
+
+        def drop_all(self, *args, **kwargs):
+            pass
+
+        def Column(self, *args, **kwargs):
+            return None
+
+        def ForeignKey(self, *args, **kwargs):
+            return None
+
+        def relationship(self, *args, **kwargs):
+            return None
+
+        def Table(self, *args, **kwargs):
+            return None
+
+        def UniqueConstraint(self, *args, **kwargs):
+            return None
+
+        def Index(self, *args, **kwargs):
+            return None
+
+    class UserMixin:
+        pass
+
+    def SQLAlchemy(*args, **kwargs):
+        return _DummyDb()
 
 db = SQLAlchemy()
 

@@ -46,6 +46,13 @@
                 <input type="hidden" name="rubric_score" value="2">
                 <button class="btn-primary" type="submit">Request Revision</button>
             </form>
+            <form method="POST" action="{{ url_for('teacher.review_practical_evidence', practical_id=row.practical_id, action='reject') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input name="teacher_comment" placeholder="Reason for rejection" style="width:100%;padding:8px;border-radius:10px;border:1px solid #dbe3ef;margin:8px 0;">
+                <input type="hidden" name="rubric_level" value="Beginning">
+                <input type="hidden" name="rubric_score" value="1">
+                <button class="btn-primary" type="submit">Reject Evidence</button>
+            </form>
             {% endif %}
         </div>
         {% else %}

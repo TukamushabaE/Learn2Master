@@ -1,17 +1,37 @@
 import os
 import json
 import logging
-import requests
 import hashlib
 import time
 import threading
 import re
-import numpy as np
 from pathlib import Path
 from functools import lru_cache
-from PyPDF2 import PdfReader
-from huggingface_hub import InferenceClient
-from groq import Groq
+
+try:
+    import requests
+except ImportError:
+    requests = None
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+try:
+    from PyPDF2 import PdfReader
+except ImportError:
+    PdfReader = None
+
+try:
+    from huggingface_hub import InferenceClient
+except ImportError:
+    InferenceClient = None
+
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -72,7 +92,7 @@ class KnowledgeBase:
         self._lock = threading.Lock()
 
         hf_token = os.environ.get('HF_TOKEN')
-        if hf_token:
+        if hf_token and InferenceClient:
             self.hf_client = InferenceClient(token=hf_token)
 
         self.load_and_process()
@@ -121,7 +141,7 @@ class KnowledgeBase:
                         with open(filepath, 'r', encoding='utf-8') as f:
                             data = json.load(f)
                             all_text += self._extract_text(data) + "\n"
-                    elif filename.endswith('.pdf'):
+                    elif filename.endswith('.pdf') and PdfReader:
                         reader = PdfReader(filepath)
                         for page in reader.pages:
                             text = page.extract_text()
@@ -153,7 +173,7 @@ class KnowledgeBase:
                 except Exception as e:
                     logger.error(f"Error loading dynamic KB: {e}")
 
-            if self.chunks and self.hf_client:
+            if self.chunks and self.hf_client and np:
                 try:
                     embeddings = self.hf_client.feature_extraction(self.chunks, model=self.model_id)
                     self.embeddings = np.array(embeddings)
@@ -173,6 +193,8 @@ class KnowledgeBase:
                 return []
 
         try:
+            if not np:
+                return []
             query_embedding = np.array(self.get_query_embedding(query))
             if len(query_embedding.shape) > 1:
                 query_embedding = query_embedding[0]
@@ -199,7 +221,7 @@ class KnowledgeBase:
         if not text or len(text) > 4000:
             return
         new_embedding = None
-        if self.hf_client:
+        if self.hf_client and np:
             try:
                 new_embedding = np.array(self.hf_client.feature_extraction([text], model=self.model_id))
             except Exception as e:
@@ -246,7 +268,7 @@ class AIEngine:
     @staticmethod
     def log_interaction_to_training_api(user_input, user_id, context, response):
         training_url = os.environ.get('TRAINING_API_URL')
-        if not training_url:
+        if not training_url or not requests:
             return
         def _send():
             payload = {
@@ -273,7 +295,7 @@ class AIEngine:
         gaps = context.get('gaps', [])
         if time.time() < _groq_circuit_open_until:
              return "I'm currently undergoing maintenance. Please try again shortly."
-        if not groq_api_key:
+        if not groq_api_key or not Groq:
             return "I'm currently undergoing maintenance. Please try again shortly."
         kb = get_kb()
         relevant_context = kb.search(user_input)

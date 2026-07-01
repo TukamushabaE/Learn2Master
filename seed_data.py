@@ -1168,6 +1168,133 @@ cur.execute("""
         estimated_time = estimated_time_minutes
 """)
 
+# Dissertation-release enrichment: ensure every concept has a richer adaptive
+# practice bank and every outcome has the CBC activity modes expected by the
+# proposal. These records are generated from the seeded syllabus concepts, not
+# from planted performance figures.
+practice_templates = [
+    ("multiple_choice", "Remember", "basic", "Which action best shows understanding of {concept_title}?", "Apply it to a real task and explain the evidence"),
+    ("multiple_choice", "Understand", "standard", "Why is {concept_title} important in {outcome_name}?", "It helps the learner make accurate practical decisions"),
+    ("multiple_choice", "Apply", "standard", "A learner must demonstrate {concept_title}. What should they do first?", "Select a real task and gather evidence"),
+    ("multiple_choice", "Analyse", "intermediate", "Which evidence would best help a teacher judge {concept_title}?", "A labelled record with method, result and explanation"),
+    ("short_answer", "Understand", "standard", "Briefly explain {concept_title} using a school or home example.", "{concept_title}"),
+    ("fill_blank", "Remember", "basic", "Fill in the blank: {concept_title} should be demonstrated using clear ____.", "evidence"),
+    ("practical_task", "Apply", "intermediate", "Carry out a short practical task that demonstrates {concept_title} and describe your evidence.", "practical evidence"),
+    ("investigation_task", "Analyse", "advanced", "Investigate a real situation where {concept_title} affects the quality of a result.", "investigation"),
+    ("reflection_question", "Evaluate", "standard", "What mistake might a learner make with {concept_title}, and how would you correct it?", "reflection"),
+    ("coding_task", "Create", "advanced", "Design a digital checklist, table or simple pseudocode routine to support {concept_title}.", "checklist"),
+]
+
+for concept_row in cur.execute("""
+    SELECT concepts.*, lo.outcome_code, lo.outcome_name, lo.outcome_id,
+           lo.topic_id, lo.competency_id, comp.subject_id
+    FROM concepts
+    JOIN learning_outcomes lo ON lo.outcome_id=concepts.outcome_id
+    JOIN competencies comp ON comp.competency_id=lo.competency_id
+    ORDER BY lo.outcome_code, concepts.concept_tag
+""").fetchall():
+    lesson_id = get_id("SELECT lesson_id FROM lessons WHERE outcome_id=?", (concept_row["outcome_id"],))
+    assessment_id = get_id(
+        "SELECT assessment_id FROM assessments WHERE lesson_id=? AND assessment_type='practice'",
+        (lesson_id,),
+    )
+    for question_type, bloom, difficulty, template, correct_answer in practice_templates:
+        question_text = template.format(
+            concept_title=concept_row["concept_title"],
+            outcome_name=concept_row["outcome_name"],
+        )
+        cur.execute("""
+            INSERT INTO questions
+            (assessment_id, subject_id, topic_id, learning_outcome_id, competency_id, concept_id,
+             question_text, concept_tag, difficulty_level, question_type, marks, correct_answer,
+             bloom_level, explanation, feedback, resource_link, resource_hint,
+             estimated_time_minutes, estimated_time)
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, 4, 4
+            WHERE NOT EXISTS (SELECT 1 FROM questions WHERE assessment_id=? AND question_text=?)
+        """, (
+            assessment_id,
+            concept_row["subject_id"],
+            concept_row["topic_id"],
+            concept_row["outcome_id"],
+            concept_row["competency_id"],
+            concept_row["concept_id"],
+            question_text,
+            concept_row["concept_tag"],
+            difficulty,
+            question_type,
+            correct_answer,
+            bloom,
+            f"This item checks {bloom.lower()} evidence for {concept_row['concept_title']}.",
+            "Use notes, worked examples and practical evidence to improve this concept.",
+            concept_row["concept_tag"],
+            concept_row["concept_tag"],
+            assessment_id,
+            question_text,
+        ))
+        qid = get_id("SELECT question_id FROM questions WHERE assessment_id=? AND question_text=?", (assessment_id, question_text))
+        if question_type == "multiple_choice":
+            for option_text, is_correct in [
+                (correct_answer, 1),
+                ("Memorise the term without applying it", 0),
+                ("Skip evidence and wait for the post-test", 0),
+                ("Use unrelated examples only", 0),
+            ]:
+                cur.execute("""
+                    INSERT INTO question_options (question_id, option_text, is_correct)
+                    SELECT ?, ?, ?
+                    WHERE NOT EXISTS (SELECT 1 FROM question_options WHERE question_id=? AND option_text=?)
+                """, (qid, option_text, is_correct, qid, option_text))
+
+required_activity_types = [
+    ("concept map", "Create a concept map linking key terms, evidence and real-life use.", "Learning", 15),
+    ("brainstorm", "Brainstorm examples from school, home and community before choosing evidence.", "Learning", 10),
+    ("predict-observe-explain", "Predict what will happen, observe the result and explain using evidence.", "Investigation", 25),
+    ("investigation", "Collect and interpret evidence from a real or simulated situation.", "Investigation", 30),
+    ("practical experiment", "Perform a hands-on task and record observations accurately.", "Practical", 35),
+    ("simulation", "Use a diagram, model or digital simulation to test the concept.", "Simulation", 20),
+    ("group discussion", "Discuss evidence with peers and agree on a justified conclusion.", "Collaboration", 15),
+    ("peer teaching", "Teach the concept to a peer using an example and correction prompt.", "Communication", 15),
+    ("research task", "Use trusted sources or local observation to extend the concept.", "Research", 25),
+    ("project", "Create a product, report or solution that transfers the concept to a real need.", "Project", 40),
+    ("problem-solving challenge", "Solve a real problem by selecting a method and justifying the evidence.", "Application", 25),
+    ("case study", "Analyse a short case and recommend a competent action.", "Application", 20),
+    ("presentation", "Present evidence, method and conclusion clearly.", "Communication", 20),
+    ("reflection", "Reflect on difficulty, support used, confidence and real-life application.", "Reflection", 10),
+    ("self-assessment", "Check your evidence against the success criteria before submission.", "Assessment", 10),
+    ("teacher assessment", "Submit evidence for teacher feedback or rubric scoring.", "Assessment", 10),
+    ("remediation", "Redo a targeted task for a weak concept.", "Support", 15),
+    ("enrichment", "Extend the concept to a more complex community or career context.", "Extension", 20),
+]
+
+for outcome in cur.execute("SELECT outcome_id, outcome_code, outcome_name FROM learning_outcomes").fetchall():
+    for activity_type, description, stage, minutes in required_activity_types:
+        title = f"{activity_type.title()} - {outcome['outcome_code']}"
+        cur.execute("""
+            INSERT INTO learning_activities
+            (outcome_id, activity_title, activity_description, activity_type, activity_stage, estimated_minutes, evidence_required)
+            SELECT ?, ?, ?, ?, ?, ?, 1
+            WHERE NOT EXISTS (
+                SELECT 1 FROM learning_activities WHERE outcome_id=? AND activity_title=?
+            )
+        """, (
+            outcome["outcome_id"],
+            title,
+            f"{description} Outcome focus: {outcome['outcome_name']}.",
+            activity_type,
+            stage,
+            minutes,
+            outcome["outcome_id"],
+            title,
+        ))
+
+cur.execute("""
+    UPDATE learning_resources
+    SET offline_available = 1,
+        cache_key = COALESCE(cache_key, 'resource:' || resource_id),
+        last_cached_at = CURRENT_TIMESTAMP
+    WHERE resource_status='Active'
+""")
+
 cached_rows = [
     ("course", ict_course, "Introduction to ICT offline packet", "course:ict:introduction", 512),
     ("course", phy_course, "Measurements in Physics offline packet", "course:physics:measurements", 640),
@@ -1181,11 +1308,48 @@ for resource_type, resource_id, title, cache_key, size_kb in cached_rows:
         WHERE NOT EXISTS (SELECT 1 FROM cached_resources WHERE cache_key=?)
     """, (resource_type, resource_id, title, cache_key, size_kb, cache_key))
 
+for resource in cur.execute("""
+    SELECT resource_id, resource_type, resource_title, cache_key
+    FROM learning_resources
+    WHERE offline_available=1 AND cache_key IS NOT NULL
+    LIMIT 80
+""").fetchall():
+    cur.execute("""
+        INSERT INTO cached_resources
+        (resource_type, resource_id, resource_title, cache_key, cache_status, estimated_size_kb)
+        SELECT ?, ?, ?, ?, 'Cached', 24
+        WHERE NOT EXISTS (SELECT 1 FROM cached_resources WHERE cache_key=?)
+    """, (
+        resource["resource_type"],
+        resource["resource_id"],
+        resource["resource_title"],
+        resource["cache_key"],
+        resource["cache_key"],
+    ))
+
 cur.execute("""
     INSERT INTO offline_sync_queue (learner_id, event_type, payload, sync_status)
     SELECT ?, 'offline_foundation_demo', '{"message":"Prototype queued event for low-resource readiness"}', 'Pending'
     WHERE NOT EXISTS (SELECT 1 FROM offline_sync_queue WHERE event_type='offline_foundation_demo')
 """, (learner_id,))
+
+cur.execute("""
+    INSERT INTO sync_queue (learner_id, queue_type, payload, sync_status)
+    SELECT ?, 'offline_foundation_demo', '{"message":"Prototype queued event for low-resource readiness"}', 'Pending'
+    WHERE NOT EXISTS (SELECT 1 FROM sync_queue WHERE queue_type='offline_foundation_demo')
+""", (learner_id,))
+
+cur.execute("""
+    INSERT INTO offline_activity_logs (actor_id, action, details, offline_status)
+    SELECT ?, 'CACHE_PACKETS_READY', 'Physics and ICT starter resources marked cacheable for offline study.', 'Recorded'
+    WHERE NOT EXISTS (SELECT 1 FROM offline_activity_logs WHERE action='CACHE_PACKETS_READY')
+""", (get_id("SELECT user_id FROM users WHERE username='admin'"),))
+
+cur.execute("""
+    INSERT INTO sync_events (actor_id, event_type, event_status, queued_count, synced_count, failed_count, details)
+    SELECT ?, 'seed_sync_status', 'Recorded', 1, 0, 0, 'Initial offline sync queue seeded for demonstration.'
+    WHERE NOT EXISTS (SELECT 1 FROM sync_events WHERE event_type='seed_sync_status')
+""", (get_id("SELECT user_id FROM users WHERE username='admin'"),))
 
 cur.execute("""
     INSERT INTO activity_logs (learner_id, activity_type, activity_description)

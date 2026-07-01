@@ -10,12 +10,15 @@
     <nav class="side-nav">
         <a href="{{ url_for('teacher.teacher_dashboard') }}" class="nav-link">Home <span>Dashboard</span></a>
         <a href="{{ url_for('teacher.learners') }}" class="nav-link">Class <span>Learners</span></a>
+        <a href="{{ url_for('teacher.pending_reviews') }}" class="nav-link">Review <span>Pending Reviews</span></a>
         <a href="{{ url_for('teacher.mastery_monitor') }}" class="nav-link">Goal <span>Mastery Monitor</span></a>
+        <a href="{{ url_for('teacher.question_bank') }}" class="nav-link">QBank <span>Question Bank</span></a>
         <a href="{{ url_for('teacher.ai_insights') }}" class="nav-link">AI <span>AI Insights</span></a>
         <a href="{{ url_for('ai.explanations') }}" class="nav-link">XAI <span>AI Explanations</span></a>
         <a href="{{ url_for('teacher.practical_evidence') }}" class="nav-link">Lab <span>Practical Evidence</span></a>
         <a href="{{ url_for('analytics.analytics_dashboard') }}" class="nav-link">Data <span>Class Analytics</span></a>
         <a href="{{ url_for('teacher.reports') }}" class="nav-link">Print <span>Reports</span></a>
+        <a href="{{ url_for('offline.sync_queue') }}" class="nav-link">Sync <span>Offline Queue</span></a>
         <a href="{{ url_for('framework.alignment') }}" class="nav-link">Map <span>Framework Alignment</span></a>
         <a href="{{ url_for('research.research_dashboard') }}" class="nav-link">Research <span>Research Dashboard</span></a>
         <a href="{{ url_for('research.research_reports') }}" class="nav-link">CSV <span>Research Reports</span></a>

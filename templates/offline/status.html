@@ -1,0 +1,56 @@
+{% extends "layouts/base.html" %}
+{% block title %}Offline Status{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Low-Resource Readiness</p>
+        <h1>Offline Status</h1>
+        <p>Track resources prepared for offline study, queued learner actions, and prototype sync attempts.</p>
+    </div>
+    <div class="hero-badge"><span>Pending Sync</span><strong>{{ summary.get('Pending', 0) }}</strong></div>
+</section>
+
+<div class="evidence-grid">
+    <div><span>Cached Resources</span><strong>{{ summary.get('Cached', 0) }}</strong></div>
+    <div><span>Pending</span><strong>{{ summary.get('Pending', 0) }}</strong></div>
+    <div><span>Synced</span><strong>{{ summary.get('Synced', 0) }}</strong></div>
+    <div><span>Failed</span><strong>{{ summary.get('Failed', 0) }}</strong></div>
+    <div><span>Sync Events</span><strong>{{ summary.get('Events', 0) }}</strong></div>
+</div>
+
+<section class="learn-card">
+    <span class="subject-code">Offline Packets</span>
+    <h2>Cached Learning Resources</h2>
+    <div class="concept-grid">
+        {% for item in cached_resources %}
+        <div class="concept-pill good">
+            <span>{{ item.resource_type|title }}</span>
+            <strong>{{ item.resource_title }}</strong>
+            <small>{{ item.cache_key }} - {{ item.cache_status }} - {{ item.estimated_size_kb }} KB</small>
+        </div>
+        {% else %}
+        <p>No cached resources recorded yet.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Sync Queue</span>
+    <h2>Recent Pending or Completed Items</h2>
+    <p><a href="{{ url_for('offline.sync_queue') }}">Open full sync queue</a></p>
+    <div class="concept-grid">
+        {% for item in queue[:12] %}
+        <div class="concept-pill {% if item.sync_status == 'Synced' %}good{% else %}weak{% endif %}">
+            <span>{{ item.learner_name or 'System' }}</span>
+            <strong>{{ item.queue_type }}</strong>
+            <small>Status: {{ item.sync_status }} - Attempts: {{ item.attempts }}</small>
+        </div>
+        {% else %}
+        <p>No sync queue records yet.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

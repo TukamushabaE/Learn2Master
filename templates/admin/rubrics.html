@@ -1,0 +1,23 @@
+{% extends "layouts/base.html" %}
+{% block title %}Rubrics{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="learn-card">
+    <span class="subject-code">Practical Evidence Assessment</span>
+    <h1>Rubrics</h1>
+    <div class="concept-grid">
+        {% for row in rows %}
+        <div class="concept-pill {% if row.level in ['Proficient', 'Advanced'] %}good{% else %}weak{% endif %}">
+            <span>{{ row.subject_name }} - {{ row.outcome_code }}</span>
+            <strong>{{ row.level }} - {{ row.score }}</strong>
+            <small>{{ row.criterion }}</small>
+            <small>{{ row.description }}</small>
+        </div>
+        {% else %}
+        <p>No rubric criteria found.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

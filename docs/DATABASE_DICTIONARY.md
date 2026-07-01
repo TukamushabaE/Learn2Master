@@ -17,6 +17,14 @@ Important tables:
 - `learning_reflections`, `practical_evidence`, `rubric_criteria`, `rubric_assessments`: CBC reflection and practical evidence review.
 - `recommendations`, `ai_explanations`: explainable AI recommendation records.
 - `teacher_interventions`, `teacher_feedback`, `teacher_mastery_reviews`: teacher-in-the-loop decision support.
-- `offline_sync_queue`, `cached_resources`: offline prototype foundation.
+- `activity_submissions`, `activity_feedback`: learner CBC activity evidence and teacher feedback.
+- `offline_sync_queue`, `sync_queue`, `cached_resources`, `offline_activity_logs`, `sync_events`: offline prototype foundation, cached resources, queued submissions and sync attempt logs.
 - `audit_logs`: traceability for security, curriculum, assessment, resource and AI events.
 - `system_settings`, `backups`: AI/CBC configuration and backup register.
+
+Recent schema additions:
+
+- `questions` now stores subject, topic, outcome, competency, concept, difficulty, Bloom level, question type, marks, answer, feedback, resource link and estimated time.
+- `learning_resources` includes offline-cache flags and cache keys.
+- `recommendations` includes recommended activity and teacher-action-required indicators.
+- `learning_reflections` stores difficult concept, helpful strategy, real-life application and support-needed prompts.

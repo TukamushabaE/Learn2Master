@@ -16,6 +16,7 @@
       <strong>{{ rec.recommendation_type }}</strong>
       <small>{{ rec.recommendation_reason }}</small>
       <small><b>Resource:</b> {{ rec.recommended_resource }} | <b>Time:</b> {{ rec.estimated_study_minutes }} minutes | <b>Expected mastery:</b> {{ rec.expected_mastery }}%</small>
+      <small><b>Activity:</b> {{ rec.recommended_activity or 'Targeted practice' }} | <b>Teacher action:</b> {% if rec.teacher_action_required %}Required{% else %}Not required{% endif %}</small>
     </div>
   {% else %}
     <p>No recommendation yet. Start with a diagnostic pre-test.</p>

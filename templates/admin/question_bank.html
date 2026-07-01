@@ -1,0 +1,27 @@
+{% extends "layouts/base.html" %}
+{% block title %}Question Bank{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="learn-card">
+    <span class="subject-code">CBC + AI Metadata</span>
+    <h1>Adaptive Question Bank</h1>
+    <p><a class="btn-primary" href="{{ url_for('admin.create_question') }}">Create Question</a></p>
+    <div class="concept-grid">
+        {% for q in rows %}
+        <div class="concept-pill">
+            <span>{{ q.subject_name }} - {{ q.assessment_type|title }} - {{ q.outcome_code }}</span>
+            <strong>{{ q.concept_tag.replace('_',' ')|title }}</strong>
+            <small>{{ q.question_text }}</small>
+            <small>Type: {{ q.question_type.replace('_',' ')|title }} - Difficulty: {{ q.difficulty_level }} - Bloom: {{ q.bloom_level }} - Marks: {{ q.marks }}</small>
+            <small>Options: {{ q.options }} - Time: {{ q.estimated_time }} min</small>
+            <small>Feedback: {{ q.feedback or 'No feedback entered' }}</small>
+            <a href="{{ url_for('admin.edit_question', question_id=q.question_id) }}">Edit item</a>
+        </div>
+        {% else %}
+        <p>No question bank records yet.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "layouts/base.html" %}
+{% block title %}AI Configuration{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Explainable AI Governance</p>
+        <h1>AI Configuration</h1>
+        <p>Review the simplified BKT model, adaptivity settings, confidence evidence, and teacher review status.</p>
+    </div>
+    <div class="hero-badge"><span>BKT Records</span><strong>{{ bkt.records or 0 }}</strong></div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Model Settings</span>
+    <h2>Stored AI Settings</h2>
+    <div class="concept-grid">
+        {% for item in settings_rows %}
+        <div class="concept-pill">
+            <span>{{ item.setting_category }}</span>
+            <strong>{{ item.setting_key.replace('_',' ')|title }}</strong>
+            <small>Value: {{ item.setting_value }}</small>
+            <small>{{ item.setting_description }}</small>
+        </div>
+        {% else %}
+        <p>No AI settings have been seeded yet.</p>
+        {% endfor %}
+    </div>
+    <p><a href="{{ url_for('admin.settings') }}">Open editable system settings</a></p>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Knowledge Tracing</span>
+    <h2>Computed BKT Summary</h2>
+    <div class="evidence-grid">
+        <div><span>Prior</span><strong>{{ bkt.avg_prior or 0 }}</strong></div>
+        <div><span>Learn</span><strong>{{ bkt.avg_learn or 0 }}</strong></div>
+        <div><span>Guess</span><strong>{{ bkt.avg_guess or 0 }}</strong></div>
+        <div><span>Slip</span><strong>{{ bkt.avg_slip or 0 }}</strong></div>
+        <div><span>Avg Mastery</span><strong>{{ bkt.avg_mastery or 0 }}%</strong></div>
+        <div><span>Avg Confidence</span><strong>{{ bkt.avg_confidence or 0 }}%</strong></div>
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Teacher-in-the-Loop</span>
+    <h2>Recommendation Review Status</h2>
+    <div class="concept-grid">
+        {% for rec in recommendations %}
+        <div class="concept-pill {% if rec.teacher_status == 'Approved' %}good{% else %}weak{% endif %}">
+            <span>{{ rec.recommendation_type }}</span>
+            <strong>{{ rec.teacher_status }}</strong>
+            <small>{{ rec.total }} recommendation(s), average confidence {{ rec.avg_confidence or 0 }}%</small>
+        </div>
+        {% else %}
+        <p>No recommendation records yet.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

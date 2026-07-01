@@ -1,1 +1,47 @@
-{% extends "layouts/base.html" %}{% block title %}AI Insights{% endblock %}{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">{% endblock %}{% block content %}<section class="hero-panel"><div><p class="eyebrow">Explainable AI</p><h1>AI Insights</h1><p>Shows why Learn2Master recommended remediation, practice, or mastery decisions.</p></div><div class="hero-badge"><span>Teacher Control</span><strong>Enabled</strong></div></section><section class="learn-card"><h2>AI Recommendations</h2><div class="concept-grid">{% for r in recommendations %}<div class="concept-pill weak"><span>{{ r.full_name }} • {{ r.outcome_name }}</span><strong>{{ r.recommendation_type }}</strong><small>{{ r.recommendation_reason }} • {{ r.teacher_status }}</small></div>{% else %}<p>No recommendations yet.</p>{% endfor %}</div></section><section class="learn-card"><h2>AI Explanation Log</h2><div class="concept-grid">{% for e in explanations %}<div class="concept-pill"><span>{{ e.full_name }} • {{ e.outcome_name }}</span><strong>{{ e.decision_type }} • {{ e.confidence_score }}%</strong><small>{{ e.explanation_text }}</small></div>{% else %}<p>No explanation logs yet.</p>{% endfor %}</div></section>{% endblock %}
+{% extends "layouts/base.html" %}
+{% block title %}AI Insights{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Explainable AI</p>
+        <h1>AI Insights</h1>
+        <p>Review why Learn2Master recommended remediation, practice, teacher action or mastery progression.</p>
+    </div>
+    <div class="hero-badge"><span>Teacher Control</span><strong>Enabled</strong></div>
+</section>
+
+<section class="learn-card">
+    <h2>AI Recommendations</h2>
+    <div class="concept-grid">
+        {% for r in recommendations %}
+        <div class="concept-pill {% if r.teacher_action_required %}weak{% else %}good{% endif %}">
+            <span>{{ r.full_name }} - {{ r.outcome_name }}</span>
+            <strong>{{ r.recommendation_type }}</strong>
+            <small>{{ r.recommendation_reason }}</small>
+            <small>Resource: {{ r.recommended_resource }} | Activity: {{ r.recommended_activity or 'Targeted practice' }}</small>
+            <small>Confidence: {{ r.confidence_score }}% | Teacher status: {{ r.teacher_status }} | Action required: {% if r.teacher_action_required %}Yes{% else %}No{% endif %}</small>
+        </div>
+        {% else %}
+        <p>No recommendations yet.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <h2>AI Explanation Log</h2>
+    <div class="concept-grid">
+        {% for e in explanations %}
+        <div class="concept-pill">
+            <span>{{ e.full_name }} - {{ e.outcome_name }}</span>
+            <strong>{{ e.decision_type }} - {{ e.confidence_score }}%</strong>
+            <small>{{ e.explanation_text }}</small>
+        </div>
+        {% else %}
+        <p>No explanation logs yet.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}
