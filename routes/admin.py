@@ -1,7 +1,9 @@
 import sqlite3
 
+import os
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
 
 from database import get_db
 from routes.guards import role_required
@@ -1498,3 +1500,46 @@ def reports():
         report_users=report_users,
         schools=schools,
     )
+
+
+@admin_bp.route("/admin/kb/upload", methods=["GET", "POST"])
+@role_required("super_admin")
+@csrf_protect
+def admin_kb_upload():
+    from engine import get_kb
+    kb = get_kb()
+    kb_dir = kb.directory
+
+    if request.method == "POST":
+        file = request.files.get("file")
+        if not file or file.filename == "":
+            flash("No file selected.", "danger")
+            return redirect(url_for("admin.admin_kb_upload"))
+
+        filename = secure_filename(file.filename)
+        if not (filename.endswith(".md") or filename.endswith(".json")):
+            flash("Only .md and .json files are supported for Knowledge Base uploads.", "danger")
+            return redirect(url_for("admin.admin_kb_upload"))
+
+        file_path = kb_dir / filename
+        file.save(str(file_path))
+
+        # Re-index the knowledge base
+        try:
+            kb.load_and_process()
+            conn = get_db()
+            audit(conn, "KB_UPLOAD", "knowledge_base", filename, f"Uploaded and indexed {filename}")
+            conn.commit()
+            conn.close()
+            flash(f"File {filename} uploaded and Knowledge Base re-indexed successfully.", "success")
+        except Exception as e:
+            flash(f"Error processing Knowledge Base: {str(e)}", "danger")
+
+        return redirect(url_for("admin.admin_kb_upload"))
+
+    # GET: List existing files
+    files = []
+    if kb_dir.exists():
+        files = [f for f in os.listdir(kb_dir) if not f.startswith("_")]
+
+    return render_template("admin_kb_upload.html", files=files)

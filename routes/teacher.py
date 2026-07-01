@@ -286,3 +286,27 @@ def review_practical_evidence(practical_id, action):
     conn.commit(); conn.close()
     flash(f"Practical evidence marked as {status}.", "success")
     return redirect(url_for("teacher.practical_evidence"))
+
+
+@teacher_bp.route("/teacher/kb")
+@role_required("teacher", "school_admin", "super_admin")
+def teacher_kb_view():
+    from engine import get_kb
+    kb = get_kb()
+
+    page = request.args.get("page", 1, type=int)
+    per_page = 50
+
+    total_chunks = len(kb.chunks)
+    total_pages = (total_chunks + per_page - 1) // per_page if total_chunks > 0 else 1
+
+    start = (page - 1) * per_page
+    end = start + per_page
+    chunks_page = kb.chunks[start:end]
+
+    return render_template(
+        "teacher_kb_view.html",
+        chunks=chunks_page,
+        page=page,
+        total_pages=total_pages
+    )
