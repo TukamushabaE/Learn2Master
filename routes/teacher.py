@@ -1,8 +1,10 @@
+import math
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from routes.guards import role_required
 from database import get_db
 from security import csrf_protect
 from services.analytics_engine import teacher_overview, recent_ai_recommendations
+from engine import get_kb
 
 teacher_bp = Blueprint("teacher", __name__)
 
@@ -286,3 +288,19 @@ def review_practical_evidence(practical_id, action):
     conn.commit(); conn.close()
     flash(f"Practical evidence marked as {status}.", "success")
     return redirect(url_for("teacher.practical_evidence"))
+
+
+@teacher_bp.route("/teacher/kb")
+@role_required("teacher", "school_admin", "super_admin")
+def teacher_kb_view():
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+    kb = get_kb()
+    total_chunks = len(kb.chunks)
+    total_pages = math.ceil(total_chunks / per_page)
+
+    start = (page - 1) * per_page
+    end = start + per_page
+    chunks = kb.chunks[start:end]
+
+    return render_template("teacher_kb_view.html", chunks=chunks, page=page, total_pages=total_pages)

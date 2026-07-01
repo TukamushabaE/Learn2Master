@@ -35,9 +35,15 @@ def inject_security_helpers():
         "teacher": "Teacher",
         "learner": "Learner",
     }
+    class MockUser:
+        def __init__(self):
+            self.is_authenticated = "user_id" in session
+            self.username = session.get("username", "")
+            self.role = session.get("role", "")
     return {
         "csrf_token": get_csrf_token,
         "role_label": lambda role=None: role_labels.get(role or "", role or ""),
+        "current_user": MockUser(),
     }
 
 
