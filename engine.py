@@ -12,6 +12,7 @@ from functools import lru_cache
 from PyPDF2 import PdfReader
 from huggingface_hub import InferenceClient
 from groq import Groq
+from supabase import create_client, Client
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -69,11 +70,21 @@ class KnowledgeBase:
         self.chunks = []
         self.embeddings = None
         self.hf_client = None
+        self.supabase: Client = None
         self._lock = threading.Lock()
 
         hf_token = os.environ.get('HF_TOKEN')
         if hf_token:
             self.hf_client = InferenceClient(token=hf_token)
+
+        supabase_url = os.environ.get('SUPABASE_URL')
+        supabase_key = os.environ.get('SUPABASE_KEY')
+        if supabase_url and supabase_key:
+            try:
+                self.supabase = create_client(supabase_url, supabase_key)
+                logger.info("Supabase client initialized for vector storage.")
+            except Exception as e:
+                logger.error(f"Failed to initialize Supabase client: {e}")
 
         self.load_and_process()
 
@@ -85,11 +96,46 @@ class KnowledgeBase:
         text = re.sub(r'^\s*[-*+]\s+', '', text, flags=re.MULTILINE)
         return text.strip()
 
+    def _recursive_split(self, text, chunk_size=1000, overlap=200):
+        if len(text) <= chunk_size:
+            return [text.strip()]
+
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + chunk_size
+            if end < len(text):
+                # Try to find a good break point
+                last_period = text.rfind('. ', start, end)
+                last_newline = text.rfind('\n', start, end)
+                break_point = max(last_period, last_newline)
+
+                if break_point != -1 and break_point > start + (chunk_size // 2):
+                    end = break_point + 1
+
+            chunk = text[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+
+            start = end - overlap
+            if start >= len(text) - overlap:
+                break
+        return chunks
+
     def _extract_text(self, obj):
         if isinstance(obj, str):
             return obj
         if isinstance(obj, dict):
-            return " ".join(self._extract_text(v) for k, v in obj.items() if k in ('content', 'text', 'body', 'description', 'title'))
+            # Prioritize certain fields but also look deeper if needed
+            content_fields = ['content', 'text', 'body', 'description', 'title', 'summary']
+            extracted = []
+            for k, v in obj.items():
+                if k.lower() in content_fields:
+                    extracted.append(self._extract_text(v))
+                elif isinstance(v, (dict, list)):
+                    res = self._extract_text(v)
+                    if res: extracted.append(res)
+            return " ".join(extracted)
         if isinstance(obj, list):
             return " ".join(self._extract_text(i) for i in obj[:MAX_JSON_ITEMS])
         return ""
@@ -131,16 +177,7 @@ class KnowledgeBase:
                     logger.error(f"Error reading source {filename}: {e}")
 
             if all_text:
-                sentences = all_text.replace('\n', ' ').split('. ')
-                current_chunk = ""
-                for sentence in sentences:
-                    if len(current_chunk) + len(sentence) < 500:
-                        current_chunk += sentence + ". "
-                    else:
-                        self.chunks.append(current_chunk.strip())
-                        current_chunk = sentence + ". "
-                if current_chunk:
-                    self.chunks.append(current_chunk.strip())
+                self.chunks.extend(self._recursive_split(all_text, chunk_size=1000, overlap=200))
 
             # Load dynamic
             if self.dynamic_kb_path.exists():
@@ -168,6 +205,28 @@ class KnowledgeBase:
         return self.hf_client.feature_extraction(query, model=self.model_id)
 
     def search(self, query, top_k=3):
+        if self.supabase:
+            try:
+                query_embedding = self.get_query_embedding(query)
+                if isinstance(query_embedding, list) and len(query_embedding) > 0 and isinstance(query_embedding[0], list):
+                    query_embedding = query_embedding[0]
+
+                # Using Supabase rpc for vector similarity search
+                # Requires a 'match_documents' function in Supabase
+                response = self.supabase.rpc(
+                    'match_documents',
+                    {
+                        'query_embedding': query_embedding,
+                        'match_threshold': 0.5,
+                        'match_count': top_k,
+                    }
+                ).execute()
+
+                if response.data:
+                    return [item['content'] for item in response.data]
+            except Exception as e:
+                logger.error(f"Supabase search error: {e}. Falling back to local search.")
+
         with self._lock:
             if not self.chunks or self.embeddings is None or not self.hf_client:
                 return []
@@ -194,17 +253,33 @@ class KnowledgeBase:
             logger.error(f"Search error: {e}")
             return []
 
-    def add_knowledge(self, text):
+    def add_knowledge(self, text, metadata=None):
         text = text.strip()
         if not text or len(text) > 4000:
             return
         new_embedding = None
         if self.hf_client:
             try:
-                new_embedding = np.array(self.hf_client.feature_extraction([text], model=self.model_id))
+                new_embedding_raw = self.hf_client.feature_extraction([text], model=self.model_id)
+                new_embedding = np.array(new_embedding_raw)
             except Exception as e:
                 logger.error(f"Error generating embedding: {e}")
                 return
+
+        if self.supabase and new_embedding is not None:
+            try:
+                embedding_list = new_embedding.tolist()
+                if isinstance(embedding_list[0], list):
+                    embedding_list = embedding_list[0]
+
+                self.supabase.table('documents').insert({
+                    'content': text,
+                    'metadata': metadata or {},
+                    'embedding': embedding_list
+                }).execute()
+            except Exception as e:
+                logger.error(f"Supabase insertion error: {e}")
+
         with self._lock:
             if len(self.chunks) >= MAX_KB_ENTRIES:
                 return
@@ -216,7 +291,7 @@ class KnowledgeBase:
                     self.embeddings = np.vstack([self.embeddings, new_embedding])
             try:
                 with open(self.dynamic_kb_path, 'a') as f:
-                    f.write(json.dumps({'text': text, 'timestamp': time.time()}) + '\n')
+                    f.write(json.dumps({'text': text, 'metadata': metadata, 'timestamp': time.time()}) + '\n')
             except Exception as e:
                 logger.error(f"Persistence error: {e}")
 

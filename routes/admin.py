@@ -1,9 +1,12 @@
 import sqlite3
 
+import os
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
 
 from database import get_db
+from engine import get_kb
 from routes.guards import role_required
 from security import csrf_protect
 
@@ -1498,3 +1501,30 @@ def reports():
         report_users=report_users,
         schools=schools,
     )
+
+
+@admin_bp.route("/admin/kb/upload", methods=["GET", "POST"])
+@role_required("super_admin")
+@csrf_protect
+def admin_kb_upload():
+    kb = get_kb()
+    if request.method == "POST":
+        file = request.files.get("file")
+        if file and file.filename:
+            filename = secure_filename(file.filename)
+            filepath = kb.directory / filename
+            file.save(str(filepath))
+
+            # Trigger re-processing
+            kb.load_and_process()
+
+            conn = get_db()
+            audit(conn, "KB_UPLOAD", "knowledge_base", filename, f"Uploaded and processed {filename}")
+            conn.commit()
+            conn.close()
+
+            flash(f"File {filename} uploaded and KB updated.", "success")
+            return redirect(url_for("admin.admin_kb_upload"))
+
+    files = [f for f in os.listdir(kb.directory) if not f.startswith('_')]
+    return render_template("admin_kb_upload.html", files=files)
