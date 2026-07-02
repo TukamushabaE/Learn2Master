@@ -70,7 +70,7 @@ CREATE TABLE users (
     password_hash TEXT NOT NULL,
     role_id INTEGER NOT NULL,
     school_id INTEGER,
-    account_status TEXT DEFAULT 'Active',
+    account_status TEXT DEFAULT 'Pending',
     security_level INTEGER DEFAULT 1,
     must_change_password INTEGER DEFAULT 0,
     failed_login_attempts INTEGER DEFAULT 0,
@@ -692,6 +692,28 @@ CREATE TABLE IF NOT EXISTS backups (
     created_by INTEGER,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (created_by) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS student_subject_assignments (
+    assignment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL,
+    subject_id INTEGER NOT NULL,
+    assigned_by INTEGER,
+    assigned_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES users(user_id),
+    FOREIGN KEY (subject_id) REFERENCES subjects(subject_id),
+    FOREIGN KEY (assigned_by) REFERENCES users(user_id),
+    UNIQUE (student_id, subject_id)
+);
+
+CREATE TABLE IF NOT EXISTS teacher_kb_uploads (
+    upload_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    teacher_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    original_size_bytes INTEGER NOT NULL,
+    summary_size_bytes INTEGER,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (teacher_id) REFERENCES users(user_id)
 );
 
 CREATE TABLE IF NOT EXISTS audit_logs (

@@ -179,8 +179,8 @@ def register():
             conn.execute("""
                 INSERT INTO users
                 (full_name, username, email, password_hash, role_id, school_id,
-                 account_status, security_level, approved_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'Active', 1, CURRENT_TIMESTAMP)
+                 account_status, security_level)
+                VALUES (?, ?, ?, ?, ?, ?, 'Pending', 1)
             """, (
                 full_name,
                 username,

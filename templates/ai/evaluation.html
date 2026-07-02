@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Holistic AI Learning Evaluation</h2>
+    <div class="card mt-3">
+        <div class="card-body">
+            <div style="white-space: pre-wrap;">
+                {{ evaluation }}
+            </div>
+        </div>
+    </div>
+    <div class="mt-3">
+        <a href="javascript:history.back()" class="btn btn-secondary">Back</a>
+    </div>
+</div>
+{% endblock %}

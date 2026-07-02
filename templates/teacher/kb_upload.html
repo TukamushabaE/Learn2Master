@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Upload Study Materials (AI Knowledge Base)</h2>
+    <div class="alert alert-info">
+        <strong>Storage Usage:</strong> {{ (usage / 1024 / 1024) | round(2) }}MB / {{ (limit / 1024 / 1024) | round(0) }}MB
+    </div>
+    <form method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+            <label>Select File (PDF or Text)</label>
+            <input type="file" name="file" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Upload & Summarize with AI</button>
+    </form>
+
+    <h3 class="mt-4">Your Uploads</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Filename</th>
+                <th>Original Size</th>
+                <th>AI Summary Size</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for upload in uploads %}
+            <tr>
+                <td>{{ upload.filename }}</td>
+                <td>{{ (upload.original_size_bytes / 1024) | round(1) }} KB</td>
+                <td>{{ upload.summary_size_bytes }} bytes</td>
+                <td>{{ upload.created_at }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4">No uploads yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

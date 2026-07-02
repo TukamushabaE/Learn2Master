@@ -148,15 +148,13 @@
             </div>
             <div class="list-group list-group-flush">
                 <a href="{{ url_for('dashboard.dashboard') }}" class="list-group-item"><i class="fas fa-home"></i> Dashboard</a>
-                {% if current_user.role in ['teacher', 'admin', 'super_admin'] %}
+                {% if current_user.role in ['teacher', 'super_admin', 'school_admin'] %}
                 <a href="{{ url_for('teacher.teacher_kb_view') }}" class="list-group-item"><i class="fas fa-database"></i> View KB</a>
                 {% endif %}
                 <a href="{{ url_for('admin.users') }}" class="list-group-item"><i class="fas fa-users"></i> Users</a>
                 <a href="{{ url_for('admin.schools') }}" class="list-group-item"><i class="fas fa-school"></i> Schools</a>
                 <a href="{{ url_for('admin.curriculum') }}" class="list-group-item"><i class="fas fa-book"></i> Curriculum</a>
                 <a href="{{ url_for('admin.competencies') }}" class="list-group-item"><i class="fas fa-bullseye"></i> Competencies</a>
-                <a href="{{ url_for('admin.reports') }}" class="list-group-item"><i class="fas fa-chart-line"></i> System Analytics</a>
-                <a href="{{ url_for('admin.settings') }}" class="list-group-item"><i class="fas fa-cog"></i> Settings</a>
                 <a href="{{ url_for('admin.logs') }}" class="list-group-item"><i class="fas fa-file-alt"></i> Audit Logs</a>
                 <a href="{{ url_for('admin.admin_kb_upload') }}" class="list-group-item"><i class="fas fa-upload"></i> KB Upload</a>
                 <a href="{{ url_for('admin.reports') }}" class="list-group-item"><i class="fas fa-file-contract"></i> Reports</a>

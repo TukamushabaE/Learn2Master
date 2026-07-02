@@ -6,6 +6,7 @@ from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 
 from database import get_db
+from engine import get_kb
 from routes.guards import role_required
 from security import csrf_protect
 
@@ -1502,44 +1503,58 @@ def reports():
     )
 
 
+
+@admin_bp.route("/admin/headteacher/create", methods=["GET", "POST"])
+@role_required("super_admin")
+@csrf_protect
+def create_headteacher():
+    conn = get_db()
+    if request.method == "POST":
+        username = request.form.get("username")
+        full_name = request.form.get("full_name")
+        email = request.form.get("email")
+        password = request.form.get("password")
+        school_id = request.form.get("school_id")
+
+        role = conn.execute("SELECT role_id FROM roles WHERE role_name = 'school_admin'").fetchone()
+
+        try:
+            conn.execute("""
+                INSERT INTO users (full_name, username, email, password_hash, role_id, school_id, account_status, security_level)
+                VALUES (?, ?, ?, ?, ?, ?, 'Active', 4)
+            """, (full_name, username, email, generate_password_hash(password), role['role_id'], school_id))
+            conn.commit()
+            flash("School Admin created successfully.", "success")
+            return redirect(url_for("admin.users"))
+        except Exception as e:
+            flash(f"Error creating School Admin: {e}", "danger")
+
+    schools = conn.execute("SELECT * FROM schools").fetchall()
+    conn.close()
+    return render_template("admin/headteacher_form.html", schools=schools)
+
 @admin_bp.route("/admin/kb/upload", methods=["GET", "POST"])
 @role_required("super_admin")
 @csrf_protect
 def admin_kb_upload():
-    from engine import get_kb
     kb = get_kb()
-    kb_dir = kb.directory
-
     if request.method == "POST":
         file = request.files.get("file")
-        if not file or file.filename == "":
-            flash("No file selected.", "danger")
-            return redirect(url_for("admin.admin_kb_upload"))
+        if file and file.filename:
+            filename = secure_filename(file.filename)
+            filepath = kb.directory / filename
+            file.save(str(filepath))
 
-        filename = secure_filename(file.filename)
-        if not (filename.endswith(".md") or filename.endswith(".json")):
-            flash("Only .md and .json files are supported for Knowledge Base uploads.", "danger")
-            return redirect(url_for("admin.admin_kb_upload"))
-
-        file_path = kb_dir / filename
-        file.save(str(file_path))
-
-        # Re-index the knowledge base
-        try:
+            # Trigger re-processing
             kb.load_and_process()
+
             conn = get_db()
-            audit(conn, "KB_UPLOAD", "knowledge_base", filename, f"Uploaded and indexed {filename}")
+            audit(conn, "KB_UPLOAD", "knowledge_base", filename, f"Uploaded and processed {filename}")
             conn.commit()
             conn.close()
-            flash(f"File {filename} uploaded and Knowledge Base re-indexed successfully.", "success")
-        except Exception as e:
-            flash(f"Error processing Knowledge Base: {str(e)}", "danger")
 
-        return redirect(url_for("admin.admin_kb_upload"))
+            flash(f"File {filename} uploaded and KB updated.", "success")
+            return redirect(url_for("admin.admin_kb_upload"))
 
-    # GET: List existing files
-    files = []
-    if kb_dir.exists():
-        files = [f for f in os.listdir(kb_dir) if not f.startswith("_")]
-
+    files = [f for f in os.listdir(kb.directory) if not f.startswith('_')]
     return render_template("admin_kb_upload.html", files=files)

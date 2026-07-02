@@ -87,6 +87,15 @@ class KnowledgeBase:
         if hf_token:
             self.hf_client = InferenceClient(token=hf_token)
 
+        supabase_url = os.environ.get('SUPABASE_URL')
+        supabase_key = os.environ.get('SUPABASE_KEY')
+        if supabase_url and supabase_key:
+            try:
+                self.supabase = create_client(supabase_url, supabase_key)
+                logger.info("Supabase client initialized for vector storage.")
+            except Exception as e:
+                logger.error(f"Failed to initialize Supabase client: {e}")
+
         self.load_and_process()
 
     def _strip_markdown(self, text):
@@ -97,11 +106,46 @@ class KnowledgeBase:
         text = re.sub(r'^\s*[-*+]\s+', '', text, flags=re.MULTILINE)
         return text.strip()
 
+    def _recursive_split(self, text, chunk_size=1000, overlap=200):
+        if len(text) <= chunk_size:
+            return [text.strip()]
+
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + chunk_size
+            if end < len(text):
+                # Try to find a good break point
+                last_period = text.rfind('. ', start, end)
+                last_newline = text.rfind('\n', start, end)
+                break_point = max(last_period, last_newline)
+
+                if break_point != -1 and break_point > start + (chunk_size // 2):
+                    end = break_point + 1
+
+            chunk = text[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+
+            start = end - overlap
+            if start >= len(text) - overlap:
+                break
+        return chunks
+
     def _extract_text(self, obj):
         if isinstance(obj, str):
             return obj
         if isinstance(obj, dict):
-            return " ".join(self._extract_text(v) for k, v in obj.items() if k in ('content', 'text', 'body', 'description', 'title'))
+            # Prioritize certain fields but also look deeper if needed
+            content_fields = ['content', 'text', 'body', 'description', 'title', 'summary']
+            extracted = []
+            for k, v in obj.items():
+                if k.lower() in content_fields:
+                    extracted.append(self._extract_text(v))
+                elif isinstance(v, (dict, list)):
+                    res = self._extract_text(v)
+                    if res: extracted.append(res)
+            return " ".join(extracted)
         if isinstance(obj, list):
             return " ".join(self._extract_text(i) for i in obj[:MAX_JSON_ITEMS])
         return ""
@@ -163,19 +207,7 @@ class KnowledgeBase:
                     logger.error(f"Error reading source {filename}: {e}")
 
             if all_text:
-                # Sliding window chunking for better semantic context
-                chunk_size = 500
-                overlap = 100
-                all_text = all_text.replace('\n', ' ')
-
-                start = 0
-                while start < len(all_text):
-                    end = start + chunk_size
-                    chunk = all_text[start:end]
-                    self.chunks.append(chunk.strip())
-                    if end >= len(all_text):
-                        break
-                    start += (chunk_size - overlap)
+                self.chunks.extend(self._recursive_split(all_text, chunk_size=1000, overlap=200))
 
             # Load dynamic
             if self.dynamic_kb_path.exists():
@@ -220,32 +252,28 @@ class KnowledgeBase:
         return self.hf_client.feature_extraction(query, model=self.model_id)
 
     def search(self, query, top_k=3):
-        query_embedding = None
-        if self.hf_client:
+        if self.supabase:
             try:
                 query_embedding = self.get_query_embedding(query)
-                if isinstance(query_embedding, list):
-                    query_embedding = np.array(query_embedding)
-                if query_embedding.ndim > 1:
+                if isinstance(query_embedding, list) and len(query_embedding) > 0 and isinstance(query_embedding[0], list):
                     query_embedding = query_embedding[0]
-            except Exception as e:
-                logger.error(f"Error generating query embedding: {e}")
 
-        # 1. Try Supabase Vector Search if available
-        if self.supabase and query_embedding is not None:
-            try:
-                # Expects a stored procedure 'match_kb_chunks' in Supabase
-                res = self.supabase.rpc('match_kb_chunks', {
-                    'query_embedding': query_embedding.tolist(),
-                    'match_threshold': 0.5,
-                    'match_count': top_k
-                }).execute()
-                if res.data:
-                    return [item['content'] for item in res.data]
-            except Exception as e:
-                logger.error(f"Supabase Vector search error: {e}")
+                # Using Supabase rpc for vector similarity search
+                # Requires a 'match_documents' function in Supabase
+                response = self.supabase.rpc(
+                    'match_documents',
+                    {
+                        'query_embedding': query_embedding,
+                        'match_threshold': 0.5,
+                        'match_count': top_k,
+                    }
+                ).execute()
 
-        # 2. Fallback to Local In-Memory Search
+                if response.data:
+                    return [item['content'] for item in response.data]
+            except Exception as e:
+                logger.error(f"Supabase search error: {e}. Falling back to local search.")
+
         with self._lock:
             if not self.chunks or self.embeddings is None or query_embedding is None:
                 return []
@@ -270,17 +298,33 @@ class KnowledgeBase:
             logger.error(f"Local search error: {e}")
             return []
 
-    def add_knowledge(self, text):
+    def add_knowledge(self, text, metadata=None):
         text = text.strip()
         if not text or len(text) > 4000:
             return
         new_embedding = None
         if self.hf_client:
             try:
-                new_embedding = np.array(self.hf_client.feature_extraction([text], model=self.model_id))
+                new_embedding_raw = self.hf_client.feature_extraction([text], model=self.model_id)
+                new_embedding = np.array(new_embedding_raw)
             except Exception as e:
                 logger.error(f"Error generating embedding: {e}")
                 return
+
+        if self.supabase and new_embedding is not None:
+            try:
+                embedding_list = new_embedding.tolist()
+                if isinstance(embedding_list[0], list):
+                    embedding_list = embedding_list[0]
+
+                self.supabase.table('documents').insert({
+                    'content': text,
+                    'metadata': metadata or {},
+                    'embedding': embedding_list
+                }).execute()
+            except Exception as e:
+                logger.error(f"Supabase insertion error: {e}")
+
         with self._lock:
             if len(self.chunks) >= MAX_KB_ENTRIES:
                 return
@@ -292,7 +336,7 @@ class KnowledgeBase:
                     self.embeddings = np.vstack([self.embeddings, new_embedding])
             try:
                 with open(self.dynamic_kb_path, 'a') as f:
-                    f.write(json.dumps({'text': text, 'timestamp': time.time()}) + '\n')
+                    f.write(json.dumps({'text': text, 'metadata': metadata, 'timestamp': time.time()}) + '\n')
             except Exception as e:
                 logger.error(f"Persistence error: {e}")
 
@@ -304,6 +348,51 @@ def get_kb():
     return _kb_instance
 
 class AIEngine:
+    @staticmethod
+    def compress_study_material(text):
+        groq_api_key = os.environ.get('GROQ_API_KEY')
+        if not groq_api_key:
+            return text[:5000] # Fallback to truncation
+        try:
+            from groq import Groq
+            client = Groq(api_key=groq_api_key)
+            prompt = f"Summarize the following study material into a concise pedagogical summary of approximately 5KB (about 800-1000 words) that captures all key concepts and definitions for vector search: \n\n {text[:15000]}"
+            chat_completion = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama3-70b-8192",
+                temperature=0.3,
+            )
+            return chat_completion.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Compression error: {e}")
+            return text[:5000]
+
+    @staticmethod
+    def evaluate_all_work(learner_id, conn):
+        # Gather all student data
+        mastery = conn.execute("SELECT mr.*, lo.outcome_name FROM mastery_records mr JOIN learning_outcomes lo ON mr.outcome_id = lo.outcome_id WHERE learner_id = ?", (learner_id,)).fetchall()
+        evidence = conn.execute("SELECT * FROM practical_evidence WHERE learner_id = ?", (learner_id,)).fetchall()
+        attempts = conn.execute("SELECT * FROM assessment_attempts WHERE learner_id = ? ORDER BY created_at DESC LIMIT 50", (learner_id,)).fetchall()
+
+        data_summary = f"Mastery Records: {len(mastery)}, Evidence Submissions: {len(evidence)}, Recent Attempts: {len(attempts)}"
+
+        groq_api_key = os.environ.get('GROQ_API_KEY')
+        if not groq_api_key:
+            return f"AI Evaluation currently unavailable. Summary: {data_summary}"
+
+        try:
+            from groq import Groq
+            client = Groq(api_key=groq_api_key)
+            prompt = f"Evaluate the following student work data and provide a holistic pedagogical assessment of their progress, strengths, and areas for improvement in Physics and ICT: \n\n {data_summary}"
+            chat_completion = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama3-8b-8192",
+                temperature=0.5,
+            )
+            return chat_completion.choices[0].message.content
+        except Exception as e:
+            return f"Error generating evaluation: {e}"
+
     @staticmethod
     def analyze_knowledge_gaps(mastery_records):
         gaps = []
