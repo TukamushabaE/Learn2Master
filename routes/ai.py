@@ -99,3 +99,21 @@ def ai_tutor():
     conn.close()
 
     return jsonify({"response": response_text})
+
+
+@ai_bp.route("/ai/evaluate-all-work")
+@login_required
+def evaluate_all_work():
+    learner_id = session["user_id"]
+    if session.get("role") != "learner":
+        learner_id = request.args.get("learner_id")
+        if not learner_id:
+             flash("No learner specified.", "warning")
+             return redirect(url_for("teacher.teacher_dashboard"))
+
+    conn = get_db()
+    from engine import AIEngine
+    evaluation = AIEngine.evaluate_all_work(learner_id, conn)
+    conn.close()
+
+    return render_template("ai/evaluation.html", evaluation=evaluation)
