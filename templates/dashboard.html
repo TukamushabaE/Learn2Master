@@ -4,6 +4,7 @@
 <div class="page-hero">
     <div>
         <h1>Welcome back, {{ user.full_name if user else session.get('full_name','Learner') }} 👋</h1>
+<div class="mt-3"><a href="{{ url_for('ai.evaluate_all_work') }}" class="btn btn-info">Comprehensive AI Performance Evaluation</a></div>
         <p>Learn2Master V3 is the working implementation of an AI-enabled framework for sequential mastery-based learning under CBC.</p>
     </div>
     <div class="research-card" style="margin:0;min-width:260px">

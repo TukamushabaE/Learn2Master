@@ -1,6 +1,9 @@
 import os
 import sqlite3
-import psycopg2
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
 from werkzeug.security import generate_password_hash
 
 DATABASE_URL = os.environ.get("DATABASE_URL")

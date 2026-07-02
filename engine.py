@@ -304,6 +304,51 @@ def get_kb():
 
 class AIEngine:
     @staticmethod
+    def compress_study_material(text):
+        groq_api_key = os.environ.get('GROQ_API_KEY')
+        if not groq_api_key:
+            return text[:5000] # Fallback to truncation
+        try:
+            from groq import Groq
+            client = Groq(api_key=groq_api_key)
+            prompt = f"Summarize the following study material into a concise pedagogical summary of approximately 5KB (about 800-1000 words) that captures all key concepts and definitions for vector search: \n\n {text[:15000]}"
+            chat_completion = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama3-70b-8192",
+                temperature=0.3,
+            )
+            return chat_completion.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Compression error: {e}")
+            return text[:5000]
+
+    @staticmethod
+    def evaluate_all_work(learner_id, conn):
+        # Gather all student data
+        mastery = conn.execute("SELECT mr.*, lo.outcome_name FROM mastery_records mr JOIN learning_outcomes lo ON mr.outcome_id = lo.outcome_id WHERE learner_id = ?", (learner_id,)).fetchall()
+        evidence = conn.execute("SELECT * FROM practical_evidence WHERE learner_id = ?", (learner_id,)).fetchall()
+        attempts = conn.execute("SELECT * FROM assessment_attempts WHERE learner_id = ? ORDER BY created_at DESC LIMIT 50", (learner_id,)).fetchall()
+
+        data_summary = f"Mastery Records: {len(mastery)}, Evidence Submissions: {len(evidence)}, Recent Attempts: {len(attempts)}"
+
+        groq_api_key = os.environ.get('GROQ_API_KEY')
+        if not groq_api_key:
+            return f"AI Evaluation currently unavailable. Summary: {data_summary}"
+
+        try:
+            from groq import Groq
+            client = Groq(api_key=groq_api_key)
+            prompt = f"Evaluate the following student work data and provide a holistic pedagogical assessment of their progress, strengths, and areas for improvement in Physics and ICT: \n\n {data_summary}"
+            chat_completion = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama3-8b-8192",
+                temperature=0.5,
+            )
+            return chat_completion.choices[0].message.content
+        except Exception as e:
+            return f"Error generating evaluation: {e}"
+
+    @staticmethod
     def analyze_knowledge_gaps(mastery_records):
         gaps = []
         for record in mastery_records:

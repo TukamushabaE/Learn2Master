@@ -1503,6 +1503,36 @@ def reports():
     )
 
 
+
+@admin_bp.route("/admin/headteacher/create", methods=["GET", "POST"])
+@role_required("super_admin")
+@csrf_protect
+def create_headteacher():
+    conn = get_db()
+    if request.method == "POST":
+        username = request.form.get("username")
+        full_name = request.form.get("full_name")
+        email = request.form.get("email")
+        password = request.form.get("password")
+        school_id = request.form.get("school_id")
+
+        role = conn.execute("SELECT role_id FROM roles WHERE role_name = 'school_admin'").fetchone()
+
+        try:
+            conn.execute("""
+                INSERT INTO users (full_name, username, email, password_hash, role_id, school_id, account_status, security_level)
+                VALUES (?, ?, ?, ?, ?, ?, 'Active', 4)
+            """, (full_name, username, email, generate_password_hash(password), role['role_id'], school_id))
+            conn.commit()
+            flash("School Admin created successfully.", "success")
+            return redirect(url_for("admin.users"))
+        except Exception as e:
+            flash(f"Error creating School Admin: {e}", "danger")
+
+    schools = conn.execute("SELECT * FROM schools").fetchall()
+    conn.close()
+    return render_template("admin/headteacher_form.html", schools=schools)
+
 @admin_bp.route("/admin/kb/upload", methods=["GET", "POST"])
 @role_required("super_admin")
 @csrf_protect
