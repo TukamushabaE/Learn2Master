@@ -73,6 +73,16 @@ class KnowledgeBase:
         self.supabase: Client = None
         self._lock = threading.Lock()
 
+        # Supabase config
+        supabase_url = os.environ.get("SUPABASE_URL")
+        supabase_key = os.environ.get("SUPABASE_KEY")
+        if supabase_url and supabase_key:
+            try:
+                self.supabase = create_client(supabase_url, supabase_key)
+                logger.info("Supabase client initialized.")
+            except Exception as e:
+                logger.error(f"Failed to initialize Supabase: {e}")
+
         hf_token = os.environ.get('HF_TOKEN')
         if hf_token:
             self.hf_client = InferenceClient(token=hf_token)
@@ -150,6 +160,26 @@ class KnowledgeBase:
                 self.directory.mkdir(parents=True, exist_ok=True)
 
             all_text = ""
+
+            # 1. Sync from Supabase Storage if available
+            if self.supabase:
+                try:
+                    res = self.supabase.storage.from_("knowledge-base").list()
+                    for file_info in res:
+                        fname = file_info['name']
+                        if fname.startswith('.') or fname.startswith('_'): continue
+
+                        local_path = self.directory / fname
+                        # Simple check: if not exists, download
+                        if not local_path.exists():
+                            logger.info(f"Downloading {fname} from Supabase Storage...")
+                            with open(local_path, 'wb') as f:
+                                data = self.supabase.storage.from_("knowledge-base").download(fname)
+                                f.write(data)
+                except Exception as e:
+                    logger.error(f"Supabase Storage sync error: {e}")
+
+            # 2. Process local files (including newly downloaded ones)
             for filename in sorted(os.listdir(self.directory)):
                 if filename.startswith('_'): continue
                 filepath = self.directory / filename
@@ -192,9 +222,26 @@ class KnowledgeBase:
 
             if self.chunks and self.hf_client:
                 try:
-                    embeddings = self.hf_client.feature_extraction(self.chunks, model=self.model_id)
-                    self.embeddings = np.array(embeddings)
+                    embeddings_list = self.hf_client.feature_extraction(self.chunks, model=self.model_id)
+                    self.embeddings = np.array(embeddings_list)
                     logger.info(f"Initialized KB with {len(self.chunks)} chunks.")
+
+                    # 3. Sync chunks and embeddings to Supabase if available
+                    if self.supabase:
+                        # Clear old embeddings for simplicity in this prototype
+                        # In production, we'd do incremental updates
+                        try:
+                            # Note: This is an expensive operation and should be done background/async
+                            data_to_insert = [
+                                {'content': chunk, 'embedding': emb}
+                                for chunk, emb in zip(self.chunks, embeddings_list)
+                            ]
+                            # Use Supabase client to UPSERT or INSERT
+                            # For prototype: simple insert
+                            self.supabase.table('kb_embeddings').upsert(data_to_insert).execute()
+                        except Exception as e:
+                            logger.error(f"Supabase Embedding sync error: {e}")
+
                 except Exception as e:
                     logger.error(f"Error generating KB embeddings: {e}")
 
@@ -228,14 +275,10 @@ class KnowledgeBase:
                 logger.error(f"Supabase search error: {e}. Falling back to local search.")
 
         with self._lock:
-            if not self.chunks or self.embeddings is None or not self.hf_client:
+            if not self.chunks or self.embeddings is None or query_embedding is None:
                 return []
 
         try:
-            query_embedding = np.array(self.get_query_embedding(query))
-            if len(query_embedding.shape) > 1:
-                query_embedding = query_embedding[0]
-
             with self._lock:
                 if self.embeddings is None: return []
                 expected_dim = self.embeddings.shape[-1]
@@ -243,6 +286,8 @@ class KnowledgeBase:
                      return []
                 if self.embeddings.ndim == 1:
                      self.embeddings = self.embeddings.reshape(1, -1)
+
+                # Cosine similarity
                 dot_product = np.dot(self.embeddings, query_embedding)
                 norms = np.linalg.norm(self.embeddings, axis=1) * np.linalg.norm(query_embedding)
                 norms[norms == 0] = 1e-9
@@ -250,7 +295,7 @@ class KnowledgeBase:
                 top_indices = np.argsort(similarities)[::-1][:top_k]
                 return [self.chunks[i] for i in top_indices]
         except Exception as e:
-            logger.error(f"Search error: {e}")
+            logger.error(f"Local search error: {e}")
             return []
 
     def add_knowledge(self, text, metadata=None):

@@ -10,7 +10,8 @@ from routes.research import research_bp
 from routes.ai import ai_bp
 from flask import Flask, redirect, request, send_from_directory, session, url_for
 from flask_migrate import Migrate
-from models import db
+from flask_login import LoginManager, current_user
+from models import db, User
 
 from routes.auth import auth_bp
 from routes.dashboard import dashboard_bp
@@ -25,6 +26,14 @@ app.config.from_object(Config)
 
 db.init_app(app)
 migrate = Migrate(app, db)
+
+login_manager = LoginManager()
+login_manager.login_view = "auth.login_view"
+login_manager.init_app(app)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(User, int(user_id))
 
 
 @app.context_processor

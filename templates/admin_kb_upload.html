@@ -6,6 +6,7 @@
         <div class="card-header bg-primary text-white">Upload New Document</div>
         <div class="card-body">
             <form method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="mb-3">
                     <label for="file" class="form-label">Select File (.md or .json)</label>
                     <input class="form-control" type="file" id="file" name="file" accept=".md,.json" required>

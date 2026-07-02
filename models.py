@@ -9,18 +9,23 @@ class User(UserMixin, db.Model):
     id = db.Column('user_id', db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(120), nullable=False)
-    role = db.Column(db.String(20), nullable=False) # student, teacher, admin, parent, school_admin, researcher
-    school = db.Column(db.String(100))
+    role_id = db.Column(db.Integer, db.ForeignKey('roles.role_id'), nullable=False)
+    school_id = db.Column(db.Integer, db.ForeignKey('schools.school_id'))
     full_name = db.Column(db.String(120))
     email = db.Column(db.String(120), unique=True)
-    bio = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    phone = db.Column(db.String(20))
+    title = db.Column(db.String(100))
+    account_status = db.Column(db.String(20), default='Active')
+    security_level = db.Column(db.Integer, default=1)
+    must_change_password = db.Column(db.Integer, default=0)
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    locked_until = db.Column(db.String(50))
+    last_login_at = db.Column(db.String(50))
+    created_at = db.Column(db.String(50), default=datetime.utcnow().isoformat())
 
     # Relationships
-    children = db.relationship('User', secondary='parent_student',
-                               primaryjoin='User.id==parent_student.c.parent_id',
-                               secondaryjoin='User.id==parent_student.c.student_id',
-                               backref='parents')
+    role_obj = db.relationship('Role', backref='users', lazy=True)
+    school = db.relationship('School', backref='users', lazy=True)
 
 # Association table for Parent-Student relationship
 parent_student = db.Table('parent_student',
@@ -133,9 +138,9 @@ class AuditLog(db.Model):
     id = db.Column('audit_id', db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'))
     action = db.Column(db.String(200))
-    resource_type = db.Column(db.String(50))
-    resource_id = db.Column(db.Integer)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    entity_type = db.Column(db.String(50))
+    entity_id = db.Column(db.String(50))
+    timestamp = db.Column('created_at', db.DateTime, default=datetime.utcnow)
     details = db.Column(db.Text)
 
 

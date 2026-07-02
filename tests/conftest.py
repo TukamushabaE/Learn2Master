@@ -17,6 +17,7 @@ def app(tmp_path):
     shutil.copyfile(PROJECT_DB, db_path)
     database.DATABASE = str(db_path)
     flask_app.config.update(
+        SQLALCHEMY_DATABASE_URI=f"sqlite:///{db_path}",
         TESTING=True,
         SECRET_KEY="test-secret",
         CSRF_ENABLED=True,
