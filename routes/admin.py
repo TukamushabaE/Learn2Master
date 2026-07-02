@@ -1545,16 +1545,22 @@ def admin_kb_upload():
             filepath = kb.directory / filename
             file.save(str(filepath))
 
-            # Trigger re-processing
-            kb.load_and_process()
+            # Trigger refined extraction and embedding
+            success = kb.process_file(filepath, metadata={"uploader_role": "super_admin", "source": filename})
 
             conn = get_db()
-            audit(conn, "KB_UPLOAD", "knowledge_base", filename, f"Uploaded and processed {filename}")
+            if success:
+                audit(conn, "KB_UPLOAD_SUCCESS", "knowledge_base", filename, f"Uploaded and processed {filename}")
+                flash(f"File {filename} uploaded and processed into KB.", "success")
+            else:
+                audit(conn, "KB_UPLOAD_FAIL", "knowledge_base", filename, f"Failed to process {filename}")
+                flash(f"File {filename} uploaded but extraction/embedding failed. Check logs.", "warning")
             conn.commit()
             conn.close()
 
-            flash(f"File {filename} uploaded and KB updated.", "success")
             return redirect(url_for("admin.admin_kb_upload"))
 
-    files = [f for f in os.listdir(kb.directory) if not f.startswith('_')]
+    files = []
+    if kb.directory.exists():
+        files = [f for f in os.listdir(kb.directory) if not f.startswith('_')]
     return render_template("admin_kb_upload.html", files=files)

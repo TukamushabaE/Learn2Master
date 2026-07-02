@@ -66,6 +66,7 @@ class KnowledgeBase:
         base_dir = Path(__file__).parent.resolve()
         self.directory = (base_dir / directory).resolve()
         self.dynamic_kb_path = self.directory / "_dynamic.jsonl"
+        self.processed_files_path = self.directory / "_processed_files.json"
         self.model_id = model_id
         self.chunks = []
         self.embeddings = None
@@ -73,28 +74,20 @@ class KnowledgeBase:
         self.supabase: Client = None
         self._lock = threading.Lock()
 
-        # Supabase config
+        # Initialize Supabase client
         supabase_url = os.environ.get("SUPABASE_URL")
         supabase_key = os.environ.get("SUPABASE_KEY")
         if supabase_url and supabase_key:
             try:
                 self.supabase = create_client(supabase_url, supabase_key)
-                logger.info("Supabase client initialized.")
+                logger.info("Supabase client initialized for KB.")
             except Exception as e:
                 logger.error(f"Failed to initialize Supabase: {e}")
 
+        # Initialize Hugging Face client
         hf_token = os.environ.get('HF_TOKEN')
         if hf_token:
             self.hf_client = InferenceClient(token=hf_token)
-
-        supabase_url = os.environ.get('SUPABASE_URL')
-        supabase_key = os.environ.get('SUPABASE_KEY')
-        if supabase_url and supabase_key:
-            try:
-                self.supabase = create_client(supabase_url, supabase_key)
-                logger.info("Supabase client initialized for vector storage.")
-            except Exception as e:
-                logger.error(f"Failed to initialize Supabase client: {e}")
 
         self.load_and_process()
 
@@ -106,7 +99,7 @@ class KnowledgeBase:
         text = re.sub(r'^\s*[-*+]\s+', '', text, flags=re.MULTILINE)
         return text.strip()
 
-    def _recursive_split(self, text, chunk_size=1000, overlap=200):
+    def _recursive_split(self, text, chunk_size=500, overlap=100):
         if len(text) <= chunk_size:
             return [text.strip()]
 
@@ -120,6 +113,11 @@ class KnowledgeBase:
                 last_newline = text.rfind('\n', start, end)
                 break_point = max(last_period, last_newline)
 
+                if break_point == -1 or break_point <= start + (chunk_size // 2):
+                    last_space = text.rfind(' ', start, end)
+                    if last_space > start + (chunk_size // 2):
+                        break_point = last_space
+
                 if break_point != -1 and break_point > start + (chunk_size // 2):
                     end = break_point + 1
 
@@ -132,34 +130,51 @@ class KnowledgeBase:
                 break
         return chunks
 
-    def _extract_text(self, obj):
+    def _extract_text(self, obj, depth=0):
+        if depth > 10: # Safety against infinite recursion
+            return ""
         if isinstance(obj, str):
             return obj
         if isinstance(obj, dict):
             # Prioritize certain fields but also look deeper if needed
-            content_fields = ['content', 'text', 'body', 'description', 'title', 'summary']
+            content_fields = {'content', 'text', 'body', 'description', 'title', 'summary'}
             extracted = []
+            # First pass: check priority fields
             for k, v in obj.items():
                 if k.lower() in content_fields:
-                    extracted.append(self._extract_text(v))
-                elif isinstance(v, (dict, list)):
-                    res = self._extract_text(v)
-                    if res: extracted.append(res)
-            return " ".join(extracted)
+                    extracted.append(self._extract_text(v, depth + 1))
+
+            # Second pass: if nothing found, look at everything else
+            if not extracted:
+                for v in obj.values():
+                    if isinstance(v, (dict, list, str)):
+                        res = self._extract_text(v, depth + 1)
+                        if res: extracted.append(res)
+            return " ".join(filter(None, extracted))
         if isinstance(obj, list):
-            return " ".join(self._extract_text(i) for i in obj[:MAX_JSON_ITEMS])
+            return " ".join(filter(None, [self._extract_text(i, depth + 1) for i in obj[:MAX_JSON_ITEMS]]))
         return ""
 
-    def load_and_process(self):
-        with self._lock:
-            # Clear existing state for full reload
-            self.chunks = []
-            self.embeddings = None
+    def _get_file_hash(self, filepath):
+        hasher = hashlib.md5()
+        with open(filepath, 'rb') as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()
 
+    def load_and_process(self):
+        """Loads and processes all files in the KB directory, with hashing to avoid redundant embedding."""
+        with self._lock:
             if not self.directory.exists():
                 self.directory.mkdir(parents=True, exist_ok=True)
 
-            all_text = ""
+            processed_data = {}
+            if self.processed_files_path.exists():
+                try:
+                    with open(self.processed_files_path, 'r') as f:
+                        processed_data = json.load(f)
+                except Exception as e:
+                    logger.error(f"Error loading processed files log: {e}")
 
             # 1. Sync from Supabase Storage if available
             if self.supabase:
@@ -168,9 +183,7 @@ class KnowledgeBase:
                     for file_info in res:
                         fname = file_info['name']
                         if fname.startswith('.') or fname.startswith('_'): continue
-
                         local_path = self.directory / fname
-                        # Simple check: if not exists, download
                         if not local_path.exists():
                             logger.info(f"Downloading {fname} from Supabase Storage...")
                             with open(local_path, 'wb') as f:
@@ -179,35 +192,49 @@ class KnowledgeBase:
                 except Exception as e:
                     logger.error(f"Supabase Storage sync error: {e}")
 
-            # 2. Process local files (including newly downloaded ones)
+            # 2. Rebuild in-memory chunks and embeddings
+            # To be truly efficient, we should cache embeddings too, but re-reading
+            # text and re-generating embeddings if hashes change is the first step.
+            self.chunks = []
+            all_embeddings = []
+            files_to_embed = []
+
             for filename in sorted(os.listdir(self.directory)):
                 if filename.startswith('_'): continue
                 filepath = self.directory / filename
-                try:
-                    if filepath.stat().st_size > MAX_FILE_BYTES:
-                        continue
+                if not filepath.is_file() or filepath.stat().st_size > MAX_FILE_BYTES:
+                    continue
 
+                current_hash = self._get_file_hash(filepath)
+                is_new = filename not in processed_data or processed_data[filename]['hash'] != current_hash
+
+                try:
+                    file_text = ""
                     if filename.endswith('.txt') or filename.endswith('.md'):
                         with open(filepath, 'r', encoding='utf-8') as f:
-                            text = f.read()
-                            if filename.endswith('.md'):
-                                text = self._strip_markdown(text)
-                            all_text += text + "\n"
+                            file_text = f.read()
+                            if filename.endswith('.md'): file_text = self._strip_markdown(file_text)
                     elif filename.endswith('.json'):
                         with open(filepath, 'r', encoding='utf-8') as f:
                             data = json.load(f)
-                            all_text += self._extract_text(data) + "\n"
+                            file_text = self._extract_text(data)
                     elif filename.endswith('.pdf'):
-                        reader = PdfReader(filepath)
-                        for page in reader.pages:
-                            text = page.extract_text()
-                            if text:
-                                all_text += text + "\n"
-                except Exception as e:
-                    logger.error(f"Error reading source {filename}: {e}")
+                        try:
+                            reader = PdfReader(filepath)
+                            for page in reader.pages:
+                                text = page.extract_text()
+                                if text: file_text += text + "\n"
+                        except Exception as pdf_err:
+                            logger.error(f"PDF extraction error in {filename}: {pdf_err}")
 
-            if all_text:
-                self.chunks.extend(self._recursive_split(all_text, chunk_size=1000, overlap=200))
+                    if file_text:
+                        file_chunks = self._recursive_split(file_text)
+                        self.chunks.extend(file_chunks)
+                        if is_new:
+                            files_to_embed.append((filename, current_hash, file_chunks))
+                        processed_data[filename] = {'hash': current_hash, 'timestamp': time.time()}
+                except Exception as e:
+                    logger.error(f"Error processing {filename}: {e}")
 
             # Load dynamic
             if self.dynamic_kb_path.exists():
@@ -215,35 +242,34 @@ class KnowledgeBase:
                     with open(self.dynamic_kb_path, 'r') as f:
                         for line in f:
                             entry = json.loads(line)
-                            if 'text' in entry:
-                                self.chunks.append(entry['text'])
-                except Exception as e:
-                    logger.error(f"Error loading dynamic KB: {e}")
+                            if 'text' in entry: self.chunks.append(entry['text'])
+                except Exception: pass
 
+            # Embed only if necessary or initial run
             if self.chunks and self.hf_client:
+                # For this prototype, we still embed all chunks for simplicity
+                # (to ensure the embedding matrix aligns with self.chunks).
+                # To be truly "official", we'd cache embeddings per chunk.
                 try:
                     embeddings_list = self.hf_client.feature_extraction(self.chunks, model=self.model_id)
                     self.embeddings = np.array(embeddings_list)
-                    logger.info(f"Initialized KB with {len(self.chunks)} chunks.")
 
-                    # 3. Sync chunks and embeddings to Supabase if available
                     if self.supabase:
-                        # Clear old embeddings for simplicity in this prototype
-                        # In production, we'd do incremental updates
-                        try:
-                            # Note: This is an expensive operation and should be done background/async
-                            data_to_insert = [
-                                {'content': chunk, 'embedding': emb}
-                                for chunk, emb in zip(self.chunks, embeddings_list)
-                            ]
-                            # Use Supabase client to UPSERT or INSERT
-                            # For prototype: simple insert
-                            self.supabase.table('kb_embeddings').upsert(data_to_insert).execute()
-                        except Exception as e:
-                            logger.error(f"Supabase Embedding sync error: {e}")
+                        # Clear old for simplicity or do unique upsert
+                        data_to_insert = [
+                            {'content': chunk, 'embedding': emb, 'metadata': {'source': 'kb_init'}}
+                            for chunk, emb in zip(self.chunks, embeddings_list)
+                        ]
+                        # Use Supabase table kb_documents
+                        # Note: In production, ensure kb_documents has a unique constraint on 'content' or similar
+                        self.supabase.table('kb_documents').upsert(data_to_insert).execute()
 
+                    with open(self.processed_files_path, 'w') as f:
+                        json.dump(processed_data, f)
+
+                    logger.info(f"KB refreshed with {len(self.chunks)} chunks.")
                 except Exception as e:
-                    logger.error(f"Error generating KB embeddings: {e}")
+                    logger.error(f"Error generating embeddings: {e}")
 
     @lru_cache(maxsize=512)
     def get_query_embedding(self, query):
@@ -252,19 +278,22 @@ class KnowledgeBase:
         return self.hf_client.feature_extraction(query, model=self.model_id)
 
     def search(self, query, top_k=3):
+        query_embedding = self.get_query_embedding(query)
+        if query_embedding is None:
+            return []
+
         if self.supabase:
             try:
-                query_embedding = self.get_query_embedding(query)
-                if isinstance(query_embedding, list) and len(query_embedding) > 0 and isinstance(query_embedding[0], list):
-                    query_embedding = query_embedding[0]
+                # Handle potential list of lists from HF
+                emb = query_embedding
+                if isinstance(emb, list) and len(emb) > 0 and isinstance(emb[0], list):
+                    emb = emb[0]
 
-                # Using Supabase rpc for vector similarity search
-                # Requires a 'match_documents' function in Supabase
                 response = self.supabase.rpc(
-                    'match_documents',
+                    'match_kb_chunks', # Unified RPC name
                     {
-                        'query_embedding': query_embedding,
-                        'match_threshold': 0.5,
+                        'query_embedding': emb,
+                        'match_threshold': 0.3,
                         'match_count': top_k,
                     }
                 ).execute()
@@ -272,31 +301,83 @@ class KnowledgeBase:
                 if response.data:
                     return [item['content'] for item in response.data]
             except Exception as e:
-                logger.error(f"Supabase search error: {e}. Falling back to local search.")
+                logger.error(f"Supabase search error: {e}. Falling back to local.")
 
         with self._lock:
-            if not self.chunks or self.embeddings is None or query_embedding is None:
+            if not self.chunks or self.embeddings is None:
                 return []
 
         try:
-            with self._lock:
-                if self.embeddings is None: return []
-                expected_dim = self.embeddings.shape[-1]
-                if query_embedding.shape[-1] != expected_dim:
-                     return []
-                if self.embeddings.ndim == 1:
-                     self.embeddings = self.embeddings.reshape(1, -1)
+            # Local NumPy fallback
+            q_emb = np.array(query_embedding)
+            if q_emb.ndim > 1: q_emb = q_emb.flatten()
 
-                # Cosine similarity
-                dot_product = np.dot(self.embeddings, query_embedding)
-                norms = np.linalg.norm(self.embeddings, axis=1) * np.linalg.norm(query_embedding)
-                norms[norms == 0] = 1e-9
-                similarities = dot_product / norms
-                top_indices = np.argsort(similarities)[::-1][:top_k]
-                return [self.chunks[i] for i in top_indices]
+            dot_product = np.dot(self.embeddings, q_emb)
+            norms = np.linalg.norm(self.embeddings, axis=1) * np.linalg.norm(q_emb)
+            norms[norms == 0] = 1e-9
+            similarities = dot_product / norms
+            top_indices = np.argsort(similarities)[::-1][:top_k]
+            return [self.chunks[i] for i in top_indices]
         except Exception as e:
             logger.error(f"Local search error: {e}")
             return []
+
+    def process_file(self, filepath, metadata=None):
+        """Processes a single file and adds it to the KB."""
+        filename = filepath.name
+        try:
+            file_text = ""
+            if filename.endswith('.txt') or filename.endswith('.md'):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    file_text = f.read()
+                    if filename.endswith('.md'): file_text = self._strip_markdown(file_text)
+            elif filename.endswith('.json'):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    file_text = self._extract_text(data)
+            elif filename.endswith('.pdf'):
+                reader = PdfReader(filepath)
+                for page in reader.pages:
+                    text = page.extract_text()
+                    if text: file_text += text + "\n"
+
+            if file_text:
+                # Update processed logs
+                current_hash = self._get_file_hash(filepath)
+                with self._lock:
+                    if not self.processed_files_path.exists():
+                        processed_data = {}
+                    else:
+                        with open(self.processed_files_path, 'r') as f:
+                            processed_data = json.load(f)
+
+                    processed_data[filename] = {'hash': current_hash, 'timestamp': time.time()}
+                    with open(self.processed_files_path, 'w') as f:
+                        json.dump(processed_data, f)
+
+                # Generate chunks and embeddings
+                chunks = self._recursive_split(file_text)
+                if chunks and self.hf_client:
+                    embeddings_list = self.hf_client.feature_extraction(chunks, model=self.model_id)
+                    new_embeddings = np.array(embeddings_list)
+
+                    with self._lock:
+                        self.chunks.extend(chunks)
+                        if self.embeddings is None:
+                            self.embeddings = new_embeddings
+                        else:
+                            self.embeddings = np.vstack([self.embeddings, new_embeddings])
+
+                    if self.supabase:
+                        data_to_insert = [
+                            {'content': chunk, 'embedding': emb, 'metadata': metadata or {'source': filename}}
+                            for chunk, emb in zip(chunks, embeddings_list)
+                        ]
+                        self.supabase.table('kb_documents').upsert(data_to_insert).execute()
+                    return True
+        except Exception as e:
+            logger.error(f"Error processing uploaded file {filename}: {e}")
+        return False
 
     def add_knowledge(self, text, metadata=None):
         text = text.strip()
@@ -317,7 +398,7 @@ class KnowledgeBase:
                 if isinstance(embedding_list[0], list):
                     embedding_list = embedding_list[0]
 
-                self.supabase.table('documents').insert({
+                self.supabase.table('kb_documents').insert({
                     'content': text,
                     'metadata': metadata or {},
                     'embedding': embedding_list

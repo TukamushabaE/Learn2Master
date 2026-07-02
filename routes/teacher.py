@@ -1,5 +1,7 @@
 import math
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
 from routes.guards import role_required
 from database import get_db
 from security import csrf_protect
@@ -407,39 +409,32 @@ def teacher_kb_upload():
     if request.method == "POST":
         file = request.files.get("file")
         if file and file.filename:
-            file_content = file.read()
-            file_size = len(file_content)
+            filename = secure_filename(file.filename)
+            kb = get_kb()
+            filepath = kb.directory / f"teacher_{teacher_id}_{filename}"
+            file.save(str(filepath))
+            file_size = filepath.stat().st_size
 
             if usage + file_size > LIMIT:
+                filepath.unlink()
                 flash("Upload failed: You have exceeded your 10MB storage limit.", "danger")
                 return redirect(url_for("teacher.teacher_kb_upload"))
 
-            # Extract text (assuming PDF or text for simplicity)
-            text = ""
-            if file.filename.endswith('.pdf'):
-                from PyPDF2 import PdfReader
-                import io
-                reader = PdfReader(io.BytesIO(file_content))
-                for page in reader.pages:
-                    text += page.extract_text() or ""
+            # Improved processing using KnowledgeBase.process_file
+            # This handles PDF, JSON, TXT, MD with standardized chunking
+            success = kb.process_file(filepath, metadata={"teacher_id": teacher_id, "source": filename})
+
+            if success:
+                # Still record in teacher_kb_uploads for quota tracking
+                conn.execute("""
+                    INSERT INTO teacher_kb_uploads (teacher_id, filename, original_size_bytes, summary_size_bytes)
+                    VALUES (?, ?, ?, ?)
+                """, (teacher_id, filename, file_size, 0)) # summary_size_bytes set to 0 as we use refined chunking now
+                conn.commit()
+                flash(f"File {filename} uploaded and added to the Knowledge Base.", "success")
             else:
-                text = file_content.decode('utf-8', errors='ignore')
+                flash(f"Failed to process {filename}. Check file format.", "danger")
 
-            # AI Compression
-            from engine import AIEngine, get_kb
-            summary = AIEngine.compress_study_material(text)
-
-            # Save to Knowledge Base
-            kb = get_kb()
-            kb.add_knowledge(summary, metadata={"teacher_id": teacher_id, "source": file.filename})
-
-            # Record upload
-            conn.execute("""
-                INSERT INTO teacher_kb_uploads (teacher_id, filename, original_size_bytes, summary_size_bytes)
-                VALUES (?, ?, ?, ?)
-            """, (teacher_id, file.filename, file_size, len(summary)))
-            conn.commit()
-            flash(f"File {file.filename} uploaded and processed with AI summarization.", "success")
             return redirect(url_for("teacher.teacher_kb_upload"))
 
     uploads = conn.execute("SELECT * FROM teacher_kb_uploads WHERE teacher_id = ?", (teacher_id,)).fetchall()
