@@ -397,6 +397,8 @@ def create_student():
 @role_required("teacher", "school_admin")
 @csrf_protect
 def teacher_kb_upload():
+    import magic
+    from werkzeug.utils import secure_filename
     conn = get_db()
     teacher_id = session["user_id"]
 
@@ -414,6 +416,19 @@ def teacher_kb_upload():
                 flash("Upload failed: You have exceeded your 10MB storage limit.", "danger")
                 return redirect(url_for("teacher.teacher_kb_upload"))
 
+            # MIME validation
+            mime = magic.from_buffer(file_content, mime=True)
+            allowed_mimes = {
+                'text/plain', 'text/markdown', 'application/json', 'application/pdf',
+                'text/x-markdown'
+            }
+            ext = os.path.splitext(file.filename)[1].lower()
+            allowed_exts = {'.txt', '.md', '.json', '.pdf'}
+
+            if mime not in allowed_mimes and ext not in allowed_exts:
+                flash(f"Upload failed: Unsupported file type ({mime}).", "danger")
+                return redirect(url_for("teacher.teacher_kb_upload"))
+
             # Extract text (assuming PDF or text for simplicity)
             text = ""
             if file.filename.endswith('.pdf'):
@@ -429,9 +444,16 @@ def teacher_kb_upload():
             from engine import AIEngine, get_kb
             summary = AIEngine.compress_study_material(text)
 
-            # Save to Knowledge Base
+            # Save to Knowledge Base (via unified method if possible, or direct add_knowledge for summaries)
             kb = get_kb()
-            kb.add_knowledge(summary, metadata={"teacher_id": teacher_id, "source": file.filename})
+            # For teacher uploads, we often store the summary to save tokens/space in RAG
+            kb.add_knowledge(summary, metadata={"teacher_id": teacher_id, "source": file.filename, "type": "teacher_summary"})
+
+            # Also save the original file to the kb directory for completeness if needed
+            filename = secure_filename(file.filename)
+            filepath = kb.directory / f"teacher_{teacher_id}_{filename}"
+            with open(filepath, 'wb') as f:
+                f.write(file_content)
 
             # Record upload
             conn.execute("""

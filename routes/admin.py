@@ -1537,23 +1537,45 @@ def create_headteacher():
 @role_required("super_admin")
 @csrf_protect
 def admin_kb_upload():
+    import magic
     kb = get_kb()
     if request.method == "POST":
         file = request.files.get("file")
         if file and file.filename:
+            # MIME validation
+            file_content = file.read()
+            mime = magic.from_buffer(file_content, mime=True)
+            allowed_mimes = {
+                'text/plain', 'text/markdown', 'application/json', 'application/pdf',
+                'text/x-markdown'
+            }
+            # Also allow based on extension as fallback or safety
+            ext = os.path.splitext(file.filename)[1].lower()
+            allowed_exts = {'.txt', '.md', '.json', '.pdf'}
+
+            if mime not in allowed_mimes and ext not in allowed_exts:
+                flash(f"Upload failed: Unsupported file type ({mime}).", "danger")
+                return redirect(url_for("admin.admin_kb_upload"))
+
             filename = secure_filename(file.filename)
             filepath = kb.directory / filename
-            file.save(str(filepath))
 
-            # Trigger re-processing
-            kb.load_and_process()
+            # Save file
+            with open(filepath, 'wb') as f:
+                f.write(file_content)
 
-            conn = get_db()
-            audit(conn, "KB_UPLOAD", "knowledge_base", filename, f"Uploaded and processed {filename}")
-            conn.commit()
-            conn.close()
+            # Process file using the unified KB method
+            success = kb.process_file(filepath, metadata={"uploaded_by": session.get("user_id"), "role": "admin"})
 
-            flash(f"File {filename} uploaded and KB updated.", "success")
+            if success:
+                conn = get_db()
+                audit(conn, "KB_UPLOAD", "knowledge_base", filename, f"Admin uploaded and processed {filename}")
+                conn.commit()
+                conn.close()
+                flash(f"File {filename} uploaded and processed into Knowledge Base.", "success")
+            else:
+                flash(f"File {filename} uploaded but processing failed.", "warning")
+
             return redirect(url_for("admin.admin_kb_upload"))
 
     files = [f for f in os.listdir(kb.directory) if not f.startswith('_')]

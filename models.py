@@ -4,6 +4,17 @@ from datetime import datetime
 
 db = SQLAlchemy()
 
+class Role(db.Model):
+    __tablename__ = 'roles'
+    id = db.Column('role_id', db.Integer, primary_key=True)
+    role_name = db.Column(db.String(50), unique=True, nullable=False)
+    display_name = db.Column(db.String(100), nullable=False)
+
+class School(db.Model):
+    __tablename__ = 'schools'
+    id = db.Column('school_id', db.Integer, primary_key=True)
+    school_name = db.Column(db.String(255), unique=True, nullable=False)
+
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
     id = db.Column('user_id', db.Integer, primary_key=True)
