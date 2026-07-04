@@ -1558,23 +1558,24 @@ def admin_kb_upload():
                 return redirect(url_for("admin.admin_kb_upload"))
 
             filename = secure_filename(file.filename)
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in {'.txt', '.md', '.json', '.pdf'}:
+                flash("Unsupported file type. Use .txt, .md, .json, or .pdf", "danger")
+                return redirect(url_for("admin.admin_kb_upload"))
+
             filepath = kb.directory / filename
 
-            # Save file
-            with open(filepath, 'wb') as f:
-                f.write(file_content)
-
-            # Process file using the unified KB method
-            success = kb.process_file(filepath, metadata={"uploaded_by": session.get("user_id"), "role": "admin"})
+            # Use unified processing method
+            success, _ = kb.process_file(str(filepath))
 
             if success:
                 conn = get_db()
-                audit(conn, "KB_UPLOAD", "knowledge_base", filename, f"Admin uploaded and processed {filename}")
+                audit(conn, "KB_UPLOAD", "knowledge_base", filename, f"Uploaded and processed {filename}")
                 conn.commit()
                 conn.close()
-                flash(f"File {filename} uploaded and processed into Knowledge Base.", "success")
+                flash(f"File {filename} uploaded and KB updated.", "success")
             else:
-                flash(f"File {filename} uploaded but processing failed.", "warning")
+                flash(f"Error processing {filename}.", "danger")
 
             return redirect(url_for("admin.admin_kb_upload"))
 
