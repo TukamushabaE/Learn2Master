@@ -24,12 +24,45 @@ from security import get_csrf_token
 app = Flask(__name__)
 app.config.from_object(Config)
 
+# Static files with WhiteNoise
+app.wsgi_app = WhiteNoise(app.wsgi_app, root='static/', prefix='static/')
+
+# Production configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///learn2master.db')
+if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
+    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
+
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Logging Configuration
+if not app.debug:
+    if not os.path.exists('logs'):
+        os.mkdir('logs')
+    file_handler = RotatingFileHandler('logs/learn2master.log', maxBytes=10240, backupCount=10)
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'))
+    file_handler.setLevel(logging.INFO)
+    app.logger.addHandler(file_handler)
+    app.logger.setLevel(logging.INFO)
+    app.logger.info('Learn2Master startup')
+
+# Database initialization
 db.init_app(app)
 migrate = Migrate(app, db)
 
 login_manager = LoginManager()
 login_manager.login_view = "auth.login_view"
 login_manager.init_app(app)
+
+@app.errorhandler(404)
+def not_found_error(error):
+    return render_template('errors/404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return render_template('errors/500.html'), 500
 
 @login_manager.user_loader
 def load_user(user_id):
