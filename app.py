@@ -140,4 +140,4 @@ app.register_blueprint(research_bp)
 app.register_blueprint(ai_bp)
 
 if __name__ == "__main__":
-    app.run(debug=app.config["DEBUG"])
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=app.config["DEBUG"])
