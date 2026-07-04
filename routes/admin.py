@@ -1537,26 +1537,45 @@ def create_headteacher():
 @role_required("super_admin")
 @csrf_protect
 def admin_kb_upload():
+    import magic
     kb = get_kb()
     if request.method == "POST":
         file = request.files.get("file")
         if file and file.filename:
+            # MIME validation
+            file_content = file.read()
+            mime = magic.from_buffer(file_content, mime=True)
+            allowed_mimes = {
+                'text/plain', 'text/markdown', 'application/json', 'application/pdf',
+                'text/x-markdown'
+            }
+            # Also allow based on extension as fallback or safety
+            ext = os.path.splitext(file.filename)[1].lower()
+            allowed_exts = {'.txt', '.md', '.json', '.pdf'}
+
+            if mime not in allowed_mimes and ext not in allowed_exts:
+                flash(f"Upload failed: Unsupported file type ({mime}).", "danger")
+                return redirect(url_for("admin.admin_kb_upload"))
+
             filename = secure_filename(file.filename)
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in {'.txt', '.md', '.json', '.pdf'}:
+                flash("Unsupported file type. Use .txt, .md, .json, or .pdf", "danger")
+                return redirect(url_for("admin.admin_kb_upload"))
+
             filepath = kb.directory / filename
-            file.save(str(filepath))
 
-            # Trigger refined extraction and embedding
-            success = kb.process_file(filepath, metadata={"uploader_role": "super_admin", "source": filename})
+            # Use unified processing method
+            success, _ = kb.process_file(str(filepath))
 
-            conn = get_db()
             if success:
-                audit(conn, "KB_UPLOAD_SUCCESS", "knowledge_base", filename, f"Uploaded and processed {filename}")
-                flash(f"File {filename} uploaded and processed into KB.", "success")
+                conn = get_db()
+                audit(conn, "KB_UPLOAD", "knowledge_base", filename, f"Uploaded and processed {filename}")
+                conn.commit()
+                conn.close()
+                flash(f"File {filename} uploaded and KB updated.", "success")
             else:
-                audit(conn, "KB_UPLOAD_FAIL", "knowledge_base", filename, f"Failed to process {filename}")
-                flash(f"File {filename} uploaded but extraction/embedding failed. Check logs.", "warning")
-            conn.commit()
-            conn.close()
+                flash(f"Error processing {filename}.", "danger")
 
             return redirect(url_for("admin.admin_kb_upload"))
 

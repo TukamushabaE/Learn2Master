@@ -13,7 +13,7 @@ class Role(db.Model):
 class School(db.Model):
     __tablename__ = 'schools'
     id = db.Column('school_id', db.Integer, primary_key=True)
-    school_name = db.Column(db.String(100), unique=True, nullable=False)
+    school_name = db.Column(db.String(255), unique=True, nullable=False)
 
 class User(UserMixin, db.Model):
     __tablename__ = 'users'

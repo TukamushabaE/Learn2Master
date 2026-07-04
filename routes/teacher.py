@@ -399,8 +399,11 @@ def create_student():
 @role_required("teacher", "school_admin")
 @csrf_protect
 def teacher_kb_upload():
+    import magic
+    from werkzeug.utils import secure_filename
     conn = get_db()
     teacher_id = session["user_id"]
+    kb = get_kb()
 
     # Check 10MB limit
     usage = conn.execute("SELECT SUM(original_size_bytes) FROM teacher_kb_uploads WHERE teacher_id = ?", (teacher_id,)).fetchone()[0] or 0
@@ -410,30 +413,37 @@ def teacher_kb_upload():
         file = request.files.get("file")
         if file and file.filename:
             filename = secure_filename(file.filename)
-            kb = get_kb()
-            filepath = kb.directory / f"teacher_{teacher_id}_{filename}"
-            file.save(str(filepath))
-            file_size = filepath.stat().st_size
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in {'.txt', '.md', '.json', '.pdf'}:
+                flash("Unsupported file type. Use .txt, .md, .json, or .pdf", "danger")
+                return redirect(url_for("teacher.teacher_kb_upload"))
+
+            # Calculate file size before saving
+            file.seek(0, os.SEEK_END)
+            file_size = file.tell()
+            file.seek(0)
 
             if usage + file_size > LIMIT:
                 filepath.unlink()
                 flash("Upload failed: You have exceeded your 10MB storage limit.", "danger")
                 return redirect(url_for("teacher.teacher_kb_upload"))
 
-            # Improved processing using KnowledgeBase.process_file
-            # This handles PDF, JSON, TXT, MD with standardized chunking
-            success = kb.process_file(filepath, metadata={"teacher_id": teacher_id, "source": filename})
+            filepath = kb.directory / filename
+            file.save(str(filepath))
+
+            # Use unified processing method with summarization forced for teachers
+            success, summary_size = kb.process_file(str(filepath), metadata={"teacher_id": teacher_id}, summarize=True)
 
             if success:
-                # Still record in teacher_kb_uploads for quota tracking
+                # Record upload
                 conn.execute("""
                     INSERT INTO teacher_kb_uploads (teacher_id, filename, original_size_bytes, summary_size_bytes)
                     VALUES (?, ?, ?, ?)
-                """, (teacher_id, filename, file_size, 0)) # summary_size_bytes set to 0 as we use refined chunking now
+                """, (teacher_id, filename, file_size, summary_size))
                 conn.commit()
-                flash(f"File {filename} uploaded and added to the Knowledge Base.", "success")
+                flash(f"File {filename} uploaded and processed with AI summarization.", "success")
             else:
-                flash(f"Failed to process {filename}. Check file format.", "danger")
+                flash(f"Error processing {filename}.", "danger")
 
             return redirect(url_for("teacher.teacher_kb_upload"))
 
