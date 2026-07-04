@@ -85,6 +85,7 @@ class KnowledgeBase:
             except Exception as e:
                 logger.error(f"Failed to initialize Supabase: {e}")
 
+        # Initialize Hugging Face client
         hf_token = os.environ.get('HF_TOKEN')
         if hf_token:
             self.hf_client = InferenceClient(token=hf_token)
@@ -150,22 +151,29 @@ class KnowledgeBase:
                 break
         return chunks
 
-    def _extract_text(self, obj):
+    def _extract_text(self, obj, depth=0):
+        if depth > 10: # Safety against infinite recursion
+            return ""
         if isinstance(obj, str):
             return obj
         if isinstance(obj, dict):
             # Prioritize certain fields but also look deeper if needed
-            content_fields = ['content', 'text', 'body', 'description', 'title', 'summary']
+            content_fields = {'content', 'text', 'body', 'description', 'title', 'summary'}
             extracted = []
+            # First pass: check priority fields
             for k, v in obj.items():
                 if k.lower() in content_fields:
-                    extracted.append(self._extract_text(v))
-                elif isinstance(v, (dict, list)):
-                    res = self._extract_text(v)
-                    if res: extracted.append(res)
-            return " ".join(extracted)
+                    extracted.append(self._extract_text(v, depth + 1))
+
+            # Second pass: if nothing found, look at everything else
+            if not extracted:
+                for v in obj.values():
+                    if isinstance(v, (dict, list, str)):
+                        res = self._extract_text(v, depth + 1)
+                        if res: extracted.append(res)
+            return " ".join(filter(None, extracted))
         if isinstance(obj, list):
-            return " ".join(self._extract_text(i) for i in obj[:MAX_JSON_ITEMS])
+            return " ".join(filter(None, [self._extract_text(i, depth + 1) for i in obj[:MAX_JSON_ITEMS]]))
         return ""
 
     def process_file(self, filepath, metadata=None, summarize=False):
@@ -323,7 +331,7 @@ class KnowledgeBase:
                 if response.data:
                     return [item['content'] for item in response.data]
             except Exception as e:
-                logger.error(f"Supabase search error: {e}. Falling back to local search.")
+                logger.error(f"Supabase search error: {e}. Falling back to local.")
 
         with self._lock:
             if not self.chunks or self.embeddings is None:
@@ -350,6 +358,63 @@ class KnowledgeBase:
         except Exception as e:
             logger.error(f"Local search error: {e}")
             return []
+
+    def process_file(self, filepath, metadata=None):
+        """Processes a single file and adds it to the KB."""
+        filename = filepath.name
+        try:
+            file_text = ""
+            if filename.endswith('.txt') or filename.endswith('.md'):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    file_text = f.read()
+                    if filename.endswith('.md'): file_text = self._strip_markdown(file_text)
+            elif filename.endswith('.json'):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    file_text = self._extract_text(data)
+            elif filename.endswith('.pdf'):
+                reader = PdfReader(filepath)
+                for page in reader.pages:
+                    text = page.extract_text()
+                    if text: file_text += text + "\n"
+
+            if file_text:
+                # Update processed logs
+                current_hash = self._get_file_hash(filepath)
+                with self._lock:
+                    if not self.processed_files_path.exists():
+                        processed_data = {}
+                    else:
+                        with open(self.processed_files_path, 'r') as f:
+                            processed_data = json.load(f)
+
+                    processed_data[filename] = {'hash': current_hash, 'timestamp': time.time()}
+                    with open(self.processed_files_path, 'w') as f:
+                        json.dump(processed_data, f)
+
+                # Generate chunks and embeddings
+                chunks = self._recursive_split(file_text)
+                if chunks and self.hf_client:
+                    embeddings_list = self.hf_client.feature_extraction(chunks, model=self.model_id)
+                    new_embeddings = np.array(embeddings_list)
+
+                    with self._lock:
+                        self.chunks.extend(chunks)
+                        if self.embeddings is None:
+                            self.embeddings = new_embeddings
+                        else:
+                            self.embeddings = np.vstack([self.embeddings, new_embeddings])
+
+                    if self.supabase:
+                        data_to_insert = [
+                            {'content': chunk, 'embedding': emb, 'metadata': metadata or {'source': filename}}
+                            for chunk, emb in zip(chunks, embeddings_list)
+                        ]
+                        self.supabase.table('kb_documents').upsert(data_to_insert).execute()
+                    return True
+        except Exception as e:
+            logger.error(f"Error processing uploaded file {filename}: {e}")
+        return False
 
     def add_knowledge(self, text, metadata=None):
         text = text.strip()

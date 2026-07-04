@@ -1579,5 +1579,7 @@ def admin_kb_upload():
 
             return redirect(url_for("admin.admin_kb_upload"))
 
-    files = [f for f in os.listdir(kb.directory) if not f.startswith('_')]
+    files = []
+    if kb.directory.exists():
+        files = [f for f in os.listdir(kb.directory) if not f.startswith('_')]
     return render_template("admin_kb_upload.html", files=files)

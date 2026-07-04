@@ -1,5 +1,7 @@
 import math
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
 from routes.guards import role_required
 from database import get_db
 from security import csrf_protect
@@ -422,6 +424,7 @@ def teacher_kb_upload():
             file.seek(0)
 
             if usage + file_size > LIMIT:
+                filepath.unlink()
                 flash("Upload failed: You have exceeded your 10MB storage limit.", "danger")
                 return redirect(url_for("teacher.teacher_kb_upload"))
 
