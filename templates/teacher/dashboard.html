@@ -1,0 +1,87 @@
+{% extends "layouts/base.html" %}
+{% block title %}Teacher Decision Dashboard{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subjects.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Teacher-in-the-Loop Decision Support</p>
+        <h1>Improved Teacher Account</h1>
+<div class="evidence-grid" style="margin-top: 20px;"><a href="{{ url_for('teacher.pending_students') }}" class="btn btn-warning">Pending Students</a> <a href="{{ url_for('teacher.assign_subjects') }}" class="btn btn-primary">Assign Subjects</a> <a href="{{ url_for('teacher.teacher_kb_upload') }}" class="btn btn-success">Upload Study Materials</a> <a href="{{ url_for('teacher.create_student') }}" class="btn btn-info">Create Student</a></div>
+        <p>Monitor learners, inspect weak concepts, approve or override AI recommendations, and record interventions.</p>
+    </div>
+    <div class="hero-badge"><span>Common Weak Concept</span><strong>{{ overview.common_weak }}</strong></div>
+</section>
+
+<div class="evidence-grid">
+    <div><span>Learners</span><strong>{{ overview.learners }}</strong></div>
+    <div><span>Mastered Records</span><strong>{{ overview.mastered }}</strong></div>
+    <div><span>At Risk</span><strong>{{ overview.at_risk }}</strong></div>
+    <div><span>Average AI Confidence</span><strong>{{ overview.avg_mastery }}%</strong></div>
+    <div><span>Mastery Rate</span><strong>{{ overview.mastery_rate }}%</strong></div>
+    <div><span>Pending AI Reviews</span><strong>{{ overview.pending_recs }}</strong></div>
+</div>
+
+<section class="learn-card ai-panel">
+    <span class="subject-code">AI Intervention Suggestion</span>
+    <h2>Teacher Action Recommended</h2>
+    <p>Use the weak-concept evidence below to conduct a short demonstration, assign adaptive practice, or override AI recommendations where professional judgement requires it.</p>
+    <div class="concept-grid">
+        {% for w in weak %}
+        <div class="concept-pill {% if w.avg_score >= 70 %}good{% else %}weak{% endif %}">
+            <span>{{ w.concept_tag.replace('_',' ')|title }}</span>
+            <strong>{{ w.avg_score }}%</strong>
+            <small>{{ w.evidence }} evidence record(s)</small>
+        </div>
+        {% else %}
+        <p>No concept evidence yet.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Teacher Review Queue</span>
+    <h2>Explainable AI Recommendations</h2>
+    <div class="concept-grid">
+        {% for rec in recommendations %}
+        <div class="concept-pill weak">
+            <span>{{ rec.full_name }} - {{ rec.outcome_name }}</span>
+            <strong>{{ rec.recommendation_type }}</strong>
+            <small>{{ rec.recommendation_reason }}</small>
+            <small><b>Status:</b> {{ rec.teacher_status }}</small>
+            {% if rec.teacher_status == 'Pending Review' %}
+            <form method="POST" action="{{ url_for('teacher.review_recommendation', recommendation_id=rec.recommendation_id, action='approve') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input name="intervention_note" placeholder="Teacher comment" style="width:100%;padding:8px;border-radius:10px;border:1px solid #dbe3ef;margin:8px 0;">
+                <button class="btn-primary" type="submit">Approve AI</button>
+            </form>
+            <form method="POST" action="{{ url_for('teacher.review_recommendation', recommendation_id=rec.recommendation_id, action='override') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn-primary" type="submit">Override / Add Intervention</button>
+            </form>
+            {% endif %}
+        </div>
+        {% else %}
+        <p>No recommendations recorded yet.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Intervention History</span>
+    <h2>Teacher Actions Recorded</h2>
+    <div class="concept-grid">
+        {% for i in interventions %}
+        <div class="concept-pill good">
+            <span>{{ i.learner_name }} - {{ i.outcome_name }}</span>
+            <strong>{{ i.intervention_type }}</strong>
+            <small>{{ i.intervention_note }}</small>
+        </div>
+        {% else %}
+        <p>No teacher interventions yet.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

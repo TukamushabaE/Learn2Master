@@ -1,0 +1,59 @@
+{% extends "layouts/base.html" %}
+{% block title %}Learner Portfolio{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>.portfolio-row{display:grid;grid-template-columns:1.4fr 1fr 1.2fr;gap:12px;padding:13px 0;border-bottom:1px solid #edf1f6}.mini-form{display:flex;gap:6px;flex-wrap:wrap}.mini-form input{padding:8px;border:1px solid #d8dee8;border-radius:8px}.mini-form button{border:1px solid #143d73;border-radius:8px;padding:8px 10px;background:#143d73;color:#fff;font-weight:800}@media(max-width:900px){.portfolio-row{grid-template-columns:1fr}}</style>
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div><p class="eyebrow">Teacher Decision Support</p><h1>{{ learner.full_name }} Portfolio</h1><p>Review mastery evidence, practical work, AI recommendations, reflections and teacher decisions before approving or assigning remediation.</p></div>
+  <div class="hero-badge"><span>Evidence Rows</span><strong>{{ rows|length }}</strong></div>
+</section>
+<section class="learn-card">
+  <h2>Learning Outcome Evidence</h2>
+  {% for row in rows %}
+  <div class="portfolio-row">
+    <div><strong>{{ row.subject_name }} | {{ row.outcome_code }}</strong><small>{{ row.outcome_name }}</small></div>
+    <div><strong>{{ row.mastery_status }}</strong><small>Pre {{ row.pretest_score }} | Practice {{ row.practice_score }} | Post {{ row.posttest_score }} | AI {{ row.mastery_score }}%</small></div>
+    <div>
+      <small>Reflection {{ row.reflections }} | Practical {{ row.practical_evidence }} | AI recs {{ row.recommendations }} | Reviews {{ row.teacher_reviews }}</small>
+      <form class="mini-form" method="post" action="{{ url_for('teacher.mastery_decision', learner_id=learner.user_id, outcome_id=row.outcome_id, action='approve') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input name="teacher_comment" placeholder="Teacher comment">
+        <button type="submit">Approve</button>
+      </form>
+      <form class="mini-form" method="post" action="{{ url_for('teacher.mastery_decision', learner_id=learner.user_id, outcome_id=row.outcome_id, action='remediate') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input name="teacher_comment" placeholder="Remediation note">
+        <button type="submit">Remediate</button>
+      </form>
+      <form class="mini-form" method="post" action="{{ url_for('teacher.mastery_decision', learner_id=learner.user_id, outcome_id=row.outcome_id, action='reopen') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit">Reopen</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+<section class="learn-card">
+  <h2>Practical Evidence</h2>
+  <div class="concept-grid">
+  {% for item in evidence %}
+    <div class="concept-pill {% if item.teacher_status == 'Approved' %}good{% else %}weak{% endif %}">
+      <span>{{ item.outcome_code }} | {{ item.evidence_title }}</span>
+      <strong>{{ item.teacher_status }}</strong>
+      <small>{{ item.evidence_description }}</small>
+      <small>{{ item.teacher_comment or "No teacher comment yet" }}</small>
+    </div>
+  {% else %}<p>No practical evidence submitted yet.</p>{% endfor %}
+  </div>
+</section>
+<section class="learn-card">
+  <h2>Teacher Feedback History</h2>
+  <div class="concept-grid">
+  {% for item in feedback %}
+    <div class="concept-pill good"><span>{{ item.outcome_code }}</span><strong>{{ item.feedback_type }}</strong><small>{{ item.feedback_text }}</small></div>
+  {% else %}<p>No feedback recorded yet.</p>{% endfor %}
+  </div>
+</section>
+{% endblock %}

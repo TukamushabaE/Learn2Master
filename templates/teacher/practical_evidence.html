@@ -1,0 +1,56 @@
+{% extends "layouts/base.html" %}
+{% block title %}Practical Evidence Review{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subjects.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Teacher Review - CBC Practical Skills</p>
+        <h1>Practical Evidence Review</h1>
+        <p>Review ICT screenshots, code files, Physics practical reports, experiment photos, and learner evidence before confirming competence.</p>
+    </div>
+    <div class="hero-badge"><span>Teacher-in-the-loop</span><strong>Evidence</strong></div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Evidence Queue</span>
+    <h2>Learner Practical Evidence</h2>
+    <div class="concept-grid">
+        {% for row in rows %}
+        <div class="concept-pill {% if row.teacher_status == 'Approved' %}good{% else %}weak{% endif %}">
+            <span>{{ row.learner_name }} - {{ row.subject_name }}</span>
+            <strong>{{ row.evidence_title }}</strong>
+            <small>{{ row.outcome_name }}</small>
+            <small>{{ row.evidence_description }}</small>
+            <small>Status: {{ row.teacher_status }}{% if row.rubric_level %} | Rubric {{ row.rubric_level }} ({{ row.rubric_score }}){% endif %}</small>
+            {% if row.file_path %}<small>File: {{ row.file_path }}</small>{% endif %}
+            {% if row.teacher_status == 'Pending Review' %}
+            <form method="POST" action="{{ url_for('teacher.review_practical_evidence', practical_id=row.practical_id, action='approve') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input name="teacher_comment" placeholder="Teacher comment" style="width:100%;padding:8px;border-radius:10px;border:1px solid #dbe3ef;margin:8px 0;">
+                <select name="rubric_level" style="width:100%;padding:8px;border-radius:10px;border:1px solid #dbe3ef;margin-bottom:8px;">
+                    <option value="Proficient">Proficient</option>
+                    <option value="Advanced">Advanced</option>
+                    <option value="Developing">Developing</option>
+                    <option value="Beginning">Beginning</option>
+                </select>
+                <input type="number" name="rubric_score" value="3" min="1" max="4" style="width:100%;padding:8px;border-radius:10px;border:1px solid #dbe3ef;margin-bottom:8px;">
+                <button class="btn-primary" type="submit">Approve Evidence</button>
+            </form>
+            <form method="POST" action="{{ url_for('teacher.review_practical_evidence', practical_id=row.practical_id, action='revise') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input name="teacher_comment" placeholder="Revision request" style="width:100%;padding:8px;border-radius:10px;border:1px solid #dbe3ef;margin:8px 0;">
+                <input type="hidden" name="rubric_level" value="Developing">
+                <input type="hidden" name="rubric_score" value="2">
+                <button class="btn-primary" type="submit">Request Revision</button>
+            </form>
+            {% endif %}
+        </div>
+        {% else %}
+        <p>No practical evidence has been submitted yet.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

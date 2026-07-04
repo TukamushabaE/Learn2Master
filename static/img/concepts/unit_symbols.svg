@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">Writing units correctly</title>
+  <desc id="desc">Examples of correct unit symbols and conversion from centimetres to metres.</desc>
+  <rect width="720" height="360" fill="#fbfcff"/>
+  <rect x="70" y="62" width="250" height="220" rx="16" fill="#e8f8ed" stroke="#2d8a48" stroke-width="3"/>
+  <text x="195" y="106" text-anchor="middle" font-family="Inter,Arial" font-size="22" font-weight="800" fill="#175225">Correct</text>
+  <text x="195" y="157" text-anchor="middle" font-family="Inter,Arial" font-size="24" fill="#175225">5 m</text>
+  <text x="195" y="205" text-anchor="middle" font-family="Inter,Arial" font-size="24" fill="#175225">10 kg</text>
+  <text x="195" y="253" text-anchor="middle" font-family="Inter,Arial" font-size="24" fill="#175225">12 cm</text>
+  <rect x="400" y="62" width="250" height="220" rx="16" fill="#fff0d9" stroke="#d17b00" stroke-width="3"/>
+  <text x="525" y="106" text-anchor="middle" font-family="Inter,Arial" font-size="22" font-weight="800" fill="#6f4200">Convert</text>
+  <text x="525" y="163" text-anchor="middle" font-family="Inter,Arial" font-size="26" font-weight="700" fill="#6f4200">250 cm ÷ 100</text>
+  <text x="525" y="220" text-anchor="middle" font-family="Inter,Arial" font-size="28" font-weight="800" fill="#6f4200">= 2.5 m</text>
+  <text x="360" y="324" text-anchor="middle" font-family="Inter,Arial" font-size="16" font-weight="700" fill="#26394f">Leave a space between the value and unit symbol.</text>
+</svg>

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Knowledge Base Management</h2>
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">Upload New Document</div>
+        <div class="card-body">
+            <form method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label for="file" class="form-label">Select File (.md or .json)</label>
+                    <input class="form-control" type="file" id="file" name="file" accept=".md,.json" required>
+                    <div class="form-text">Markdown files or JSON (with "content" or "text" fields) are supported.</div>
+                </div>
+                <button type="submit" class="btn btn-success">Upload & Process</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-secondary text-white">Current Documents</div>
+        <ul class="list-group list-group-flush">
+            {% for file in files %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                {{ file }}
+                <span class="badge bg-info rounded-pill">Active</span>
+            </li>
+            {% else %}
+            <li class="list-group-item text-muted italic">No documents found in knowledge base.</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

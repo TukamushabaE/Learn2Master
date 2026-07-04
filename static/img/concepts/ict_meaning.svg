@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">ICT system diagram</title>
+  <desc id="desc">Information moves through technology and communication channels to solve a task.</desc>
+  <rect width="720" height="360" fill="#f7fbff"/>
+  <rect x="38" y="82" width="150" height="84" rx="12" fill="#dff3ff" stroke="#2a7fb8" stroke-width="3"/>
+  <text x="113" y="118" text-anchor="middle" font-family="Inter,Arial" font-size="18" font-weight="700" fill="#17486a">Information</text>
+  <text x="113" y="145" text-anchor="middle" font-family="Inter,Arial" font-size="14" fill="#17486a">message, record, image</text>
+  <rect x="285" y="54" width="150" height="140" rx="14" fill="#fff0d9" stroke="#d17b00" stroke-width="3"/>
+  <text x="360" y="91" text-anchor="middle" font-family="Inter,Arial" font-size="18" font-weight="700" fill="#6f4200">Technology</text>
+  <rect x="324" y="116" width="72" height="46" rx="5" fill="#ffffff" stroke="#6f4200" stroke-width="2"/>
+  <rect x="346" y="162" width="28" height="12" fill="#6f4200"/>
+  <rect x="318" y="174" width="84" height="8" rx="4" fill="#6f4200"/>
+  <rect x="532" y="82" width="150" height="84" rx="12" fill="#e7f8e9" stroke="#2d8a48" stroke-width="3"/>
+  <text x="607" y="118" text-anchor="middle" font-family="Inter,Arial" font-size="18" font-weight="700" fill="#175225">Communication</text>
+  <text x="607" y="145" text-anchor="middle" font-family="Inter,Arial" font-size="14" fill="#175225">sharing with others</text>
+  <path d="M190 124 H275" stroke="#375a7f" stroke-width="5" marker-end="url(#arrow)"/>
+  <path d="M445 124 H530" stroke="#375a7f" stroke-width="5" marker-end="url(#arrow)"/>
+  <rect x="160" y="246" width="400" height="58" rx="15" fill="#ffffff" stroke="#7c8da0" stroke-width="2"/>
+  <text x="360" y="282" text-anchor="middle" font-family="Inter,Arial" font-size="18" font-weight="700" fill="#26394f">ICT helps people process and share useful information</text>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#375a7f"/>
+    </marker>
+  </defs>
+</svg>

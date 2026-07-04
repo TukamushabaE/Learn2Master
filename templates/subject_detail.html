@@ -1,0 +1,38 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}{{ subject.subject_name }} Pathway{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subjects.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">CBC Mastery Pathway</p>
+        <h1>{% if subject.subject_name == 'Physics' %}⚛{% else %}💻{% endif %} {{ subject.subject_name }}</h1>
+        <p>One official Senior One starting topic is used for depth. Mastery is computed after assessment, not planted.</p>
+    </div>
+    <div class="hero-badge"><span>Class</span><strong>S1</strong></div>
+</section>
+
+<div class="subject-grid">
+    {% for item in pathway_cards %}
+    <article class="subject-card">
+        <div class="subject-icon">🎯</div>
+        <div class="subject-content">
+            <div class="subject-topline">
+                <span class="subject-code">{{ item.pathway.difficulty_level }}</span>
+                <span class="ai-badge">{{ item.mastered }}/{{ item.total }} Mastered</span>
+            </div>
+            <h2>{{ item.pathway.course_title }}</h2>
+            <p>{{ item.pathway.course_description }}</p>
+            <div class="subject-meta"><span>Pathway Progress</span><span>{{ item.progress }}%</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width: {{ item.progress }}%;"></div></div>
+            <a class="btn-primary" href="{{ url_for('learning.pathway', course_id=item.pathway.course_id) }}">Start Mastery Pathway →</a>
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">Sources of measurement error</title>
+  <desc id="desc">Common measurement errors and ways to reduce them.</desc>
+  <rect width="720" height="360" fill="#f8fbfa"/>
+  <rect x="80" y="54" width="560" height="252" rx="18" fill="#ffffff" stroke="#7c8da0" stroke-width="3"/>
+  <text x="360" y="96" text-anchor="middle" font-family="Inter,Arial" font-size="24" font-weight="800" fill="#26394f">Reduce Measurement Errors</text>
+  <g font-family="Inter,Arial" font-size="17" fill="#26394f">
+    <text x="125" y="142">Source: parallax → read at eye level</text>
+    <text x="125" y="184">Source: wrong instrument → choose suitable range</text>
+    <text x="125" y="226">Source: random variation → repeat and average</text>
+    <text x="125" y="268">Source: poor recording → write value, unit and precision</text>
+  </g>
+</svg>

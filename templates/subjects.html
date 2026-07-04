@@ -1,0 +1,44 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Subjects{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subjects.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Senior One Research Scope</p>
+        <h1>Select Subject</h1>
+        <p>Only Physics and ICT are active in this research prototype. Progress below is calculated from actual mastery records generated after assessment attempts.</p>
+    </div>
+    <div class="hero-badge">
+        <span>Mastery Algorithm</span>
+        <strong>BKT-Based</strong>
+    </div>
+</section>
+
+<div class="subject-grid">
+    {% for subject in subjects %}
+    <article class="subject-card">
+        <div class="subject-icon">{{ subject.icon }}</div>
+        <div class="subject-content">
+            <div class="subject-topline">
+                <span class="subject-code">{{ subject.code }}</span>
+                <span class="ai-badge">{{ subject.mastered }}/{{ subject.total }} Outcomes</span>
+            </div>
+            <h2>{{ subject.name }}</h2>
+            <p>{{ subject.description }}</p>
+            <div class="subject-meta">
+                <span>Algorithm Progress</span>
+                <span>{{ subject.progress }}%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" style="width: {{ subject.progress }}%;"></div></div>
+            <a href="{{ url_for('subjects.subject_detail', subject_id=subject.id) }}" class="btn-primary">Open {{ subject.name }} →</a>
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% endblock %}

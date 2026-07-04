@@ -1,0 +1,46 @@
+{% extends "layouts/base.html" %}
+{% block title %}Research Analytics{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subjects.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div>
+    <p class="eyebrow">Objective 3 Evaluation Dashboard</p>
+    <h1>Learning Analytics & Framework Evaluation</h1>
+    <p>Tracks mastery attainment, feedback responsiveness, AI recommendations, weak concepts and teacher oversight evidence.</p>
+  </div>
+  <div class="hero-badge"><span>Mastery Rate</span><strong>{{ metrics.mastery_rate }}%</strong></div>
+</section>
+
+<div class="evidence-grid">
+  <div><span>Total Outcomes</span><strong>{{ metrics.total_outcomes }}</strong></div>
+  <div><span>Assessment Attempts</span><strong>{{ metrics.total_attempts }}</strong></div>
+  <div><span>AI Recommendations</span><strong>{{ metrics.total_recommendations }}</strong></div>
+  <div><span>Mastered Records</span><strong>{{ metrics.mastered_records }}</strong></div>
+  <div><span>At Risk Learners</span><strong>{{ overview.at_risk }}</strong></div>
+  <div><span>Common Weak Concept</span><strong>{{ overview.common_weak }}</strong></div>
+</div>
+
+<div class="two-column-learning">
+  <section class="learn-card">
+    <span class="subject-code">Concept Analytics</span>
+    <h2>Weakest Concepts First</h2>
+    <div class="concept-grid">
+    {% for c in concept_rows %}
+      <div class="concept-pill {% if c.avg_score >= 70 %}good{% else %}weak{% endif %}">
+        <span>{{ c.concept_tag.replace('_',' ')|title }}</span><strong>{{ c.avg_score|round(1) }}%</strong><small>{{ c.attempts }} evidence record(s)</small>
+      </div>
+    {% else %}<p>No concept data yet.</p>{% endfor %}
+    </div>
+  </section>
+  <section class="learn-card ai-panel">
+    <span class="subject-code">Teacher Oversight</span>
+    <h2>Recent AI Decisions</h2>
+    {% for r in recommendations %}
+      <div class="adaptive-item"><strong>{{ r.full_name }} • {{ r.recommendation_type }}</strong><p>{{ r.recommendation_reason }}</p><small>{{ r.teacher_status }}</small></div>
+    {% else %}<p>No AI recommendations yet.</p>{% endfor %}
+  </section>
+</div>
+{% endblock %}

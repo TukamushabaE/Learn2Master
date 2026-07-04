@@ -1,7 +1,9 @@
-*.pyc
 __pycache__/
-instance/
-logs/
-.env
+*.py[cod]
 .pytest_cache/
-*.log
+.tmp_pytest/
+.env
+instance/
+*.db
+uploads/
+static/uploads/

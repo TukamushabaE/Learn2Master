@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card p-4">
+    <h2 class="fw-bold mb-4">Competency Framework (CBC)</h2>
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Learning Outcome</th>
+                    <th>Topic</th>
+                    <th>Standard</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lo in outcomes %}
+                <tr>
+                    <td>{{ lo.name }}</td>
+                    <td>{{ lo.topic.name }}</td>
+                    <td><span class="badge bg-info">Grade 1</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

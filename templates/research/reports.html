@@ -1,0 +1,36 @@
+{% extends "layouts/base.html" %}
+{% block title %}Research Reports{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>.report-row{display:grid;grid-template-columns:1.2fr 1fr;gap:12px;padding:10px 0;border-bottom:1px solid #edf1f6}.print-actions{display:flex;gap:10px;justify-content:flex-end;margin-bottom:14px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}@media print{.sidebar,.topbar,.footer,.print-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}}</style>
+{% endblock %}
+{% block content %}
+<div class="print-actions">
+  <a class="button" href="{{ url_for('research.research_reports', format='csv') }}">Export CSV</a>
+  <button class="button" onclick="window.print()">Print</button>
+</div>
+<section class="hero-panel">
+  <div><p class="eyebrow">Dissertation Evidence Export</p><h1>Research Reports</h1><p>Computed indicators for mastery-based learning evaluation, teacher support, AI confidence, evidence completion and low-resource readiness.</p></div>
+  <div class="hero-badge"><span>Mastery Rate</span><strong>{{ metrics.mastery_rate }}%</strong></div>
+</section>
+<section class="learn-card">
+  <h2>Evaluation Metrics</h2>
+  {% for key, value in metrics.items() %}
+  <div class="report-row"><strong>{{ key.replace('_',' ')|title }}</strong><span>{{ value }}</span></div>
+  {% endfor %}
+</section>
+<section class="learn-card">
+  <h2>Weak Concepts Distribution</h2>
+  <div class="concept-grid">
+  {% for row in weak_concepts %}
+    <div class="concept-pill {% if row.avg_score and row.avg_score >= 70 %}good{% else %}weak{% endif %}">
+      <span>{{ row.concept_tag.replace('_',' ')|title }}</span>
+      <strong>{{ row.avg_score or 0 }}%</strong>
+      <small>{{ row.evidence }} evidence records</small>
+    </div>
+  {% else %}
+    <p>No weak-concept data yet.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}

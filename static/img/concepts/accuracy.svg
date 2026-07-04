@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">Improving accuracy</title>
+  <desc id="desc">Repeated measurements and averaging improve reliability.</desc>
+  <rect width="720" height="360" fill="#f8fbfa"/>
+  <rect x="75" y="68" width="190" height="210" rx="16" fill="#fff0d9" stroke="#d17b00" stroke-width="3"/>
+  <text x="170" y="108" text-anchor="middle" font-family="Inter,Arial" font-size="21" font-weight="800" fill="#6f4200">Readings</text>
+  <text x="170" y="153" text-anchor="middle" font-family="Inter,Arial" font-size="20" fill="#6f4200">12.1 s</text>
+  <text x="170" y="192" text-anchor="middle" font-family="Inter,Arial" font-size="20" fill="#6f4200">12.3 s</text>
+  <text x="170" y="231" text-anchor="middle" font-family="Inter,Arial" font-size="20" fill="#6f4200">12.2 s</text>
+  <path d="M270 174 H352" stroke="#506070" stroke-width="5" marker-end="url(#arrow)"/>
+  <rect x="360" y="100" width="130" height="150" rx="16" fill="#dff3ff" stroke="#2a7fb8" stroke-width="3"/>
+  <text x="425" y="153" text-anchor="middle" font-family="Inter,Arial" font-size="20" font-weight="800" fill="#17486a">Average</text>
+  <text x="425" y="199" text-anchor="middle" font-family="Inter,Arial" font-size="24" font-weight="800" fill="#17486a">12.2 s</text>
+  <path d="M498 174 H580" stroke="#506070" stroke-width="5" marker-end="url(#arrow)"/>
+  <rect x="590" y="115" width="92" height="120" rx="16" fill="#e8f8ed" stroke="#2d8a48" stroke-width="3"/>
+  <text x="636" y="163" text-anchor="middle" font-family="Inter,Arial" font-size="18" font-weight="800" fill="#175225">More</text>
+  <text x="636" y="192" text-anchor="middle" font-family="Inter,Arial" font-size="18" font-weight="800" fill="#175225">Reliable</text>
+  <text x="360" y="324" text-anchor="middle" font-family="Inter,Arial" font-size="17" font-weight="800" fill="#26394f">Repeat, compare, average and record with correct units.</text>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#506070"/></marker></defs>
+</svg>

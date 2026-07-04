@@ -1,0 +1,84 @@
+{% extends "layouts/base.html" %}
+{% block title %}{{ user.full_name }} Report{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>
+.print-actions{display:flex;gap:10px;justify-content:flex-end;margin-bottom:14px}.print-button{border:1px solid #143d73;border-radius:8px;background:#143d73;color:#fff;padding:10px 14px;font-weight:800;cursor:pointer;text-decoration:none}.report-header{display:grid;grid-template-columns:2fr 1fr 1fr;gap:16px}.report-table{width:100%;border-collapse:collapse;margin-top:12px}.report-table th,.report-table td{border-bottom:1px solid #e5eaf2;padding:9px;text-align:left;vertical-align:top}.report-table th{font-size:12px;text-transform:uppercase;color:#5b677a}.badge{display:inline-flex;padding:4px 9px;border-radius:999px;background:#eef6ff;color:#155da8;font-weight:800;font-size:12px}@media(max-width:820px){.report-header{grid-template-columns:1fr}}@media print{.sidebar,.topbar,.footer,.print-actions,.flash-wrap{display:none!important}.app-shell{display:block}.main-area,.content-area{padding:0;margin:0}.learn-card,.hero-panel{box-shadow:none;border:0;break-inside:avoid}.report-table th,.report-table td{font-size:11px}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="print-actions">
+    <a class="print-button" href="{{ url_for('admin.reports') }}">Back</a>
+    <button class="print-button" onclick="window.print()">Print Report</button>
+</div>
+
+<section class="learn-card">
+    <span class="subject-code">Official Account Report</span>
+    <h1>{{ user.full_name }}</h1>
+    <div class="report-header">
+        <div>
+            <strong>{{ user.display_name }}</strong>
+            <small>{{ user.username }} | {{ user.email or "No email" }} | {{ user.school_name or "No school" }}</small>
+        </div>
+        <div><span class="badge">{{ user.account_status }}</span><br><small>Account status</small></div>
+        <div><strong>Level {{ user.security_level }}</strong><br><small>{{ security_label(user.security_level) }}</small></div>
+    </div>
+</section>
+
+<section class="learn-card">
+    <h2>Security and Access Trace</h2>
+    <table class="report-table">
+        <tr><th>Last login</th><td>{{ user.last_login_at or "Not recorded" }}</td><th>Failed attempts</th><td>{{ user.failed_login_attempts or 0 }}</td></tr>
+        <tr><th>Locked until</th><td>{{ user.locked_until or "Not locked" }}</td><th>Created</th><td>{{ user.created_at }}</td></tr>
+        <tr><th>Must change password</th><td>{{ "Yes" if user.must_change_password else "No" }}</td><th>Approved at</th><td>{{ user.approved_at or "Not recorded" }}</td></tr>
+    </table>
+</section>
+
+{% if user.role_name == "learner" %}
+<section class="learn-card">
+    <h2>Learner Mastery Record</h2>
+    <table class="report-table">
+        <thead><tr><th>Subject</th><th>Outcome</th><th>Pre</th><th>Practice</th><th>Post</th><th>Mastery</th><th>Status</th></tr></thead>
+        <tbody>
+        {% for row in mastery %}
+        <tr><td>{{ row.subject_name }}</td><td>{{ row.outcome_code }} - {{ row.outcome_name }}</td><td>{{ row.pretest_score }}</td><td>{{ row.practice_score }}</td><td>{{ row.posttest_score }}</td><td>{{ row.mastery_score }}%</td><td>{{ row.mastery_status }}</td></tr>
+        {% else %}<tr><td colspan="7">No mastery records yet.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="learn-card">
+    <h2>Assessment Trace</h2>
+    <table class="report-table">
+        <thead><tr><th>Assessment</th><th>Type</th><th>Score</th><th>Weak Concepts</th><th>Date</th></tr></thead>
+        <tbody>{% for a in attempts %}<tr><td>{{ a.assessment_title }}</td><td>{{ a.assessment_type }}</td><td>{{ a.score }}%</td><td>{{ a.weak_concepts or "None recorded" }}</td><td>{{ a.attempted_at }}</td></tr>{% else %}<tr><td colspan="5">No attempts yet.</td></tr>{% endfor %}</tbody>
+    </table>
+</section>
+
+<section class="learn-card">
+    <h2>AI Recommendations and Evidence</h2>
+    <table class="report-table">
+        <thead><tr><th>Type</th><th>Reason</th><th>Weak Concepts</th><th>Expected Mastery</th><th>Status</th></tr></thead>
+        <tbody>{% for r in recommendations %}<tr><td>{{ r.recommendation_type }}</td><td>{{ r.recommendation_reason }}</td><td>{{ r.weak_concepts or "None" }}</td><td>{{ r.expected_mastery }}%</td><td>{{ r.teacher_status }}</td></tr>{% else %}<tr><td colspan="5">No recommendations yet.</td></tr>{% endfor %}</tbody>
+    </table>
+</section>
+{% endif %}
+
+{% if user.role_name == "teacher" %}
+<section class="learn-card">
+    <h2>Teacher Intervention Trace</h2>
+    <table class="report-table">
+        <thead><tr><th>Learner</th><th>Outcome</th><th>Type</th><th>Note</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody>{% for i in interventions %}<tr><td>{{ i.learner_name }}</td><td>{{ i.outcome_code }}</td><td>{{ i.intervention_type }}</td><td>{{ i.intervention_note }}</td><td>{{ i.status }}</td><td>{{ i.created_at }}</td></tr>{% else %}<tr><td colspan="6">No teacher interventions recorded yet.</td></tr>{% endfor %}</tbody>
+    </table>
+</section>
+{% endif %}
+
+<section class="learn-card">
+    <h2>Audit Trail</h2>
+    <table class="report-table">
+        <thead><tr><th>Action</th><th>Entity</th><th>Details</th><th>Date</th></tr></thead>
+        <tbody>{% for log in audit_rows %}<tr><td>{{ log.action }}</td><td>{{ log.entity_type }} #{{ log.entity_id }}</td><td>{{ log.details }}</td><td>{{ log.created_at }}</td></tr>{% else %}<tr><td colspan="4">No audit entries yet.</td></tr>{% endfor %}</tbody>
+    </table>
+</section>
+{% endblock %}

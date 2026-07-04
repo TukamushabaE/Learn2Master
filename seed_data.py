@@ -1,92 +1,104 @@
 import os
-from app import app, db
-from models import User, Subject, Topic, LearningOutcome, LearningResource
+import sqlite3
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
 from werkzeug.security import generate_password_hash
 
-def seed():
-    with app.app_context():
-        # Seed Users
-        if not User.query.filter_by(username='elijah').first():
-            users = [
-                User(username='elijah', password_hash=generate_password_hash('12345'), role='student', school='Demo Secondary School'),
-                User(username='teacher', password_hash=generate_password_hash('12345'), role='teacher', school='Demo Secondary School'),
-                User(username='admin', password_hash=generate_password_hash('12345'), role='admin', school='System')
-            ]
-            db.session.add_all(users)
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-        # Seed Subjects
-        if not Subject.query.filter_by(name='Physics').first():
-            physics = Subject(name='Physics')
-            ict = Subject(name='ICT')
-            db.session.add_all([physics, ict])
-            db.session.commit()
+def get_connection():
+    if DATABASE_URL and (DATABASE_URL.startswith("postgres://") or DATABASE_URL.startswith("postgresql://")):
+        conn = psycopg2.connect(DATABASE_URL)
+        return conn, conn.cursor(), "%s"
+    else:
+        conn = sqlite3.connect("learn2master.db")
+        conn.row_factory = sqlite3.Row
+        return conn, conn.cursor(), "?"
 
-            # Seed Physics Topic
-            mechanics = Topic(subject_id=physics.id, name='Introduction to Mechanics', order=1)
-            db.session.add(mechanics)
-            db.session.commit()
+conn, cur, p = get_connection()
 
-            # Seed Learning Outcomes for Physics
-            lo1 = LearningOutcome(
-                topic_id=mechanics.id,
-                name='Distance and Displacement',
-                description='Understand the difference between distance and displacement.',
-                order=1,
-                notes='Distance is a scalar quantity, while displacement is a vector...',
-                video_url='https://www.youtube.com/embed/placeholder1',
-                examples='Example 1: A car moves 5km north...'
-            )
-            lo2 = LearningOutcome(
-                topic_id=mechanics.id,
-                name='Speed and Velocity',
-                description='Distinguish between speed and velocity.',
-                order=2,
-                notes='Speed = distance/time. Velocity = displacement/time.',
-                video_url='https://www.youtube.com/embed/placeholder2',
-                examples='Example: Calculate the velocity of a sprinter...'
-            )
-            db.session.add_all([lo1, lo2])
+def get_id(query, params=()):
+    q = query.replace("?", p)
+    cur.execute(q, params)
+    row = cur.fetchone()
+    return row[0] if row else None
 
-            # Seed ICT Topic
-            computing = Topic(subject_id=ict.id, name='Computer Systems', order=1)
-            db.session.add(computing)
-            db.session.commit()
+def execute(query, params=()):
+    q = query.replace("?", p)
+    cur.execute(q, params)
 
-            lo3 = LearningOutcome(
-                topic_id=computing.id,
-                name='Hardware Components',
-                description='Identify major hardware components of a computer.',
-                order=1,
-                notes='CPU, RAM, Motherboard, Storage...',
-                video_url='https://www.youtube.com/embed/placeholder3',
-                examples='Look inside a system unit to see the RAM slots.'
-            )
-            db.session.add(lo3)
-            db.session.commit()
+# --- Start Seeding ---
 
-            # Seed Adaptive Resources for LO1
-            res1 = LearningResource(
-                learning_outcome_id=lo1.id,
-                type='notes',
-                title='Introductory Notes',
-                content='Foundational concepts for distance and displacement.',
-                min_mastery=0.0,
-                max_mastery=0.6
-            )
-            res2 = LearningResource(
-                learning_outcome_id=lo1.id,
-                type='video',
-                title='Advanced Vectors Video',
-                content='Deep dive into vector displacement for high mastery students.',
-                min_mastery=0.6,
-                max_mastery=1.0
-            )
-            db.session.add_all([res1, res2])
+# Roles
+for role in ['learner', 'teacher', 'school_admin', 'super_admin', 'researcher', 'parent']:
+    execute("INSERT INTO roles (role_name, display_name) SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM roles WHERE role_name=?)", (role, role.replace('_', ' ').title(), role))
 
-            db.session.commit()
-            print("Data seeded successfully.")
-        else:
-            print("Data already seeded.")
+# School
+execute("INSERT INTO schools (school_name) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM schools WHERE school_name=?)", ('Kigezi High School', 'Kigezi High School'))
 
-if __name__ == "__main__":
-    seed()
+conn.commit()
+
+learner_role = get_id("SELECT role_id FROM roles WHERE role_name='learner'")
+teacher_role = get_id("SELECT role_id FROM roles WHERE role_name='teacher'")
+school_admin_role = get_id("SELECT role_id FROM roles WHERE role_name='school_admin'")
+super_admin_role = get_id("SELECT role_id FROM roles WHERE role_name='super_admin'")
+school_id = get_id("SELECT school_id FROM schools WHERE school_name='Kigezi High School'")
+
+# Users
+users = [
+    ('elijah', 'Elijah Tukamushaba', 'elijah@example.com', '12345', learner_role, school_id, 'Learner', 1),
+    ('teacher', 'Master Teacher', 'teacher@example.com', '12345', teacher_role, school_id, 'Physics Teacher', 3),
+    ('admin', 'School Admin', 'admin@example.com', '12345', school_admin_role, school_id, 'Administrator', 5),
+    ('superadmin', 'System Super Admin', 'super@example.com', '12345', super_admin_role, None, 'Super Admin', 10),
+]
+
+for username, full_name, email, password, role_id, sid, title, security_level in users:
+    execute("""
+        INSERT INTO users (username, full_name, email, password_hash, role_id, school_id, security_level, account_status, approved_at)
+        SELECT ?, ?, ?, ?, ?, ?, ?, 'Active', CURRENT_TIMESTAMP
+        WHERE NOT EXISTS (SELECT 1 FROM users WHERE username=?)
+    """, (username, full_name, email, generate_password_hash(password), role_id, sid, security_level, username))
+
+# Subjects
+execute("INSERT INTO subjects (subject_name) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM subjects WHERE subject_name=?)", ('Physics', 'Physics'))
+execute("INSERT INTO subjects (subject_name) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM subjects WHERE subject_name=?)", ('ICT', 'ICT'))
+conn.commit()
+
+phy_id = get_id("SELECT subject_id FROM subjects WHERE subject_name='Physics'")
+ict_id = get_id("SELECT subject_id FROM subjects WHERE subject_name='ICT'")
+
+# Competencies
+execute("INSERT INTO competencies (subject_id, competency_code, competency_name) SELECT ?, 'ICT-C1', 'Basic ICT Operations' WHERE NOT EXISTS (SELECT 1 FROM competencies WHERE competency_code='ICT-C1')", (ict_id,))
+ict_c1 = get_id("SELECT competency_id FROM competencies WHERE competency_code='ICT-C1'")
+
+# Learning Outcomes
+execute("INSERT INTO learning_outcomes (competency_id, outcome_code, outcome_name, sequence_order, mastery_threshold) SELECT ?, 'ICT-LO1', 'Understanding Computer Systems', 1, 80 WHERE NOT EXISTS (SELECT 1 FROM learning_outcomes WHERE outcome_code='ICT-LO1')", (ict_c1,))
+execute("INSERT INTO learning_outcomes (competency_id, outcome_code, outcome_name, sequence_order, mastery_threshold) SELECT ?, 'ICT-LO2', 'Operating Systems', 2, 80 WHERE NOT EXISTS (SELECT 1 FROM learning_outcomes WHERE outcome_code='ICT-LO2')", (ict_c1,))
+ict_lo1 = get_id("SELECT outcome_id FROM learning_outcomes WHERE outcome_code='ICT-LO1'")
+ict_lo2 = get_id("SELECT outcome_id FROM learning_outcomes WHERE outcome_code='ICT-LO2'")
+
+# Lessons
+execute("INSERT INTO lessons (course_id, outcome_id, lesson_title, sequence_order) SELECT 1, ?, 'Intro to Computers', 1 WHERE NOT EXISTS (SELECT 1 FROM lessons WHERE lesson_title='Intro to Computers')", (ict_lo1,))
+lesson1 = get_id("SELECT lesson_id FROM lessons WHERE lesson_title='Intro to Computers'")
+
+# Assessments
+for atype in ['pretest', 'practice', 'posttest']:
+    execute("INSERT INTO assessments (lesson_id, assessment_type, assessment_title) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM assessments WHERE lesson_id=? AND assessment_type=?)", (lesson1, atype, atype.title(), lesson1, atype))
+
+# Mastery Record
+elijah_id = get_id("SELECT user_id FROM users WHERE username='elijah'")
+execute("INSERT INTO mastery_records (learner_id, outcome_id, mastery_level, mastery_status, is_unlocked) SELECT ?, ?, 'Beginning', 'Not Started', 1 WHERE NOT EXISTS (SELECT 1 FROM mastery_records WHERE learner_id=? AND outcome_id=?)", (elijah_id, ict_lo1, elijah_id, ict_lo1))
+
+# System Settings
+settings = [
+    ("ai_adaptivity_level", "balanced", "AI & Personalization Settings", "select"),
+    ("at_risk_threshold", "60", "Notifications & Interventions", "number"),
+]
+for k, v, category, stype in settings:
+    execute("INSERT INTO system_settings (setting_key, setting_value, setting_category, setting_type) SELECT ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM system_settings WHERE setting_key=?)", (k, v, category, stype, k))
+
+conn.commit()
+print("Cloud-ready seed completed.")
+conn.close()

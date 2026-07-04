@@ -1,0 +1,66 @@
+{% extends "layouts/base.html" %}
+{% block title %}Reports{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>
+.report-row{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:12px;align-items:center;padding:13px 0;border-bottom:1px solid #edf0f5}.report-button{border:1px solid #cfd7e3;border-radius:8px;background:#fff;padding:8px 11px;font-weight:800;text-decoration:none;color:#1f2937}.print-button{background:#143d73;color:#fff;border-color:#143d73}.status-badge{display:inline-flex;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:800;background:#eef6ff;color:#155da8}@media(max-width:820px){.report-row{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">Traceable Evidence</p>
+        <h1>Administrative Reports</h1>
+        <p>Print learner mastery reports, teacher activity reports, administrator security reports and whole-school summaries.</p>
+    </div>
+    <div class="hero-badge"><span>Attempts</span><strong>{{ summary.attempts }}</strong></div>
+</section>
+
+<div class="evidence-grid">
+    <div><span>Users</span><strong>{{ summary.users }}</strong></div>
+    <div><span>Locked</span><strong>{{ summary.locked }}</strong></div>
+    <div><span>Suspended</span><strong>{{ summary.suspended }}</strong></div>
+    <div><span>AI Recommendations</span><strong>{{ summary.recommendations }}</strong></div>
+</div>
+
+<section class="learn-card">
+    <h2>Subject Mastery Summary</h2>
+    <div class="concept-grid">
+        {% for m in mastery %}
+        <div class="concept-pill {% if m.avg_mastery and m.avg_mastery >= 80 %}good{% else %}weak{% endif %}">
+            <span>{{ m.subject_name }}</span>
+            <strong>{{ m.avg_mastery or 0 }}%</strong>
+            <small>{{ m.mastered or 0 }} mastered of {{ m.records or 0 }} record(s)</small>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Individual Reports</span>
+    <h2>Learners, Teachers and Administrators</h2>
+    {% for u in report_users %}
+    <div class="report-row">
+        <div><strong>{{ u.full_name }}</strong><small>{{ u.username }} | {{ u.school_name or "No school" }}</small></div>
+        <div>{{ u.display_name }}<br><small>Level {{ u.security_level }}: {{ security_label(u.security_level) }}</small></div>
+        <div><span class="status-badge">{{ u.account_status }}</span></div>
+        <a class="report-button print-button" href="{{ url_for('admin.user_report', user_id=u.user_id) }}">Open Report</a>
+    </div>
+    {% else %}
+    <p>No users available for reporting.</p>
+    {% endfor %}
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">School Reports</span>
+    <h2>Institution-Level Management Reports</h2>
+    {% for school in schools %}
+    <div class="report-row">
+        <div><strong>{{ school.school_name }}</strong><small>School-wide account, mastery and security profile</small></div>
+        <div>Institution</div>
+        <div><span class="status-badge">Printable</span></div>
+        <a class="report-button print-button" href="{{ url_for('admin.school_report', school_id=school.school_id) }}">Open Report</a>
+    </div>
+    {% endfor %}
+</section>
+{% endblock %}

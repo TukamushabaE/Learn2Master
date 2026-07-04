@@ -1,0 +1,104 @@
+{% extends "layouts/base.html" %}
+{% block title %}Settings{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>
+.settings-shell{display:grid;gap:18px}.settings-row{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid #e7ecf3}.settings-row:last-child{border-bottom:0}.settings-meta strong{display:block}.settings-meta small{color:#5d6b7d}.settings-control{display:flex;gap:8px;align-items:center}.settings-control select,.settings-control input{width:100%;padding:10px 12px;border:1px solid #ced7e4;border-radius:8px;background:#fff}.setting-suffix{font-weight:800;color:#4d5d70;min-width:48px}.settings-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-top:14px}.settings-button{border:1px solid #143d73;border-radius:8px;background:#143d73;color:#fff;padding:10px 14px;font-weight:800;cursor:pointer;text-decoration:none}.secondary-button{background:#fff;color:#143d73}.threshold-row{display:grid;grid-template-columns:1.5fr 1fr auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #edf1f6}.threshold-form{display:flex;gap:8px;align-items:center}.threshold-form input{width:92px;padding:9px 10px;border:1px solid #ced7e4;border-radius:8px}.readonly-note{padding:12px 14px;border-radius:8px;background:#fff8db;color:#785a00;font-weight:700}@media(max-width:850px){.settings-row,.threshold-row{grid-template-columns:1fr}.settings-actions{justify-content:flex-start}}
+</style>
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">CBC AI Governance</p>
+        <h1>System Settings</h1>
+        <p>Configure AI personalization, mastery rules, assessment behavior, collaboration, compliance and intervention policies for Learn2Master.</p>
+    </div>
+    <div class="hero-badge"><span>Settings Mode</span><strong>{% if can_edit_settings %}Editable{% else %}Read-only{% endif %}</strong></div>
+</section>
+
+{% if not can_edit_settings %}
+<section class="learn-card">
+    <div class="readonly-note">Global platform settings are controlled by the Super Administrator. School Administrators can review them for operational alignment.</div>
+</section>
+{% endif %}
+
+<form method="post" action="{{ url_for('admin.settings') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="settings_action" value="update_system_settings">
+    <div class="settings-shell">
+        {% for group in settings_groups %}
+        <section class="learn-card">
+            <span class="subject-code">{{ group.title }}</span>
+            <h2>{{ group.title }}</h2>
+            <p>{{ group.summary }}</p>
+            {% for setting in group.settings %}
+            <div class="settings-row">
+                <div class="settings-meta">
+                    <strong>{{ setting.label }}</strong>
+                    <small>{{ setting.description }}</small>
+                </div>
+                <div class="settings-control">
+                    {% if setting.type == "select" %}
+                    <select name="{{ setting.key }}" {% if not can_edit_settings %}disabled{% endif %}>
+                        {% for value, label in setting.options %}
+                        <option value="{{ value }}" {% if setting.value == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% elif setting.type == "number" %}
+                    <input type="number" name="{{ setting.key }}" value="{{ setting.value }}" min="{{ setting.min }}" max="{{ setting.max }}" {% if not can_edit_settings %}disabled{% endif %}>
+                    {% endif %}
+                    {% if setting.suffix %}<span class="setting-suffix">{{ setting.suffix }}</span>{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </section>
+        {% endfor %}
+    </div>
+
+    {% if can_edit_settings %}
+    <div class="settings-actions">
+        <button class="settings-button" type="submit">Save System Settings</button>
+    </div>
+    {% endif %}
+</form>
+
+{% if can_edit_settings %}
+<form method="post" action="{{ url_for('admin.settings') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="settings_action" value="restore_defaults">
+    <section class="learn-card">
+        <span class="subject-code">Configuration Recovery</span>
+        <h2>Restore CBC/AI Defaults</h2>
+        <p>Return AI, mastery, assessment, collaboration, compliance and intervention settings to the recommended framework baseline.</p>
+        <div class="settings-actions">
+            <button class="settings-button secondary-button" type="submit">Restore Defaults</button>
+        </div>
+    </section>
+</form>
+{% endif %}
+
+<section class="learn-card">
+    <span class="subject-code">Outcome Mastery Rules</span>
+    <h2>Mastery Thresholds</h2>
+    {% for t in thresholds %}
+    <div class="threshold-row">
+        <div>
+            <strong>{{ t.subject_name }} | {{ t.outcome_code }}</strong>
+            <small>{{ t.outcome_name }}</small>
+        </div>
+        <div><strong>{{ t.mastery_threshold }}%</strong><br><small>Current mastery threshold</small></div>
+        {% if can_edit_settings %}
+        <form class="threshold-form" method="post" action="{{ url_for('admin.settings') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="settings_action" value="update_threshold">
+            <input type="hidden" name="outcome_id" value="{{ t.outcome_id }}">
+            <input type="number" name="mastery_threshold" value="{{ t.mastery_threshold }}" min="50" max="100">
+            <button class="settings-button secondary-button" type="submit">Update</button>
+        </form>
+        {% else %}
+        <span></span>
+        {% endif %}
+    </div>
+    {% endfor %}
+</section>
+{% endblock %}
