@@ -75,13 +75,13 @@ class KnowledgeBase:
         self._lock = threading.Lock()
         self._processed_files = {}
 
-        # Supabase config
+        # Initialize clients
         supabase_url = os.environ.get("SUPABASE_URL")
         supabase_key = os.environ.get("SUPABASE_KEY")
         if supabase_url and supabase_key:
             try:
                 self.supabase = create_client(supabase_url, supabase_key)
-                logger.info("Supabase client initialized.")
+                logger.info("Supabase client initialized for Knowledge Base.")
             except Exception as e:
                 logger.error(f"Failed to initialize Supabase: {e}")
 
@@ -332,15 +332,17 @@ class KnowledgeBase:
         try:
             with self._lock:
                 if self.embeddings is None: return []
+                query_embedding_np = np.array(query_embedding)
+                if query_embedding_np.ndim > 1:
+                    query_embedding_np = query_embedding_np[0]
+
                 expected_dim = self.embeddings.shape[-1]
-                if query_embedding.shape[-1] != expected_dim:
+                if query_embedding_np.shape[-1] != expected_dim:
                      return []
-                if self.embeddings.ndim == 1:
-                     self.embeddings = self.embeddings.reshape(1, -1)
 
                 # Cosine similarity
-                dot_product = np.dot(self.embeddings, query_embedding)
-                norms = np.linalg.norm(self.embeddings, axis=1) * np.linalg.norm(query_embedding)
+                dot_product = np.dot(self.embeddings, query_embedding_np)
+                norms = np.linalg.norm(self.embeddings, axis=1) * np.linalg.norm(query_embedding_np)
                 norms[norms == 0] = 1e-9
                 similarities = dot_product / norms
                 top_indices = np.argsort(similarities)[::-1][:top_k]
@@ -376,20 +378,46 @@ class KnowledgeBase:
             except Exception as e:
                 logger.error(f"Supabase insertion error: {e}")
 
-        with self._lock:
-            if len(self.chunks) >= MAX_KB_ENTRIES:
-                return
-            self.chunks.append(text)
-            if new_embedding is not None:
-                if self.embeddings is None:
-                    self.embeddings = new_embedding
-                else:
-                    self.embeddings = np.vstack([self.embeddings, new_embedding])
-            try:
-                with open(self.dynamic_kb_path, 'a') as f:
-                    f.write(json.dumps({'text': text, 'metadata': metadata, 'timestamp': time.time()}) + '\n')
-            except Exception as e:
-                logger.error(f"Persistence error: {e}")
+        for chunk in new_chunks:
+            new_embedding = None
+            if self.hf_client:
+                try:
+                    new_embedding_raw = self.hf_client.feature_extraction([chunk], model=self.model_id)
+                    new_embedding = np.array(new_embedding_raw)
+                except Exception as e:
+                    logger.error(f"Error generating embedding: {e}")
+                    continue
+
+            if self.supabase and new_embedding is not None:
+                try:
+                    embedding_list = new_embedding.tolist()
+                    if isinstance(embedding_list[0], list):
+                        embedding_list = embedding_list[0]
+
+                    self.supabase.table('kb_documents').insert({
+                        'content': chunk,
+                        'metadata': metadata or {},
+                        'embedding': embedding_list
+                    }).execute()
+                except Exception as e:
+                    logger.error(f"Supabase insertion error: {e}")
+
+            with self._lock:
+                if len(self.chunks) >= MAX_KB_ENTRIES:
+                    return
+                self.chunks.append(chunk)
+                if new_embedding is not None:
+                    if self.embeddings is None:
+                        self.embeddings = new_embedding
+                    else:
+                        self.embeddings = np.vstack([self.embeddings, new_embedding])
+
+        # Persistence to dynamic file
+        try:
+            with open(self.dynamic_kb_path, 'a') as f:
+                f.write(json.dumps({'text': text, 'metadata': metadata, 'timestamp': time.time()}) + '\n')
+        except Exception as e:
+            logger.error(f"Persistence error: {e}")
 
 _kb_instance = None
 def get_kb():

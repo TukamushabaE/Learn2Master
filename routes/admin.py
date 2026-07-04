@@ -1537,10 +1537,26 @@ def create_headteacher():
 @role_required("super_admin")
 @csrf_protect
 def admin_kb_upload():
+    import magic
     kb = get_kb()
     if request.method == "POST":
         file = request.files.get("file")
         if file and file.filename:
+            # MIME validation
+            file_content = file.read()
+            mime = magic.from_buffer(file_content, mime=True)
+            allowed_mimes = {
+                'text/plain', 'text/markdown', 'application/json', 'application/pdf',
+                'text/x-markdown'
+            }
+            # Also allow based on extension as fallback or safety
+            ext = os.path.splitext(file.filename)[1].lower()
+            allowed_exts = {'.txt', '.md', '.json', '.pdf'}
+
+            if mime not in allowed_mimes and ext not in allowed_exts:
+                flash(f"Upload failed: Unsupported file type ({mime}).", "danger")
+                return redirect(url_for("admin.admin_kb_upload"))
+
             filename = secure_filename(file.filename)
             ext = os.path.splitext(filename)[1].lower()
             if ext not in {'.txt', '.md', '.json', '.pdf'}:
@@ -1548,7 +1564,6 @@ def admin_kb_upload():
                 return redirect(url_for("admin.admin_kb_upload"))
 
             filepath = kb.directory / filename
-            file.save(str(filepath))
 
             # Use unified processing method
             success, _ = kb.process_file(str(filepath))

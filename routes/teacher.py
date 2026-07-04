@@ -397,6 +397,8 @@ def create_student():
 @role_required("teacher", "school_admin")
 @csrf_protect
 def teacher_kb_upload():
+    import magic
+    from werkzeug.utils import secure_filename
     conn = get_db()
     teacher_id = session["user_id"]
     kb = get_kb()
