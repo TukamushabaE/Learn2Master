@@ -399,6 +399,7 @@ def create_student():
 def teacher_kb_upload():
     conn = get_db()
     teacher_id = session["user_id"]
+    kb = get_kb()
 
     # Check 10MB limit
     usage = conn.execute("SELECT SUM(original_size_bytes) FROM teacher_kb_uploads WHERE teacher_id = ?", (teacher_id,)).fetchone()[0] or 0
@@ -407,39 +408,38 @@ def teacher_kb_upload():
     if request.method == "POST":
         file = request.files.get("file")
         if file and file.filename:
-            file_content = file.read()
-            file_size = len(file_content)
+            filename = secure_filename(file.filename)
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in {'.txt', '.md', '.json', '.pdf'}:
+                flash("Unsupported file type. Use .txt, .md, .json, or .pdf", "danger")
+                return redirect(url_for("teacher.teacher_kb_upload"))
+
+            # Calculate file size before saving
+            file.seek(0, os.SEEK_END)
+            file_size = file.tell()
+            file.seek(0)
 
             if usage + file_size > LIMIT:
                 flash("Upload failed: You have exceeded your 10MB storage limit.", "danger")
                 return redirect(url_for("teacher.teacher_kb_upload"))
 
-            # Extract text (assuming PDF or text for simplicity)
-            text = ""
-            if file.filename.endswith('.pdf'):
-                from PyPDF2 import PdfReader
-                import io
-                reader = PdfReader(io.BytesIO(file_content))
-                for page in reader.pages:
-                    text += page.extract_text() or ""
+            filepath = kb.directory / filename
+            file.save(str(filepath))
+
+            # Use unified processing method with summarization forced for teachers
+            success, summary_size = kb.process_file(str(filepath), metadata={"teacher_id": teacher_id}, summarize=True)
+
+            if success:
+                # Record upload
+                conn.execute("""
+                    INSERT INTO teacher_kb_uploads (teacher_id, filename, original_size_bytes, summary_size_bytes)
+                    VALUES (?, ?, ?, ?)
+                """, (teacher_id, filename, file_size, summary_size))
+                conn.commit()
+                flash(f"File {filename} uploaded and processed with AI summarization.", "success")
             else:
-                text = file_content.decode('utf-8', errors='ignore')
+                flash(f"Error processing {filename}.", "danger")
 
-            # AI Compression
-            from engine import AIEngine, get_kb
-            summary = AIEngine.compress_study_material(text)
-
-            # Save to Knowledge Base
-            kb = get_kb()
-            kb.add_knowledge(summary, metadata={"teacher_id": teacher_id, "source": file.filename})
-
-            # Record upload
-            conn.execute("""
-                INSERT INTO teacher_kb_uploads (teacher_id, filename, original_size_bytes, summary_size_bytes)
-                VALUES (?, ?, ?, ?)
-            """, (teacher_id, file.filename, file_size, len(summary)))
-            conn.commit()
-            flash(f"File {file.filename} uploaded and processed with AI summarization.", "success")
             return redirect(url_for("teacher.teacher_kb_upload"))
 
     uploads = conn.execute("SELECT * FROM teacher_kb_uploads WHERE teacher_id = ?", (teacher_id,)).fetchall()

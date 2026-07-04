@@ -1542,18 +1542,26 @@ def admin_kb_upload():
         file = request.files.get("file")
         if file and file.filename:
             filename = secure_filename(file.filename)
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in {'.txt', '.md', '.json', '.pdf'}:
+                flash("Unsupported file type. Use .txt, .md, .json, or .pdf", "danger")
+                return redirect(url_for("admin.admin_kb_upload"))
+
             filepath = kb.directory / filename
             file.save(str(filepath))
 
-            # Trigger re-processing
-            kb.load_and_process()
+            # Use unified processing method
+            success, _ = kb.process_file(str(filepath))
 
-            conn = get_db()
-            audit(conn, "KB_UPLOAD", "knowledge_base", filename, f"Uploaded and processed {filename}")
-            conn.commit()
-            conn.close()
+            if success:
+                conn = get_db()
+                audit(conn, "KB_UPLOAD", "knowledge_base", filename, f"Uploaded and processed {filename}")
+                conn.commit()
+                conn.close()
+                flash(f"File {filename} uploaded and KB updated.", "success")
+            else:
+                flash(f"Error processing {filename}.", "danger")
 
-            flash(f"File {filename} uploaded and KB updated.", "success")
             return redirect(url_for("admin.admin_kb_upload"))
 
     files = [f for f in os.listdir(kb.directory) if not f.startswith('_')]
