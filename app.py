@@ -69,7 +69,7 @@ if db_url:
 elif not app.config.get('SQLALCHEMY_DATABASE_URI'):
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.root_path, 'learn2master.db')
 
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
+# Note: SECRET_KEY is now managed via Config class in config.py
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Logging Configuration
