@@ -1,9 +1,12 @@
 import sqlite3
 
+import os
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
 
 from database import get_db
+from engine import get_kb
 from routes.guards import role_required
 from security import csrf_protect
 
@@ -1807,3 +1810,85 @@ def reports():
         report_users=report_users,
         schools=schools,
     )
+
+
+
+@admin_bp.route("/admin/headteacher/create", methods=["GET", "POST"])
+@role_required("super_admin")
+@csrf_protect
+def create_headteacher():
+    conn = get_db()
+    if request.method == "POST":
+        username = request.form.get("username")
+        full_name = request.form.get("full_name")
+        email = request.form.get("email")
+        password = request.form.get("password")
+        school_id = request.form.get("school_id")
+
+        role = conn.execute("SELECT role_id FROM roles WHERE role_name = 'school_admin'").fetchone()
+
+        try:
+            conn.execute("""
+                INSERT INTO users (full_name, username, email, password_hash, role_id, school_id, account_status, security_level)
+                VALUES (?, ?, ?, ?, ?, ?, 'Active', 4)
+            """, (full_name, username, email, generate_password_hash(password), role['role_id'], school_id))
+            conn.commit()
+            flash("School Admin created successfully.", "success")
+            return redirect(url_for("admin.users"))
+        except Exception as e:
+            flash(f"Error creating School Admin: {e}", "danger")
+
+    schools = conn.execute("SELECT * FROM schools").fetchall()
+    conn.close()
+    return render_template("admin/headteacher_form.html", schools=schools)
+
+@admin_bp.route("/admin/kb/upload", methods=["GET", "POST"])
+@role_required("super_admin")
+@csrf_protect
+def admin_kb_upload():
+    import magic
+    kb = get_kb()
+    if request.method == "POST":
+        file = request.files.get("file")
+        if file and file.filename:
+            # MIME validation
+            file_content = file.read()
+            mime = magic.from_buffer(file_content, mime=True)
+            allowed_mimes = {
+                'text/plain', 'text/markdown', 'application/json', 'application/pdf',
+                'text/x-markdown'
+            }
+            # Also allow based on extension as fallback or safety
+            ext = os.path.splitext(file.filename)[1].lower()
+            allowed_exts = {'.txt', '.md', '.json', '.pdf'}
+
+            if mime not in allowed_mimes and ext not in allowed_exts:
+                flash(f"Upload failed: Unsupported file type ({mime}).", "danger")
+                return redirect(url_for("admin.admin_kb_upload"))
+
+            filename = secure_filename(file.filename)
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in {'.txt', '.md', '.json', '.pdf'}:
+                flash("Unsupported file type. Use .txt, .md, .json, or .pdf", "danger")
+                return redirect(url_for("admin.admin_kb_upload"))
+
+            filepath = kb.directory / filename
+
+            # Use unified processing method
+            success, _ = kb.process_file(str(filepath))
+
+            if success:
+                conn = get_db()
+                audit(conn, "KB_UPLOAD", "knowledge_base", filename, f"Uploaded and processed {filename}")
+                conn.commit()
+                conn.close()
+                flash(f"File {filename} uploaded and KB updated.", "success")
+            else:
+                flash(f"Error processing {filename}.", "danger")
+
+            return redirect(url_for("admin.admin_kb_upload"))
+
+    files = []
+    if kb.directory.exists():
+        files = [f for f in os.listdir(kb.directory) if not f.startswith('_')]
+    return render_template("admin_kb_upload.html", files=files)

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>404 – Page Not Found | Learn2Master</title>
+  <meta name="description" content="The page you are looking for could not be found." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --color-bg:          #F7F8FA;
+      --color-surface:     #FFFFFF;
+      --color-border:      #E4E7EC;
+      --color-primary:     #1A6B3A;
+      --color-primary-lt:  #EAF4EE;
+      --color-primary-mid: #2E8B57;
+      --color-accent:      #C79A00;
+      --color-accent-lt:   #FDF6DC;
+      --color-text-base:   #111827;
+      --color-text-muted:  #6B7280;
+      --color-text-faint:  #9CA3AF;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --shadow-card: 0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--color-bg);
+      color: var(--color-text-base);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+      padding: 0 24px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand-name { font-weight: 700; font-size: 18px; color: var(--color-text-base); text-decoration: none; }
+    .brand-name span { color: var(--color-primary); }
+    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .error-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+      max-width: 600px;
+      width: 100%;
+      padding: 48px;
+      text-align: center;
+    }
+    .error-code { font-size: 120px; font-weight: 800; color: var(--color-primary-lt); margin-bottom: 24px; }
+    .error-title { font-size: 28px; font-weight: 700; margin-bottom: 16px; }
+    .error-description { color: var(--color-text-muted); margin-bottom: 32px; line-height: 1.6; }
+    .btn {
+      display: inline-block;
+      padding: 12px 24px;
+      background: var(--color-primary);
+      color: white;
+      text-decoration: none;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: var(--color-primary-mid); }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a href="/" class="brand-name">Learn<span>2</span>Master</a>
+  </header>
+  <main>
+    <div class="error-card">
+      <div class="error-code">404</div>
+      <h1 class="error-title">Page Not Found</h1>
+      <p class="error-description">The learning path you are looking for doesn't exist. Let's get you back on track.</p>
+      <a href="/" class="btn">Go to Dashboard</a>
+    </div>
+  </main>
+</body>
+</html>

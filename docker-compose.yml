@@ -7,5 +7,9 @@ services:
       - "5000:5000"
     environment:
       - SECRET_KEY=production-secret-key-change-me
+      - DATABASE_URL=sqlite:///instance/learn2master.db
+      - FLASK_APP=app.py
     volumes:
       - ./instance:/app/instance
+      - ./logs:/app/logs
+    restart: always

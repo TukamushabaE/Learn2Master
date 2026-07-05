@@ -33,6 +33,12 @@ try:
 except ImportError:
     Groq = None
 
+try:
+    from supabase import create_client, Client
+except ImportError:
+    create_client = None
+    Client = None
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -85,17 +91,55 @@ class KnowledgeBase:
         base_dir = Path(__file__).parent.resolve()
         self.directory = (base_dir / directory).resolve()
         self.dynamic_kb_path = self.directory / "_dynamic.jsonl"
+        self.processed_files_path = self.directory / "_processed_files.json"
         self.model_id = model_id
         self.chunks = []
         self.embeddings = None
         self.hf_client = None
+        self.supabase: Client = None
         self._lock = threading.Lock()
+        self._processed_files = {}
 
+        # Initialize clients
+        supabase_url = os.environ.get("SUPABASE_URL")
+        supabase_key = os.environ.get("SUPABASE_KEY")
+        if supabase_url and supabase_key and create_client:
+            try:
+                self.supabase = create_client(supabase_url, supabase_key)
+                logger.info("Supabase client initialized for Knowledge Base.")
+            except Exception as e:
+                logger.error(f"Failed to initialize Supabase: {e}")
+
+        # Initialize Hugging Face client
         hf_token = os.environ.get('HF_TOKEN')
         if hf_token and InferenceClient:
             self.hf_client = InferenceClient(token=hf_token)
 
+        self.load_processed_files_metadata()
         self.load_and_process()
+
+    def load_processed_files_metadata(self):
+        if self.processed_files_path.exists():
+            try:
+                with open(self.processed_files_path, 'r') as f:
+                    self._processed_files = json.load(f)
+            except Exception as e:
+                logger.error(f"Error loading processed files metadata: {e}")
+                self._processed_files = {}
+
+    def save_processed_files_metadata(self):
+        try:
+            with open(self.processed_files_path, 'w') as f:
+                json.dump(self._processed_files, f)
+        except Exception as e:
+            logger.error(f"Error saving processed files metadata: {e}")
+
+    def _get_file_hash(self, filepath):
+        hasher = hashlib.md5()
+        with open(filepath, 'rb') as f:
+            buf = f.read()
+            hasher.update(buf)
+        return hasher.hexdigest()
 
     def _strip_markdown(self, text):
         text = re.sub(r'#{1,6}\s+', '', text)
@@ -105,81 +149,179 @@ class KnowledgeBase:
         text = re.sub(r'^\s*[-*+]\s+', '', text, flags=re.MULTILINE)
         return text.strip()
 
-    def _extract_text(self, obj):
+    def _recursive_split(self, text, chunk_size=500, overlap=100):
+        if len(text) <= chunk_size:
+            return [text.strip()]
+
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + chunk_size
+            if end < len(text):
+                # Use regex to find sentence boundaries for better chunking
+                # Looks for '.', '!', or '?' followed by a space or newline
+                search_area = text[start + (chunk_size // 2):end]
+                matches = list(re.finditer(r'[.!?](\s|\n|$)', search_area))
+                if matches:
+                    # Take the last match in the search area
+                    break_point = start + (chunk_size // 2) + matches[-1].end()
+                    end = break_point
+
+            chunk = text[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+
+            start = end - overlap
+            if start >= len(text) - overlap:
+                break
+        return chunks
+
+    def _extract_text(self, obj, depth=0):
+        if depth > 10: # Safety against infinite recursion
+            return ""
         if isinstance(obj, str):
             return obj
         if isinstance(obj, dict):
-            return " ".join(self._extract_text(v) for k, v in obj.items() if k in ('content', 'text', 'body', 'description', 'title'))
+            # Prioritize certain fields but also look deeper if needed
+            content_fields = {'content', 'text', 'body', 'description', 'title', 'summary'}
+            extracted = []
+            # First pass: check priority fields
+            for k, v in obj.items():
+                if k.lower() in content_fields:
+                    extracted.append(self._extract_text(v, depth + 1))
+
+            # Second pass: if nothing found, look at everything else
+            if not extracted:
+                for v in obj.values():
+                    if isinstance(v, (dict, list, str)):
+                        res = self._extract_text(v, depth + 1)
+                        if res: extracted.append(res)
+            return " ".join(filter(None, extracted))
         if isinstance(obj, list):
-            return " ".join(self._extract_text(i) for i in obj[:MAX_JSON_ITEMS])
+            return " ".join(filter(None, [self._extract_text(i, depth + 1) for i in obj[:MAX_JSON_ITEMS]]))
         return ""
 
-    def load_and_process(self):
+    def process_file(self, filepath, metadata=None, summarize=False):
+        filename = os.path.basename(filepath)
+        if filename.startswith('_'): return False, 0
+
+        file_hash = self._get_file_hash(filepath)
+        if filename in self._processed_files and self._processed_files[filename] == file_hash:
+            logger.info(f"Skipping {filename}, already processed.")
+            return True, 0
+
+        text = ""
+        try:
+            if filename.endswith('.txt') or filename.endswith('.md'):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    text = f.read()
+                    text = self._strip_markdown(text)
+            elif filename.endswith('.json'):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    text = self._extract_text(data)
+            elif filename.endswith('.pdf') and PdfReader:
+                reader = PdfReader(filepath)
+                for page in reader.pages:
+                    try:
+                        extracted = page.extract_text()
+                        if extracted: text += extracted + "\n"
+                    except Exception as pg_err:
+                        logger.warning(f"Error on PDF page in {filename}: {pg_err}")
+        except Exception as e:
+            logger.error(f"Error extracting text from {filename}: {e}")
+            return False, 0
+
+        text = text.strip()
+        if not text: return False, 0
+
+        # AI Summarization for large files or if requested
+        processed_size = len(text)
+        if summarize or len(text) > 15000:
+            text = AIEngine.compress_study_material(text)
+            processed_size = len(text)
+
+        new_chunks = self._recursive_split(text)
+        if not new_chunks: return False, 0
+
+        embeddings_list = []
+        if self.hf_client:
+            try:
+                embeddings_list = self.hf_client.feature_extraction(new_chunks, model=self.model_id)
+            except Exception as e:
+                logger.error(f"Error generating embeddings for {filename}: {e}")
+
         with self._lock:
-            # Clear existing state for full reload
-            self.chunks = []
-            self.embeddings = None
+            self.chunks.extend(new_chunks)
+            if embeddings_list and np:
+                new_emb_array = np.array(embeddings_list)
+                if self.embeddings is None:
+                    self.embeddings = new_emb_array
+                else:
+                    self.embeddings = np.vstack([self.embeddings, new_emb_array])
 
-            if not self.directory.exists():
-                self.directory.mkdir(parents=True, exist_ok=True)
-
-            all_text = ""
-            for filename in sorted(os.listdir(self.directory)):
-                if filename.startswith('_'): continue
-                filepath = self.directory / filename
+            # Sync to Supabase
+            supabase_success = True
+            if self.supabase and embeddings_list:
                 try:
-                    if filepath.stat().st_size > MAX_FILE_BYTES:
-                        continue
-
-                    if filename.endswith('.txt') or filename.endswith('.md'):
-                        with open(filepath, 'r', encoding='utf-8') as f:
-                            text = f.read()
-                            if filename.endswith('.md'):
-                                text = self._strip_markdown(text)
-                            all_text += text + "\n"
-                    elif filename.endswith('.json'):
-                        with open(filepath, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                            all_text += self._extract_text(data) + "\n"
-                    elif filename.endswith('.pdf') and PdfReader:
-                        reader = PdfReader(filepath)
-                        for page in reader.pages:
-                            text = page.extract_text()
-                            if text:
-                                all_text += text + "\n"
+                    data_to_insert = [
+                        {
+                            'content': chunk,
+                            'embedding': emb,
+                            'metadata': {**(metadata or {}), 'source': filename, 'hash': file_hash}
+                        }
+                        for chunk, emb in zip(new_chunks, embeddings_list)
+                    ]
+                    self.supabase.table('kb_documents').upsert(data_to_insert).execute()
                 except Exception as e:
-                    logger.error(f"Error reading source {filename}: {e}")
+                    logger.error(f"Supabase sync error for {filename}: {e}")
+                    supabase_success = False
 
-            if all_text:
-                sentences = all_text.replace('\n', ' ').split('. ')
-                current_chunk = ""
-                for sentence in sentences:
-                    if len(current_chunk) + len(sentence) < 500:
-                        current_chunk += sentence + ". "
-                    else:
-                        self.chunks.append(current_chunk.strip())
-                        current_chunk = sentence + ". "
-                if current_chunk:
-                    self.chunks.append(current_chunk.strip())
+            if supabase_success or not self.supabase:
+                self._processed_files[filename] = file_hash
+                self.save_processed_files_metadata()
 
-            # Load dynamic
-            if self.dynamic_kb_path.exists():
-                try:
-                    with open(self.dynamic_kb_path, 'r') as f:
-                        for line in f:
-                            entry = json.loads(line)
-                            if 'text' in entry:
-                                self.chunks.append(entry['text'])
-                except Exception as e:
-                    logger.error(f"Error loading dynamic KB: {e}")
+        return True, processed_size
 
-            if self.chunks and self.hf_client and np:
-                try:
-                    embeddings = self.hf_client.feature_extraction(self.chunks, model=self.model_id)
-                    self.embeddings = np.array(embeddings)
-                    logger.info(f"Initialized KB with {len(self.chunks)} chunks.")
-                except Exception as e:
-                    logger.error(f"Error generating KB embeddings: {e}")
+    def load_and_process(self):
+        if not self.directory.exists():
+            self.directory.mkdir(parents=True, exist_ok=True)
+
+        # 1. Sync from Supabase Storage if available
+        if self.supabase:
+            try:
+                res = self.supabase.storage.from_("knowledge-base").list()
+                for file_info in res:
+                    fname = file_info['name']
+                    if fname.startswith('.') or fname.startswith('_'): continue
+                    local_path = self.directory / fname
+                    if not local_path.exists():
+                        logger.info(f"Downloading {fname} from Supabase Storage...")
+                        with open(local_path, 'wb') as f:
+                            data = self.supabase.storage.from_("knowledge-base").download(fname)
+                            f.write(data)
+            except Exception as e:
+                logger.error(f"Supabase Storage sync error: {e}")
+
+        # 2. Process all files in directory
+        for filename in sorted(os.listdir(self.directory)):
+            if filename.startswith('_'): continue
+            filepath = self.directory / filename
+            if filepath.is_file() and filepath.stat().st_size <= MAX_FILE_BYTES:
+                self.process_file(str(filepath))
+
+        # 3. Load dynamic KB entries
+        if self.dynamic_kb_path.exists():
+            try:
+                with open(self.dynamic_kb_path, 'r') as f:
+                    for line in f:
+                        entry = json.loads(line)
+                        if 'text' in entry:
+                            # Direct add to in-memory chunks if not already there
+                            if entry['text'] not in self.chunks:
+                                self.add_knowledge(entry['text'], entry.get('metadata'))
+            except Exception as e:
+                logger.error(f"Error loading dynamic KB: {e}")
 
     @lru_cache(maxsize=512)
     def get_query_embedding(self, query):
@@ -188,59 +330,112 @@ class KnowledgeBase:
         return self.hf_client.feature_extraction(query, model=self.model_id)
 
     def search(self, query, top_k=3):
+        query_embedding = self.get_query_embedding(query)
+        if query_embedding is None:
+            return []
+
+        if not np:
+            return []
+
+        # Ensure query_embedding is a 1D array for Supabase/dot product
+        if isinstance(query_embedding, list):
+            if len(query_embedding) > 0 and isinstance(query_embedding[0], list):
+                query_embedding = query_embedding[0]
+            query_embedding = np.array(query_embedding)
+        elif isinstance(query_embedding, np.ndarray) and query_embedding.ndim > 1:
+            query_embedding = query_embedding.flatten()
+
+        if self.supabase:
+            try:
+                # Using Supabase rpc for vector similarity search
+                # Requires a 'match_kb_chunks' function in Supabase
+                response = self.supabase.rpc(
+                    'match_kb_chunks',
+                    {
+                        'query_embedding': query_embedding.tolist(),
+                        'match_threshold': 0.3,
+                        'match_count': top_k,
+                    }
+                ).execute()
+
+                if response.data:
+                    return [item['content'] for item in response.data]
+            except Exception as e:
+                logger.error(f"Supabase search error: {e}. Falling back to local.")
+
         with self._lock:
-            if not self.chunks or self.embeddings is None or not self.hf_client:
+            if not self.chunks or self.embeddings is None:
                 return []
 
         try:
-            if not np:
-                return []
-            query_embedding = np.array(self.get_query_embedding(query))
-            if len(query_embedding.shape) > 1:
-                query_embedding = query_embedding[0]
-
             with self._lock:
                 if self.embeddings is None: return []
+                query_embedding_np = np.array(query_embedding)
+                if query_embedding_np.ndim > 1:
+                    query_embedding_np = query_embedding_np[0]
+
                 expected_dim = self.embeddings.shape[-1]
-                if query_embedding.shape[-1] != expected_dim:
+                if query_embedding_np.shape[-1] != expected_dim:
                      return []
-                if self.embeddings.ndim == 1:
-                     self.embeddings = self.embeddings.reshape(1, -1)
-                dot_product = np.dot(self.embeddings, query_embedding)
-                norms = np.linalg.norm(self.embeddings, axis=1) * np.linalg.norm(query_embedding)
+
+                # Cosine similarity
+                dot_product = np.dot(self.embeddings, query_embedding_np)
+                norms = np.linalg.norm(self.embeddings, axis=1) * np.linalg.norm(query_embedding_np)
                 norms[norms == 0] = 1e-9
                 similarities = dot_product / norms
                 top_indices = np.argsort(similarities)[::-1][:top_k]
                 return [self.chunks[i] for i in top_indices]
         except Exception as e:
-            logger.error(f"Search error: {e}")
+            logger.error(f"Local search error: {e}")
             return []
 
-    def add_knowledge(self, text):
+    def add_knowledge(self, text, metadata=None):
         text = text.strip()
-        if not text or len(text) > 4000:
+        if not text:
             return
-        new_embedding = None
-        if self.hf_client and np:
+
+        new_chunks = self._recursive_split(text)
+        if not new_chunks:
+            return
+
+        embeddings_list = []
+        if self.hf_client:
             try:
-                new_embedding = np.array(self.hf_client.feature_extraction([text], model=self.model_id))
+                embeddings_list = self.hf_client.feature_extraction(new_chunks, model=self.model_id)
             except Exception as e:
-                logger.error(f"Error generating embedding: {e}")
-                return
+                logger.error(f"Error generating embeddings in add_knowledge: {e}")
+
+        if self.supabase and embeddings_list:
+            try:
+                data_to_insert = [
+                    {'content': chunk, 'embedding': emb, 'metadata': metadata or {}}
+                    for chunk, emb in zip(new_chunks, embeddings_list)
+                ]
+                self.supabase.table('kb_documents').insert(data_to_insert).execute()
+            except Exception as e:
+                logger.error(f"Supabase bulk insertion error in add_knowledge: {e}")
+
         with self._lock:
-            if len(self.chunks) >= MAX_KB_ENTRIES:
+            available_space = MAX_KB_ENTRIES - len(self.chunks)
+            if available_space <= 0:
                 return
-            self.chunks.append(text)
-            if new_embedding is not None:
+
+            chunks_to_add = new_chunks[:available_space]
+            self.chunks.extend(chunks_to_add)
+
+            if embeddings_list and np:
+                new_emb_array = np.array(embeddings_list[:available_space])
                 if self.embeddings is None:
-                    self.embeddings = new_embedding
+                    self.embeddings = new_emb_array
                 else:
-                    self.embeddings = np.vstack([self.embeddings, new_embedding])
-            try:
-                with open(self.dynamic_kb_path, 'a') as f:
-                    f.write(json.dumps({'text': text, 'timestamp': time.time()}) + '\n')
-            except Exception as e:
-                logger.error(f"Persistence error: {e}")
+                    self.embeddings = np.vstack([self.embeddings, new_emb_array])
+
+        # Persistence to dynamic file
+        try:
+            with open(self.dynamic_kb_path, 'a') as f:
+                f.write(json.dumps({'text': text, 'metadata': metadata, 'timestamp': time.time()}) + '\n')
+        except Exception as e:
+            logger.error(f"Persistence error: {e}")
 
 _kb_instance = None
 def get_kb():
@@ -250,6 +445,51 @@ def get_kb():
     return _kb_instance
 
 class AIEngine:
+    @staticmethod
+    def compress_study_material(text):
+        groq_api_key = os.environ.get('GROQ_API_KEY')
+        if not groq_api_key:
+            return text[:5000] # Fallback to truncation
+        try:
+            from groq import Groq
+            client = Groq(api_key=groq_api_key)
+            prompt = f"Summarize the following study material into a concise pedagogical summary of approximately 5KB (about 800-1000 words) that captures all key concepts and definitions for vector search: \n\n {text[:15000]}"
+            chat_completion = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama3-70b-8192",
+                temperature=0.3,
+            )
+            return chat_completion.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Compression error: {e}")
+            return text[:5000]
+
+    @staticmethod
+    def evaluate_all_work(learner_id, conn):
+        # Gather all student data
+        mastery = conn.execute("SELECT mr.*, lo.outcome_name FROM mastery_records mr JOIN learning_outcomes lo ON mr.outcome_id = lo.outcome_id WHERE learner_id = ?", (learner_id,)).fetchall()
+        evidence = conn.execute("SELECT * FROM practical_evidence WHERE learner_id = ?", (learner_id,)).fetchall()
+        attempts = conn.execute("SELECT * FROM assessment_attempts WHERE learner_id = ? ORDER BY created_at DESC LIMIT 50", (learner_id,)).fetchall()
+
+        data_summary = f"Mastery Records: {len(mastery)}, Evidence Submissions: {len(evidence)}, Recent Attempts: {len(attempts)}"
+
+        groq_api_key = os.environ.get('GROQ_API_KEY')
+        if not groq_api_key:
+            return f"AI Evaluation currently unavailable. Summary: {data_summary}"
+
+        try:
+            from groq import Groq
+            client = Groq(api_key=groq_api_key)
+            prompt = f"Evaluate the following student work data and provide a holistic pedagogical assessment of their progress, strengths, and areas for improvement in Physics and ICT: \n\n {data_summary}"
+            chat_completion = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama3-8b-8192",
+                temperature=0.5,
+            )
+            return chat_completion.choices[0].message.content
+        except Exception as e:
+            return f"Error generating evaluation: {e}"
+
     @staticmethod
     def analyze_knowledge_gaps(mastery_records):
         gaps = []

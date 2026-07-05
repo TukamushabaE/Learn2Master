@@ -1,14 +1,16 @@
 from flask import Blueprint, render_template, request, redirect, session, url_for, flash
+from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta, timezone
 import sqlite3
 
 from database import get_db
+from models import db, User
 from security import csrf_protect
 from routes.guards import role_home_endpoint
+from extensions import limiter
 
 auth_bp = Blueprint("auth", __name__)
-
 
 def password_meets_policy(password):
     password = password or ""
@@ -18,13 +20,11 @@ def password_meets_policy(password):
         and any(ch.isdigit() for ch in password)
     )
 
-
 def record_auth_audit(conn, user_id, action, details):
     conn.execute("""
         INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
         VALUES (?, ?, 'user', ?, ?)
     """, (user_id, action, str(user_id), details))
-
 
 @auth_bp.route("/")
 def home():
@@ -32,14 +32,13 @@ def home():
         return redirect(url_for(role_home_endpoint(session.get("role"))))
     return redirect(url_for("auth.login_view"))
 
-
 @auth_bp.route("/login", methods=["GET"])
 def login_view():
     return render_template("login.html")
 
-
 @auth_bp.route("/login", methods=["POST"])
 @csrf_protect
+@limiter.limit("5 per minute")
 def login():
     username = request.form.get("username")
     password = request.form.get("password")
@@ -96,6 +95,13 @@ def login():
         conn.commit()
         conn.close()
 
+        user_obj = db.session.get(User, int(user["user_id"]))
+        if not user_obj:
+            user_obj = User.query.filter_by(id=int(user["user_id"])).first()
+
+        if user_obj:
+            login_user(user_obj)
+
         session["user_id"] = user["user_id"]
         session["username"] = user["username"]
         session["full_name"] = user["full_name"]
@@ -128,7 +134,6 @@ def login():
 
     flash("Invalid username or password.", "danger")
     return redirect(url_for("auth.home"))
-
 
 @auth_bp.route("/register", methods=["GET", "POST"])
 @csrf_protect
@@ -169,8 +174,8 @@ def register():
             conn.execute("""
                 INSERT INTO users
                 (full_name, username, email, password_hash, role_id, school_id,
-                 account_status, security_level, approved_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'Active', 1, CURRENT_TIMESTAMP)
+                 account_status, security_level)
+                VALUES (?, ?, ?, ?, ?, ?, 'Pending', 1)
             """, (
                 full_name,
                 username,
@@ -193,7 +198,6 @@ def register():
             conn.close()
 
     return render_template("register.html")
-
 
 @auth_bp.route("/change-password", methods=["GET", "POST"])
 @csrf_protect
@@ -237,7 +241,6 @@ def change_password():
 
     return render_template("change_password.html")
 
-
 @auth_bp.route("/logout")
 def logout():
     user_id = session.get("user_id")
@@ -246,6 +249,7 @@ def logout():
         record_auth_audit(conn, user_id, "LOGOUT", "User logged out")
         conn.commit()
         conn.close()
+    logout_user()
     session.clear()
     flash("You have been logged out successfully.", "success")
     return redirect(url_for("auth.home"))

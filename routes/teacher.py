@@ -1,8 +1,12 @@
+import math
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
 from routes.guards import role_required
 from database import get_db
 from security import csrf_protect
 from services.analytics_engine import teacher_overview, recent_ai_recommendations
+from engine import get_kb
 
 teacher_bp = Blueprint("teacher", __name__)
 
@@ -620,3 +624,163 @@ def review_practical_evidence(practical_id, action):
     conn.commit(); conn.close()
     flash(f"Practical evidence marked as {status}.", "success")
     return redirect(url_for("teacher.practical_evidence"))
+
+
+@teacher_bp.route("/teacher/kb")
+@role_required("teacher", "school_admin", "super_admin")
+def teacher_kb_view():
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+    kb = get_kb()
+    total_chunks = len(kb.chunks)
+    total_pages = math.ceil(total_chunks / per_page)
+
+    start = (page - 1) * per_page
+    end = start + per_page
+    chunks = kb.chunks[start:end]
+
+    return render_template("teacher_kb_view.html", chunks=chunks, page=page, total_pages=total_pages)
+
+
+@teacher_bp.route("/teacher/students/pending")
+@role_required("teacher", "school_admin")
+def pending_students():
+    conn = get_db()
+    # Teachers see students from their school
+    user = conn.execute("SELECT school_id FROM users WHERE user_id = ?", (session["user_id"],)).fetchone()
+    students = conn.execute("""
+        SELECT u.* FROM users u
+        JOIN roles r ON u.role_id = r.role_id
+        WHERE r.role_name = 'learner' AND u.account_status = 'Pending' AND u.school_id = ?
+    """, (user['school_id'],)).fetchall()
+    conn.close()
+    return render_template("teacher/pending_students.html", students=students)
+
+@teacher_bp.route("/teacher/students/approve/<int:user_id>", methods=["POST"])
+@role_required("teacher", "school_admin")
+@csrf_protect
+def approve_student(user_id):
+    conn = get_db()
+    conn.execute("UPDATE users SET account_status = 'Active', approved_by = ?, approved_at = CURRENT_TIMESTAMP WHERE user_id = ?", (session['user_id'], user_id))
+    conn.commit()
+    conn.close()
+    flash("Student account approved.", "success")
+    return redirect(url_for("teacher.pending_students"))
+
+@teacher_bp.route("/teacher/students/assign-subjects", methods=["GET", "POST"])
+@role_required("teacher", "school_admin")
+@csrf_protect
+def assign_subjects():
+    conn = get_db()
+    if request.method == "POST":
+        student_ids = request.form.getlist("student_ids")
+        subject_ids = request.form.getlist("subject_ids")
+
+        for sid in student_ids:
+            for subid in subject_ids:
+                try:
+                    conn.execute("""
+                        INSERT INTO student_subject_assignments (student_id, subject_id, assigned_by)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(student_id, subject_id) DO NOTHING
+                    """, (sid, subid, session['user_id']))
+                except Exception: pass
+        conn.commit()
+        flash("Subjects assigned successfully.", "success")
+        return redirect(url_for("teacher.teacher_dashboard"))
+
+    user = conn.execute("SELECT school_id FROM users WHERE user_id = ?", (session["user_id"],)).fetchone()
+    students = conn.execute("""
+        SELECT u.user_id, u.full_name FROM users u
+        JOIN roles r ON u.role_id = r.role_id
+        WHERE r.role_name = 'learner' AND u.account_status = 'Active' AND u.school_id = ?
+    """, (user['school_id'],)).fetchall()
+    subjects = conn.execute("SELECT * FROM subjects").fetchall()
+    conn.close()
+    return render_template("teacher/assign_subjects.html", students=students, subjects=subjects)
+
+
+@teacher_bp.route("/teacher/students/create", methods=["GET", "POST"])
+@role_required("teacher", "school_admin")
+@csrf_protect
+def create_student():
+    conn = get_db()
+    if request.method == "POST":
+        username = request.form.get("username")
+        full_name = request.form.get("full_name")
+        email = request.form.get("email")
+        password = request.form.get("password")
+
+        user_info = conn.execute("SELECT school_id FROM users WHERE user_id = ?", (session["user_id"],)).fetchone()
+        role = conn.execute("SELECT role_id FROM roles WHERE role_name = 'learner'").fetchone()
+
+        try:
+            conn.execute("""
+                INSERT INTO users (full_name, username, email, password_hash, role_id, school_id, account_status, security_level, approved_by, approved_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'Active', 1, ?, CURRENT_TIMESTAMP)
+            """, (full_name, username, email, generate_password_hash(password), role['role_id'], user_info['school_id'], session['user_id']))
+            conn.commit()
+            flash("Student created successfully.", "success")
+            return redirect(url_for("teacher.teacher_dashboard"))
+        except Exception as e:
+            flash(f"Error creating student: {e}", "danger")
+
+    conn.close()
+    return render_template("teacher/student_form.html")
+
+
+@teacher_bp.route("/teacher/kb/upload", methods=["GET", "POST"])
+@role_required("teacher", "school_admin")
+@csrf_protect
+def teacher_kb_upload():
+    import magic
+    from werkzeug.utils import secure_filename
+    conn = get_db()
+    teacher_id = session["user_id"]
+    kb = get_kb()
+
+    # Check 10MB limit
+    usage = conn.execute("SELECT SUM(original_size_bytes) FROM teacher_kb_uploads WHERE teacher_id = ?", (teacher_id,)).fetchone()[0] or 0
+    LIMIT = 10 * 1024 * 1024 # 10MB
+
+    if request.method == "POST":
+        file = request.files.get("file")
+        if file and file.filename:
+            filename = secure_filename(file.filename)
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in {'.txt', '.md', '.json', '.pdf'}:
+                flash("Unsupported file type. Use .txt, .md, .json, or .pdf", "danger")
+                return redirect(url_for("teacher.teacher_kb_upload"))
+
+            # Calculate file size before saving
+            file.seek(0, os.SEEK_END)
+            file_size = file.tell()
+            file.seek(0)
+
+            if usage + file_size > LIMIT:
+                filepath.unlink()
+                flash("Upload failed: You have exceeded your 10MB storage limit.", "danger")
+                return redirect(url_for("teacher.teacher_kb_upload"))
+
+            filepath = kb.directory / filename
+            file.save(str(filepath))
+
+            # Use unified processing method with summarization forced for teachers
+            success, summary_size = kb.process_file(str(filepath), metadata={"teacher_id": teacher_id}, summarize=True)
+
+            if success:
+                # Record upload
+                conn.execute("""
+                    INSERT INTO teacher_kb_uploads (teacher_id, filename, original_size_bytes, summary_size_bytes)
+                    VALUES (?, ?, ?, ?)
+                """, (teacher_id, filename, file_size, summary_size))
+                conn.commit()
+                flash(f"File {filename} uploaded and processed with AI summarization.", "success")
+            else:
+                flash(f"Error processing {filename}.", "danger")
+
+            return redirect(url_for("teacher.teacher_kb_upload"))
+
+    uploads = conn.execute("SELECT * FROM teacher_kb_uploads WHERE teacher_id = ?", (teacher_id,)).fetchall()
+    conn.close()
+    return render_template("teacher/kb_upload.html", uploads=uploads, usage=usage, limit=LIMIT)
