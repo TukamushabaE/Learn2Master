@@ -92,15 +92,6 @@ login_manager = LoginManager()
 login_manager.login_view = "auth.login_view"
 login_manager.init_app(app)
 
-@app.errorhandler(404)
-def not_found_error(error):
-    return render_template('errors/404.html'), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    db.session.rollback()
-    return render_template('errors/500.html'), 500
-
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -113,15 +104,10 @@ def inject_security_helpers():
         "teacher": "Teacher",
         "learner": "Learner",
     }
-    class MockUser:
-        def __init__(self):
-            self.is_authenticated = "user_id" in session
-            self.username = session.get("username", "")
-            self.role = session.get("role", "")
     return {
         "csrf_token": get_csrf_token,
         "role_label": lambda role=None: role_labels.get(role or "", role or ""),
-        "current_user": MockUser(),
+        "current_user": current_user,
     }
 
 @app.route("/service-worker.js")
