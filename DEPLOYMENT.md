@@ -15,7 +15,21 @@ The following variables should be set in production:
 | `SECRET_KEY` | Flask security key | A long, random string. |
 | `DATABASE_URL` | DB connection string | `postgresql://user:pass@host/db` |
 | `FLASK_DEBUG` | Debug mode | `False` |
-| `PORT` | Application port | `5000` |
+| `PORT` | Application port | Automatically set by host (Render defaults to 10000) |
+
+## Render Deployment (Recommended)
+Learn2Master is optimized for Render as a single **Web Service**. You do not need a separate frontend deployment as Flask serves static assets via WhiteNoise.
+
+### Configuration Settings:
+- **Runtime**: `Python`
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**: `gunicorn --bind 0.0.0.0:$PORT --workers 4 app:app`
+
+### Database Setup on Render:
+1. Create a **Render PostgreSQL** instance.
+2. Copy the **Internal Database URL**.
+3. Add it as an environment variable named `DATABASE_URL` in your Web Service settings.
+4. Run the initialization script once via the Render Shell: `python init_db.py`
 
 ## Docker Deployment
 1. Build the image:
@@ -35,11 +49,11 @@ If you modify the database schema (`models.py`), use the following commands to m
 
 1. Generate a new migration:
    ```bash
-   docker exec -it <container_id> flask db migrate -m "Description of change"
+   flask db migrate -m "Description of change"
    ```
 2. Apply migrations:
    ```bash
-   docker exec -it <container_id> flask db upgrade
+   flask db upgrade
    ```
 
 ## Monitoring & Health
