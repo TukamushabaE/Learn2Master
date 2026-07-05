@@ -20,6 +20,11 @@ def get_connection():
         url = DATABASE_URL.replace("postgres://", "postgresql://", 1)
         conn = psycopg2.connect(url)
         return conn, conn.cursor(), "%s"
+    elif DATABASE_URL and DATABASE_URL.startswith("sqlite:///"):
+        db_path = DATABASE_URL.replace("sqlite:///", "")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        return conn, conn.cursor(), "?"
     else:
         conn = sqlite3.connect("learn2master.db")
         conn.row_factory = sqlite3.Row

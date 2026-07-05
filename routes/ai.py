@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, session, request, jsonify
 from database import get_db
 from routes.guards import role_required, login_required
 from engine import AIEngine
+from extensions import limiter
 import json
 
 ai_bp = Blueprint("ai", __name__)
@@ -66,6 +67,7 @@ def learner_ai_coach():
 
 @ai_bp.route("/ai/tutor", methods=["POST"])
 @login_required
+@limiter.limit("10 per minute")
 def ai_tutor():
     user_input = request.json.get("message", "")
     learner_id = session.get("user_id")
@@ -75,23 +77,21 @@ def ai_tutor():
 
     conn = get_db()
 
-    # Gather context
     mastery_records = conn.execute("""
-        SELECT mr.mastery_score as knowledge_level, lo.outcome_name
+        SELECT mr.knowledge_level, lo.outcome_name
         FROM mastery_records mr
-        JOIN learning_outcomes lo ON mr.outcome_id = lo.outcome_id
-        WHERE mr.learner_id = ?
+        JOIN learning_outcomes lo ON mr.learning_outcome_id = lo.outcome_id
+        WHERE mr.user_id = ?
     """, (learner_id,)).fetchall()
 
     avg_mastery = sum([m["knowledge_level"] for m in mastery_records]) / len(mastery_records) if mastery_records else 0.0
 
-    # Identify gaps for the engine
     gaps = AIEngine.analyze_knowledge_gaps(mastery_records)
 
     context = {
         "user_id": learner_id,
         "username": session.get("username", "Student"),
-        "avg_mastery": avg_mastery / 100.0,
+        "avg_mastery": avg_mastery,
         "gaps": gaps
     }
 
@@ -100,7 +100,6 @@ def ai_tutor():
 
     return jsonify({"response": response_text})
 
-
 @ai_bp.route("/ai/evaluate-all-work")
 @login_required
 def evaluate_all_work():
@@ -108,11 +107,9 @@ def evaluate_all_work():
     if session.get("role") != "learner":
         learner_id = request.args.get("learner_id")
         if not learner_id:
-             flash("No learner specified.", "warning")
              return redirect(url_for("teacher.teacher_dashboard"))
 
     conn = get_db()
-    from engine import AIEngine
     evaluation = AIEngine.evaluate_all_work(learner_id, conn)
     conn.close()
 
