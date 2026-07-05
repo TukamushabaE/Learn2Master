@@ -190,8 +190,7 @@ class KnowledgeBase:
             if filename.endswith('.txt') or filename.endswith('.md'):
                 with open(filepath, 'r', encoding='utf-8') as f:
                     text = f.read()
-                    if filename.endswith('.md'):
-                        text = self._strip_markdown(text)
+                    text = self._strip_markdown(text)
             elif filename.endswith('.json'):
                 with open(filepath, 'r', encoding='utf-8') as f:
                     data = json.load(f)
@@ -199,12 +198,16 @@ class KnowledgeBase:
             elif filename.endswith('.pdf'):
                 reader = PdfReader(filepath)
                 for page in reader.pages:
-                    extracted = page.extract_text()
-                    if extracted: text += extracted + "\n"
+                    try:
+                        extracted = page.extract_text()
+                        if extracted: text += extracted + "\n"
+                    except Exception as pg_err:
+                        logger.warning(f"Error on PDF page in {filename}: {pg_err}")
         except Exception as e:
             logger.error(f"Error extracting text from {filename}: {e}")
             return False, 0
 
+        text = text.strip()
         if not text: return False, 0
 
         # AI Summarization for large files or if requested
@@ -224,7 +227,6 @@ class KnowledgeBase:
                 logger.error(f"Error generating embeddings for {filename}: {e}")
 
         with self._lock:
-            start_idx = len(self.chunks)
             self.chunks.extend(new_chunks)
             if embeddings_list:
                 new_emb_array = np.array(embeddings_list)
@@ -359,123 +361,46 @@ class KnowledgeBase:
             logger.error(f"Local search error: {e}")
             return []
 
-    def process_file(self, filepath, metadata=None):
-        """Processes a single file and adds it to the KB."""
-        filename = filepath.name
-        try:
-            file_text = ""
-            if filename.endswith('.txt') or filename.endswith('.md'):
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    file_text = f.read()
-                    if filename.endswith('.md'): file_text = self._strip_markdown(file_text)
-            elif filename.endswith('.json'):
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    file_text = self._extract_text(data)
-            elif filename.endswith('.pdf'):
-                reader = PdfReader(filepath)
-                for page in reader.pages:
-                    text = page.extract_text()
-                    if text: file_text += text + "\n"
-
-            if file_text:
-                # Update processed logs
-                current_hash = self._get_file_hash(filepath)
-                with self._lock:
-                    if not self.processed_files_path.exists():
-                        processed_data = {}
-                    else:
-                        with open(self.processed_files_path, 'r') as f:
-                            processed_data = json.load(f)
-
-                    processed_data[filename] = {'hash': current_hash, 'timestamp': time.time()}
-                    with open(self.processed_files_path, 'w') as f:
-                        json.dump(processed_data, f)
-
-                # Generate chunks and embeddings
-                chunks = self._recursive_split(file_text)
-                if chunks and self.hf_client:
-                    embeddings_list = self.hf_client.feature_extraction(chunks, model=self.model_id)
-                    new_embeddings = np.array(embeddings_list)
-
-                    with self._lock:
-                        self.chunks.extend(chunks)
-                        if self.embeddings is None:
-                            self.embeddings = new_embeddings
-                        else:
-                            self.embeddings = np.vstack([self.embeddings, new_embeddings])
-
-                    if self.supabase:
-                        data_to_insert = [
-                            {'content': chunk, 'embedding': emb, 'metadata': metadata or {'source': filename}}
-                            for chunk, emb in zip(chunks, embeddings_list)
-                        ]
-                        self.supabase.table('kb_documents').upsert(data_to_insert).execute()
-                    return True
-        except Exception as e:
-            logger.error(f"Error processing uploaded file {filename}: {e}")
-        return False
-
     def add_knowledge(self, text, metadata=None):
         text = text.strip()
-        if not text or len(text) > 4000:
+        if not text:
             return
-        new_embedding = None
+
+        new_chunks = self._recursive_split(text)
+        if not new_chunks:
+            return
+
+        embeddings_list = []
         if self.hf_client:
             try:
-                new_embedding_raw = self.hf_client.feature_extraction([text], model=self.model_id)
-                new_embedding = np.array(new_embedding_raw)
+                embeddings_list = self.hf_client.feature_extraction(new_chunks, model=self.model_id)
             except Exception as e:
-                logger.error(f"Error generating embedding: {e}")
-                # Don't return, still add text for local fallback
+                logger.error(f"Error generating embeddings in add_knowledge: {e}")
 
-        if self.supabase and new_embedding is not None:
+        if self.supabase and embeddings_list:
             try:
-                embedding_list = new_embedding.tolist()
-                if isinstance(embedding_list[0], list):
-                    embedding_list = embedding_list[0]
-
-                self.supabase.table('kb_documents').insert({
-                    'content': text,
-                    'metadata': metadata or {},
-                    'embedding': embedding_list
-                }).execute()
+                data_to_insert = [
+                    {'content': chunk, 'embedding': emb, 'metadata': metadata or {}}
+                    for chunk, emb in zip(new_chunks, embeddings_list)
+                ]
+                self.supabase.table('kb_documents').insert(data_to_insert).execute()
             except Exception as e:
-                logger.error(f"Supabase insertion error: {e}")
+                logger.error(f"Supabase bulk insertion error in add_knowledge: {e}")
 
-        for chunk in new_chunks:
-            new_embedding = None
-            if self.hf_client:
-                try:
-                    new_embedding_raw = self.hf_client.feature_extraction([chunk], model=self.model_id)
-                    new_embedding = np.array(new_embedding_raw)
-                except Exception as e:
-                    logger.error(f"Error generating embedding: {e}")
-                    continue
+        with self._lock:
+            available_space = MAX_KB_ENTRIES - len(self.chunks)
+            if available_space <= 0:
+                return
 
-            if self.supabase and new_embedding is not None:
-                try:
-                    embedding_list = new_embedding.tolist()
-                    if isinstance(embedding_list[0], list):
-                        embedding_list = embedding_list[0]
+            chunks_to_add = new_chunks[:available_space]
+            self.chunks.extend(chunks_to_add)
 
-                    self.supabase.table('kb_documents').insert({
-                        'content': chunk,
-                        'metadata': metadata or {},
-                        'embedding': embedding_list
-                    }).execute()
-                except Exception as e:
-                    logger.error(f"Supabase insertion error: {e}")
-
-            with self._lock:
-                if len(self.chunks) >= MAX_KB_ENTRIES:
-                    return
-                self.chunks.append(chunk)
-                if new_embedding is not None:
-                    if self.embeddings is None:
-                        self.embeddings = new_embedding
-                    else:
-                        self.embeddings = np.vstack([self.embeddings, new_embedding])
+            if embeddings_list:
+                new_emb_array = np.array(embeddings_list[:available_space])
+                if self.embeddings is None:
+                    self.embeddings = new_emb_array
+                else:
+                    self.embeddings = np.vstack([self.embeddings, new_emb_array])
 
         # Persistence to dynamic file
         try:
