@@ -32,7 +32,28 @@ app.config.from_object(Config)
 app.wsgi_app = WhiteNoise(app.wsgi_app, root='static/', prefix='static/')
 
 # Security Extensions
-talisman.init_app(app, force_https=(not app.debug and not os.environ.get('TESTING')))
+csp = {
+    'default-src': '\'self\'',
+    'style-src': [
+        '\'self\'',
+        'fonts.googleapis.com',
+        '\'unsafe-inline\''
+    ],
+    'font-src': [
+        '\'self\'',
+        'fonts.gstatic.com'
+    ],
+    'script-src': [
+        '\'self\'',
+        '\'unsafe-inline\''  # Required for some inline scripts in templates
+    ],
+    'img-src': ['\'self\'', 'data:']
+}
+talisman.init_app(
+    app,
+    force_https=(not app.debug and not os.environ.get('TESTING')),
+    content_security_policy=csp
+)
 limiter.init_app(app)
 if os.environ.get('TESTING'):
     limiter.enabled = False
