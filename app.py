@@ -88,6 +88,26 @@ if not app.debug:
 db.init_app(app)
 migrate = Migrate(app, db)
 
+# Automatic database initialization check
+with app.app_context():
+    from database import get_db
+    import init_db
+    try:
+        conn = get_db()
+        # Attempt a simple query to see if the database is initialized
+        conn.execute("SELECT 1 FROM users LIMIT 1")
+        conn.close()
+    except Exception:
+        app.logger.info("Database tables appear to be missing. Initializing...")
+        db_url = os.environ.get("DATABASE_URL")
+        if db_url:
+            if db_url.startswith("postgres://"):
+                db_url = db_url.replace("postgres://", "postgresql://", 1)
+            init_db.run_postgres(db_url)
+        else:
+            init_db.run_sqlite()
+        app.logger.info("Database initialization complete.")
+
 login_manager = LoginManager()
 login_manager.login_view = "auth.login_view"
 login_manager.init_app(app)
