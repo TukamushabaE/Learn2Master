@@ -175,7 +175,7 @@ def register():
                 INSERT INTO users
                 (full_name, username, email, password_hash, role_id, school_id,
                  account_status, security_level)
-                VALUES (?, ?, ?, ?, ?, ?, 'Pending', 1)
+                VALUES (?, ?, ?, ?, ?, ?, 'Active', 1)
             """, (
                 full_name,
                 username,
