@@ -19,8 +19,7 @@ USER appuser
 
 COPY --chown=appuser:appuser . .
 
-# Run migrations then seed
-RUN flask db upgrade && python seed_data.py
+# Database initialization is handled by app.py at runtime
 
 EXPOSE 5000
 
