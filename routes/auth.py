@@ -241,60 +241,6 @@ def change_password():
 
     return render_template("change_password.html")
 
-
-@auth_bp.route("/setup-default-users")
-def setup_default_users():
-    from werkzeug.security import generate_password_hash
-
-    conn = get_db()
-
-    default_users = [
-        ("ICT Physics Teacher", "teacher", "teacher@example.com", "Teacher", "teacher", 3),
-        ("School Administrator", "admin", "admin@example.com", "School Administrator", "school_admin", 4),
-        ("System Owner", "superadmin", "superadmin@example.com", "Super Administrator", "super_admin", 5),
-    ]
-
-    school = conn.execute(
-        "SELECT school_id FROM schools WHERE school_name = ?",
-        ("Kigezi High School",)
-    ).fetchone()
-
-    if not school:
-        conn.execute("INSERT INTO schools (school_name) VALUES (?)", ("Kigezi High School",))
-        conn.commit()
-        school = conn.execute(
-            "SELECT school_id FROM schools WHERE school_name = ?",
-            ("Kigezi High School",)
-        ).fetchone()
-
-    for full_name, username, email, title, role_name, security_level in default_users:
-        role = conn.execute(
-            "SELECT role_id FROM roles WHERE role_name = ?",
-            (role_name,)
-        ).fetchone()
-
-        if role:
-            conn.execute("""
-                INSERT OR IGNORE INTO users
-                (full_name, username, email, password_hash, role_id, school_id,
-                 title, account_status, security_level, approved_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'Active', ?, CURRENT_TIMESTAMP)
-            """, (
-                full_name,
-                username,
-                email,
-                generate_password_hash("Admin12345"),
-                role["role_id"],
-                school["school_id"],
-                title,
-                security_level
-            ))
-
-    conn.commit()
-    conn.close()
-
-    return "Default teacher/admin users created. REMOVE THIS ROUTE NOW."
-
 @auth_bp.route("/logout")
 def logout():
     user_id = session.get("user_id")
