@@ -2,6 +2,7 @@ from collections import defaultdict
 
 from flask import Blueprint, render_template, request, redirect, session, url_for, flash
 import os
+import uuid
 from werkzeug.utils import secure_filename
 
 from routes.guards import role_required
@@ -18,6 +19,110 @@ from services.offline_engine import queue_offline_event
 learning_bp = Blueprint("learning", __name__)
 
 PRACTICE_CONCEPT_THRESHOLD = 70
+EVIDENCE_TYPE_LABELS = {
+    "activity": "Activity Evidence",
+    "project": "Project Evidence",
+    "investigation": "Investigation Evidence",
+    "practical": "Practical Evidence",
+    "reflection": "Reflection Evidence",
+}
+ACTIVITY_GUIDANCE = {
+    "project": {
+        "learning": "Create a product, report, model, program, poster, table, or solution that applies the concept to a real need.",
+        "evidence": "Upload the finished product, photo, screenshot, code file, report, or a short explanation of what you created.",
+    },
+    "investigation": {
+        "learning": "Ask a focused question, collect evidence, compare results, and explain what the evidence shows.",
+        "evidence": "Submit your investigation notes, data table, photo, graph, or written conclusion.",
+    },
+    "practical": {
+        "learning": "Carry out the hands-on task carefully, observe what happens, and record measurements or outputs.",
+        "evidence": "Upload a photo, lab report, screenshot, code file, measurement table, or signed observation note.",
+    },
+    "simulation": {
+        "learning": "Use the diagram, model, or simulation to test the idea and observe patterns before explaining them.",
+        "evidence": "Submit a screenshot, labelled diagram, result table, or explanation of what changed and why.",
+    },
+    "collaboration": {
+        "learning": "Work with a peer or group to compare ideas, agree on evidence, and communicate a justified answer.",
+        "evidence": "Submit group notes, peer feedback, a discussion summary, or the agreed solution.",
+    },
+    "communication": {
+        "learning": "Explain the concept clearly using examples, diagrams, demonstrations, or presentation notes.",
+        "evidence": "Submit slides, a photo of your explanation, notes, or a short written summary.",
+    },
+    "reflection": {
+        "learning": "Think about what was difficult, what helped, and how you can apply the concept in real life.",
+        "evidence": "Write your reflection and confidence level.",
+    },
+}
+POSTTEST_SYSTEM_BLOCKERS = {
+    "pretest_required": {
+        "title": "Pre-test Required",
+        "detail": "Complete the diagnostic pre-test before the post-test can open.",
+    },
+    "practice_not_available": {
+        "title": "Practice Not Available",
+        "detail": "The teacher or administrator needs to add adaptive practice for this outcome.",
+    },
+    "practice_required": {
+        "title": "Adaptive Practice Required",
+        "detail": f"Score at least {PRACTICE_CONCEPT_THRESHOLD}% in adaptive practice.",
+    },
+    "reflection_required": {
+        "title": "Reflection Required",
+        "detail": "Submit the learner reflection for this outcome.",
+    },
+    "practical_evidence_required": {
+        "title": "Practical Evidence Required",
+        "detail": "Upload practical or project evidence for this outcome.",
+    },
+}
+
+
+def concept_label(concept):
+    return str(concept or "").replace("_", " ").title()
+
+
+def split_posttest_blockers(blockers):
+    system_blockers = []
+    concept_blockers = []
+    for blocker in blockers or []:
+        if blocker in POSTTEST_SYSTEM_BLOCKERS:
+            system_blockers.append(blocker)
+        else:
+            concept_blockers.append(blocker)
+    return system_blockers, concept_blockers
+
+
+def describe_posttest_blockers(blockers):
+    system_blockers, concept_blockers = split_posttest_blockers(blockers)
+    descriptions = []
+    if concept_blockers:
+        descriptions.append({
+            "kind": "concept",
+            "title": "Weak Concept Practice",
+            "detail": (
+                f"Reach {PRACTICE_CONCEPT_THRESHOLD}% or above in: "
+                + ", ".join(concept_label(concept) for concept in concept_blockers)
+                + "."
+            ),
+        })
+    for blocker in system_blockers:
+        item = POSTTEST_SYSTEM_BLOCKERS[blocker]
+        descriptions.append({
+            "kind": "evidence",
+            "title": item["title"],
+            "detail": item["detail"],
+        })
+    return descriptions
+
+
+def posttest_blocker_summary(blockers):
+    descriptions = describe_posttest_blockers(blockers)
+    if not descriptions:
+        return "Complete the required learning evidence first."
+    return " ".join(item["detail"] for item in descriptions)
 
 
 def allowed_upload(filename):
@@ -26,6 +131,81 @@ def allowed_upload(filename):
     extension = os.path.splitext(filename)[1].lower()
     from flask import current_app
     return extension in current_app.config["UPLOAD_EXTENSIONS"]
+
+
+def guidance_for_activity(activity_type):
+    normalized = (activity_type or "").strip().lower()
+    for key, value in ACTIVITY_GUIDANCE.items():
+        if key in normalized:
+            return value
+    return {
+        "learning": "Complete the task by applying the concept to a real classroom, home, community, or school situation.",
+        "evidence": "Submit a short explanation, file, photo, screenshot, report, table, code, or other proof of what you completed.",
+    }
+
+
+def save_evidence_file(file, learner_id, outcome_id):
+    if not file or not file.filename:
+        return None, None, 0, None
+    if not allowed_upload(file.filename):
+        return None, None, 0, "Unsupported evidence file type. Please upload a PDF, image, text, Word, Python, or ZIP file."
+
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads", "learner_evidence")
+    os.makedirs(upload_dir, exist_ok=True)
+    original_name = secure_filename(file.filename)
+    filename = secure_filename(f"learner_{learner_id}_outcome_{outcome_id}_{uuid.uuid4().hex}_{original_name}")
+    absolute_path = os.path.join(upload_dir, filename)
+    file.save(absolute_path)
+    file_path = os.path.join("uploads", "learner_evidence", filename)
+    return file_path, os.path.splitext(filename)[1].lower(), os.path.getsize(absolute_path), None
+
+
+def outcome_meta(conn, outcome_id):
+    return conn.execute("""
+        SELECT lo.outcome_id, lo.topic_id, lo.competency_id, c.subject_id
+        FROM learning_outcomes lo
+        JOIN competencies c ON c.competency_id=lo.competency_id
+        WHERE lo.outcome_id=?
+    """, (outcome_id,)).fetchone()
+
+
+def evidence_progress(conn, learner_id, outcome_id, practical_required=False):
+    total_activities = conn.execute("""
+        SELECT COUNT(*) AS total
+        FROM learning_activities
+        WHERE outcome_id=? AND evidence_required=1
+    """, (outcome_id,)).fetchone()["total"]
+    completed_activities = conn.execute("""
+        SELECT COUNT(DISTINCT activity_id) AS total
+        FROM activity_submissions
+        WHERE learner_id=? AND outcome_id=?
+    """, (learner_id, outcome_id)).fetchone()["total"]
+    reflection_done = 1 if has_reflection(conn, learner_id, outcome_id) else 0
+    practical_done = 1 if practical_evidence_done(conn, learner_id, outcome_id) else 0
+
+    total_required = total_activities + 1 + (1 if practical_required else 0)
+    completed = min(completed_activities, total_activities) + reflection_done + (practical_done if practical_required else 0)
+    percentage = round((completed / total_required) * 100) if total_required else 0
+    return {
+        "total_required": total_required,
+        "completed": completed,
+        "percentage": min(100, percentage),
+        "activity_total": total_activities,
+        "activity_completed": min(completed_activities, total_activities),
+        "reflection_done": bool(reflection_done),
+        "practical_required": bool(practical_required),
+        "practical_done": bool(practical_done) if practical_required else True,
+    }
+
+
+def activity_submission_map(conn, learner_id, outcome_id):
+    rows = conn.execute("""
+        SELECT activity_id, COUNT(*) AS submission_count, MAX(created_at) AS latest_submission
+        FROM activity_submissions
+        WHERE learner_id=? AND outcome_id=?
+        GROUP BY activity_id
+    """, (learner_id, outcome_id)).fetchall()
+    return {row["activity_id"]: row for row in rows}
 
 
 def get_latest_attempt(conn, learner_id, assessment_id):
@@ -200,8 +380,37 @@ def posttest_unlock_status(conn, learner_id, outcome_id, required_concepts):
 
 
 def weak_concepts_resolved(conn, learner_id, outcome_id):
-    unlocked, not_ready = posttest_unlock_status(conn, learner_id, outcome_id, get_required_concepts(conn, outcome_id))
-    return unlocked and not not_ready
+    pretest_attempt, weak_concepts = get_pretest_weak_concepts(conn, learner_id, outcome_id)
+    if pretest_attempt is None:
+        return False
+
+    practice = conn.execute("""
+        SELECT a.assessment_id
+        FROM assessments a
+        JOIN lessons l ON a.lesson_id = l.lesson_id
+        WHERE l.outcome_id = ? AND a.assessment_type = 'practice'
+        LIMIT 1
+    """, (outcome_id,)).fetchone()
+    if not practice:
+        return False
+
+    practice_attempt = get_latest_attempt(conn, learner_id, practice["assessment_id"])
+    if not practice_attempt:
+        return False
+
+    if not weak_concepts:
+        return practice_attempt["score"] >= PRACTICE_CONCEPT_THRESHOLD
+
+    concept_map = get_concept_mastery(conn, learner_id, outcome_id)
+    for concept in weak_concepts:
+        row = concept_map.get(concept)
+        if not row:
+            return False
+        if row["latest_assessment_type"] not in ["practice", "posttest"]:
+            return False
+        if row["latest_score"] < PRACTICE_CONCEPT_THRESHOLD:
+            return False
+    return True
 
 
 def latest_practical_evidence(conn, learner_id, outcome_id):
@@ -398,9 +607,17 @@ def outcome(outcome_id):
 
     required_concepts = get_required_concepts(conn, outcome_id)
     concept_map = get_concept_mastery(conn, learner_id, outcome_id)
-    posttest_unlocked, concepts_not_ready = posttest_unlock_status(conn, learner_id, outcome_id, required_concepts)
+    posttest_unlocked, unlock_blockers = posttest_unlock_status(conn, learner_id, outcome_id, required_concepts)
+    system_blockers, concepts_not_ready = split_posttest_blockers(unlock_blockers)
+    posttest_blockers = describe_posttest_blockers(unlock_blockers)
+    needs_more_practice = bool(concepts_not_ready) or "practice_required" in system_blockers
 
     weak_concepts = get_latest_weak_concepts(conn, learner_id, outcome_id, pretest_attempt, required_concepts)
+    if not posttest_unlocked:
+        if concepts_not_ready:
+            weak_concepts = concepts_not_ready
+        elif system_blockers and not needs_more_practice:
+            weak_concepts = []
 
     placeholders = ",".join("?" for _ in weak_concepts) if weak_concepts else "''"
     params = [outcome_id] + weak_concepts
@@ -461,9 +678,20 @@ def outcome(outcome_id):
         WHERE outcome_id = ?
         ORDER BY activity_id
     """, (outcome_id,)).fetchall()
+    activity_submissions = activity_submission_map(conn, learner_id, outcome_id)
+    activity_cards = []
+    for activity in activities:
+        submission = activity_submissions.get(activity["activity_id"])
+        activity_cards.append({
+            "activity": activity,
+            "guidance": guidance_for_activity(activity["activity_type"]),
+            "submission_count": submission["submission_count"] if submission else 0,
+            "latest_submission": submission["latest_submission"] if submission else None,
+        })
 
     practical_evidence = latest_practical_evidence(conn, learner_id, outcome_id)
     bkt_rows = bkt_summary(conn, learner_id, outcome_id)
+    concepts_resolved = weak_concepts_resolved(conn, learner_id, outcome_id)
 
     latest_recommendation = conn.execute("""
         SELECT recommendation_reason, recommendation_type, evidence_used, expected_mastery,
@@ -480,18 +708,19 @@ def outcome(outcome_id):
         pretest_attempt,
         practice_attempt,
         posttest_attempt,
-        posttest_unlocked,
+        concepts_resolved,
         bool(reflection),
         outcome["posttest_score"],
         outcome["mastery_threshold"],
         bool(practical_evidence) if outcome["practical_required"] else True,
     )
+    progress = evidence_progress(conn, learner_id, outcome_id, bool(outcome["practical_required"]))
 
     pretest_items = prepare_question_items(conn, pretest["assessment_id"], limit=6, learner_id=learner_id) if pretest else []
     practice_items = []
-    if practice and pretest_attempt and not posttest_unlocked:
-        practice_items = prepare_question_items(conn, practice["assessment_id"], concept_tags=weak_concepts, limit=6, learner_id=learner_id)
-    elif practice and pretest_attempt:
+    if practice and pretest_attempt and not posttest_unlocked and needs_more_practice:
+        practice_items = prepare_question_items(conn, practice["assessment_id"], concept_tags=weak_concepts or None, limit=6, learner_id=learner_id)
+    elif practice and pretest_attempt and posttest_unlocked:
         practice_items = prepare_question_items(conn, practice["assessment_id"], limit=6, learner_id=learner_id)
     posttest_items = prepare_question_items(conn, posttest["assessment_id"], limit=8, learner_id=learner_id) if posttest and posttest_unlocked else []
 
@@ -523,14 +752,19 @@ def outcome(outcome_id):
         videos=videos,
         illustrations=illustrations,
         activities=activities,
+        activity_cards=activity_cards,
         weak_concepts=weak_concepts,
         required_concepts=required_concepts,
         concept_map=concept_map,
         posttest_unlocked=posttest_unlocked,
         concepts_not_ready=concepts_not_ready,
+        posttest_blockers=posttest_blockers,
+        needs_more_practice=needs_more_practice,
         latest_recommendation=latest_recommendation,
         reflection=reflection,
         practical_evidence=practical_evidence,
+        evidence_progress=progress,
+        evidence_type_labels=EVIDENCE_TYPE_LABELS,
         worked_examples=worked_examples,
         performance_resources=performance_resources,
         bkt_rows=bkt_rows,
@@ -579,6 +813,136 @@ def submit_reflection(outcome_id):
     conn.commit()
     conn.close()
     flash("Reflection saved. If your practice evidence is complete, the post-test will now unlock.", "success")
+    return redirect(url_for("learning.outcome", outcome_id=outcome_id))
+
+
+@learning_bp.route("/outcome/<int:outcome_id>/evidence", methods=["POST"])
+@role_required("learner")
+@csrf_protect
+def submit_outcome_evidence(outcome_id):
+    learner_id = session["user_id"]
+    evidence_type = (request.form.get("evidence_type") or "activity").strip().lower()
+    if evidence_type not in EVIDENCE_TYPE_LABELS:
+        evidence_type = "activity"
+
+    title = (request.form.get("evidence_title") or EVIDENCE_TYPE_LABELS[evidence_type]).strip()
+    description = (request.form.get("evidence_description") or "").strip()
+    simulate_offline = bool(request.form.get("simulate_offline"))
+    file = request.files.get("evidence_file")
+
+    if not description and not (file and file.filename):
+        flash("Please describe the evidence or upload a file before submitting.", "warning")
+        return redirect(url_for("learning.outcome", outcome_id=outcome_id))
+
+    file_path, file_type, file_size, upload_error = save_evidence_file(file, learner_id, outcome_id)
+    if upload_error:
+        flash(upload_error, "danger")
+        return redirect(url_for("learning.outcome", outcome_id=outcome_id))
+
+    conn = get_db()
+    meta = outcome_meta(conn, outcome_id)
+    if not meta:
+        conn.close()
+        return "Learning outcome not found", 404
+
+    entity_type = "evidence"
+    entity_id = outcome_id
+    event_payload = {"outcome_id": outcome_id, "title": title, "evidence_type": evidence_type}
+    activity_id = request.form.get("activity_id")
+
+    if evidence_type == "activity" or (evidence_type in {"project", "investigation"} and activity_id and str(activity_id).isdigit()):
+        if not activity_id or not str(activity_id).isdigit():
+            conn.close()
+            flash("Please choose the activity, project, investigation, or task this evidence belongs to.", "warning")
+            return redirect(url_for("learning.outcome", outcome_id=outcome_id))
+
+        activity = conn.execute("""
+            SELECT activity_id, outcome_id, activity_title, activity_type
+            FROM learning_activities
+            WHERE activity_id=? AND outcome_id=?
+        """, (int(activity_id), outcome_id)).fetchone()
+        if not activity:
+            conn.close()
+            flash("Selected activity was not found for this learning outcome.", "warning")
+            return redirect(url_for("learning.outcome", outcome_id=outcome_id))
+
+        cur = conn.execute("""
+            INSERT INTO activity_submissions
+            (learner_id, activity_id, outcome_id, submission_text, evidence_path, submission_status)
+            VALUES (?, ?, ?, ?, ?, 'Submitted')
+        """, (learner_id, activity["activity_id"], outcome_id, description or title, file_path))
+        entity_type = "activity_submission"
+        entity_id = cur.lastrowid
+        event_payload.update({"submission_id": entity_id, "activity_id": activity["activity_id"]})
+        portfolio_type = f"{activity['activity_type']} Evidence"
+        portfolio_note = f"{activity['activity_title']}: {description or title}"
+        log_type = "Activity Evidence Submitted"
+        audit_action = "ACTIVITY_SUBMISSION"
+
+    elif evidence_type == "reflection":
+        confidence_level = int(request.form.get("confidence_level") or 3)
+        conn.execute("""
+            INSERT INTO learning_reflections
+            (learner_id, outcome_id, reflection_text, confidence_level)
+            VALUES (?, ?, ?, ?)
+        """, (learner_id, outcome_id, description or title, confidence_level))
+        portfolio_type = "Reflection Evidence"
+        portfolio_note = description or title
+        log_type = "Reflection Submitted"
+        audit_action = "REFLECTION_SUBMITTED"
+
+    else:
+        evidence_label = EVIDENCE_TYPE_LABELS[evidence_type]
+        cur = conn.execute("""
+            INSERT INTO practical_evidence
+            (learner_id, subject_id, topic_id, outcome_id, competency_id,
+             evidence_title, evidence_description, file_path, file_type, file_size_bytes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            learner_id,
+            meta["subject_id"],
+            meta["topic_id"],
+            outcome_id,
+            meta["competency_id"],
+            title or evidence_label,
+            description,
+            file_path,
+            file_type,
+            file_size,
+        ))
+        entity_type = "practical_evidence"
+        entity_id = cur.lastrowid
+        event_payload.update({"practical_id": entity_id})
+        portfolio_type = evidence_label
+        portfolio_note = description or title
+        log_type = f"{evidence_label} Submitted"
+        audit_action = "RESOURCE_UPLOAD"
+
+    conn.execute("""
+        INSERT INTO evidence_portfolio (learner_id, outcome_id, evidence_type, evidence_status, evidence_note)
+        VALUES (?, ?, ?, 'Submitted', ?)
+    """, (learner_id, outcome_id, portfolio_type, portfolio_note))
+    conn.execute("""
+        INSERT INTO activity_logs (learner_id, activity_type, activity_description)
+        VALUES (?, ?, ?)
+    """, (learner_id, log_type, portfolio_note))
+    conn.execute("""
+        INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
+        VALUES (?, ?, ?, ?, ?)
+    """, (learner_id, audit_action, entity_type, entity_id, f"{portfolio_type}: {portfolio_note}"))
+
+    if simulate_offline:
+        queue_offline_event(conn, learner_id, "evidence_submission", event_payload)
+
+    progress = evidence_progress(
+        conn,
+        learner_id,
+        outcome_id,
+        bool(conn.execute("SELECT practical_required FROM learning_outcomes WHERE outcome_id=?", (outcome_id,)).fetchone()["practical_required"]),
+    )
+    conn.commit()
+    conn.close()
+    flash(f"{portfolio_type} saved. Evidence progress is now {progress['percentage']}%.", "success")
     return redirect(url_for("learning.outcome", outcome_id=outcome_id))
 
 
@@ -733,7 +1097,7 @@ def submit_assessment(assessment_id):
         unlocked, not_ready = posttest_unlock_status(conn, learner_id, assessment["outcome_id"], required_concepts)
         if not unlocked:
             conn.close()
-            flash("Post-test is locked. First master these practice concept(s): " + ", ".join(not_ready), "warning")
+            flash("Post-test is locked. " + posttest_blocker_summary(not_ready), "warning")
             return redirect(url_for("learning.outcome", outcome_id=assessment["outcome_id"]))
 
     questions = conn.execute("""
@@ -807,6 +1171,7 @@ def submit_assessment(assessment_id):
     improvement = existing["improvement_score"] if existing else 0
     status = existing["mastery_status"] if existing else "In Progress"
     level = existing["mastery_level"] if existing else "Beginning"
+    unlock_blockers = []
 
     if assessment["assessment_type"] == "pretest":
         pre = score
@@ -814,10 +1179,12 @@ def submit_assessment(assessment_id):
         level = mastery_level(score)
     elif assessment["assessment_type"] == "practice":
         practice = score
-        unlocked, not_ready = posttest_unlock_status(conn, learner_id, assessment["outcome_id"], required_concepts)
+        unlocked, unlock_blockers = posttest_unlock_status(conn, learner_id, assessment["outcome_id"], required_concepts)
+        _, concept_blockers = split_posttest_blockers(unlock_blockers)
         status = "Ready for Post-test" if unlocked else "Practice Required"
         level = mastery_level(score)
-        weak_concepts = not_ready
+        if concept_blockers:
+            weak_concepts = concept_blockers
     elif assessment["assessment_type"] == "posttest":
         post = score
         pretest_attempt_for_evidence, _ = get_pretest_weak_concepts(conn, learner_id, assessment["outcome_id"])
@@ -864,8 +1231,11 @@ def submit_assessment(assessment_id):
         mastery_score if assessment["assessment_type"] == "posttest" else None,
     )
 
-    if assessment["assessment_type"] == "practice" and weak_concepts:
-        rec["reason"] += " The next practice set will focus only on these weak concept(s): " + ", ".join(weak_concepts) + "."
+    if assessment["assessment_type"] == "practice":
+        if weak_concepts:
+            rec["reason"] += " The next practice set will focus only on these weak concept(s): " + ", ".join(weak_concepts) + "."
+        if unlock_blockers:
+            rec["reason"] += " Pending before post-test: " + posttest_blocker_summary(unlock_blockers)
 
     conn.execute("""
         INSERT INTO recommendations
@@ -945,7 +1315,7 @@ def submit_assessment(assessment_id):
         if status == "Ready for Post-test":
             flash(f"Practice submitted: {score}%. All concepts reached {PRACTICE_CONCEPT_THRESHOLD}%+. Post-test unlocked.", "success")
         else:
-            flash(f"Practice submitted: {score}%. The system has changed the next questions to your weak concept(s): {', '.join(weak_concepts)}.", "warning")
+            flash(f"Practice submitted: {score}%. Post-test is still locked. {posttest_blocker_summary(unlock_blockers)}", "warning")
     else:
         flash(f"Post-test submitted: {score}%. Algorithm mastery: {mastery_score}%. Status: {status}.", "success")
 

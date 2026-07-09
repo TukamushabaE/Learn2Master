@@ -9,3 +9,39 @@
 2026-07-05 19:00:34,617 INFO: Database tables appear to be missing. Initializing... [in /app/app.py:101]
 2026-07-05 19:00:34,785 INFO: Database initialization complete. [in /app/app.py:109]
 2026-07-05 19:00:50,460 INFO: Learn2Master startup [in /app/app.py:85]
+2026-07-05 23:43:11,535 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]
+2026-07-05 23:45:13,455 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]
+2026-07-05 23:53:02,628 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]
+2026-07-05 23:53:31,194 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]
+2026-07-05 23:54:57,966 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]
+2026-07-06 01:41:12,335 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]
+2026-07-06 01:41:31,994 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]
+2026-07-06 01:43:46,121 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]
+2026-07-06 01:44:04,397 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]
+2026-07-06 13:03:25,044 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]
+2026-07-06 13:04:15,827 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]
+2026-07-06 13:04:36,158 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]
+2026-07-06 13:18:07,799 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]
+2026-07-06 16:57:57,444 ERROR: Exception on /teacher/kb/upload [GET] [in C:\Program Files\Python314\Lib\site-packages\flask\app.py:875]
+Traceback (most recent call last):
+  File "C:\Program Files\Python314\Lib\site-packages\flask\app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "C:\Program Files\Python314\Lib\site-packages\flask\app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "C:\Program Files\Python314\Lib\site-packages\flask\app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "C:\Program Files\Python314\Lib\site-packages\flask\app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\routes\guards.py", line 40, in wrapped_view
+    return view(*args, **kwargs)
+  File "C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\security.py", line 29, in wrapped_view
+    return view(*args, **kwargs)
+  File "C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\routes\teacher.py", line 736, in teacher_kb_upload
+    import magic
+  File "C:\Users\user\AppData\Roaming\Python\Python314\site-packages\magic\__init__.py", line 209, in <module>
+    libmagic = loader.load_lib()
+  File "C:\Users\user\AppData\Roaming\Python\Python314\site-packages\magic\loader.py", line 49, in load_lib
+    raise ImportError('failed to find libmagic.  Check your installation')
+ImportError: failed to find libmagic.  Check your installation
+2026-07-09 17:04:37,391 INFO: Learn2Master startup [in C:\Advanced OOP\New REC files\learn2master_v8_full_proposal_aligned\learn2master_v8_dissertation_final\app.py:92]

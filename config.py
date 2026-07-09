@@ -1,24 +1,27 @@
 import os
-from dotenv import load_dotenv
 
 try:
     from dotenv import load_dotenv
 except ImportError:  # Keeps the prototype runnable before dependencies are installed.
     load_dotenv = None
 
-if load_dotenv:
-    load_dotenv()
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(BASE_DIR, '.env'))
+
+if load_dotenv:
+    load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+
+def env_flag(name, default="0"):
+    return os.environ.get(name, default).lower() in {"1", "true", "yes", "on"}
 
 class Config:
     SECRET_KEY = os.environ.get("LEARN2MASTER_SECRET_KEY") or os.environ.get("SECRET_KEY") or "dev-only-change-me"
-    DEBUG = os.environ.get("LEARN2MASTER_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
+    DEBUG = env_flag("LEARN2MASTER_DEBUG")
+    FORCE_HTTPS = env_flag("LEARN2MASTER_FORCE_HTTPS")
 
     # Session Security
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SECURE = not DEBUG
+    SESSION_COOKIE_SECURE = FORCE_HTTPS
     MAX_CONTENT_LENGTH = int(os.environ.get("LEARN2MASTER_MAX_UPLOAD_BYTES", 5 * 1024 * 1024))
     CSRF_ENABLED = os.environ.get("LEARN2MASTER_CSRF_ENABLED", "1").lower() not in {"0", "false", "no", "off"}
     UPLOAD_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".txt", ".doc", ".docx", ".py", ".zip"}

@@ -74,6 +74,21 @@
             {% endfor %}
         </div>
 
+        <h3>Evidence Portfolio Progress</h3>
+        <div class="evidence-progress-card">
+            <div class="progress-summary">
+                <div>
+                    <span class="subject-code">Submitted Evidence</span>
+                    <strong>{{ evidence_progress.completed }}/{{ evidence_progress.total_required }}</strong>
+                    <small>{{ evidence_progress.activity_completed }}/{{ evidence_progress.activity_total }} activity/project task(s), reflection {% if evidence_progress.reflection_done %}done{% else %}pending{% endif %}{% if evidence_progress.practical_required %}, practical evidence {% if evidence_progress.practical_done %}done{% else %}pending{% endif %}{% endif %}</small>
+                </div>
+                <div class="progress-percent">{{ evidence_progress.percentage }}%</div>
+            </div>
+            <div class="progress-track evidence-track">
+                <div class="progress-fill" style="width: {{ evidence_progress.percentage }}%;"></div>
+            </div>
+        </div>
+
         {% if concept_map %}
         <h3>Concept-Level Mastery</h3>
         <div class="concept-grid">
@@ -212,23 +227,30 @@
     <div class="assessment-header">
         <p class="eyebrow">Learning Activities</p>
         <h2>CBC Practice Activities</h2>
-        <p>These activities help the learner master the concept before post-test evidence is collected.</p>
+        <p>Each task states what to do and what evidence to submit. Use the evidence center below to submit completed work in parts as you finish it.</p>
     </div>
     <div class="activity-grid">
-        {% for activity in activities %}
+        {% for item in activity_cards %}
+        {% set activity = item.activity %}
         <div class="activity-card">
             <span>{{ activity.activity_type }}</span>
             <h3>{{ activity.activity_title }}</h3>
             <p>{{ activity.activity_description }}</p>
-            <form method="POST" action="{{ url_for('learning.submit_activity', activity_id=activity.activity_id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <textarea name="submission_text" rows="3" required placeholder="Describe what you did, observed, created, discussed, or solved..." style="width:100%;border-radius:14px;padding:12px;border:1px solid #dbe3ef;"></textarea>
-                <label class="option-row">
-                    <input type="checkbox" name="simulate_offline" value="1">
-                    <span>Queue as offline evidence</span>
-                </label>
-                <button class="btn-primary" type="submit">Submit Activity Evidence</button>
-            </form>
+            <div class="activity-instruction">
+                <strong>What to do</strong>
+                <p>{{ item.guidance.learning }}</p>
+            </div>
+            <div class="activity-instruction">
+                <strong>Evidence to submit</strong>
+                <p>{{ item.guidance.evidence }}</p>
+            </div>
+            <div class="activity-status {% if item.submission_count %}done{% else %}pending{% endif %}">
+                {% if item.submission_count %}
+                    Submitted {{ item.submission_count }} time(s). Latest: {{ item.latest_submission }}
+                {% else %}
+                    Pending evidence
+                {% endif %}
+            </div>
         </div>
         {% endfor %}
     </div>
@@ -236,32 +258,55 @@
 
 <section class="assessment-panel">
     <div class="assessment-header">
-        <p class="eyebrow">Practical Evidence Portfolio</p>
-        <h2>Upload Practical / Project Evidence</h2>
-        <p>For Physics and ICT, learners may submit experiment photos, screenshots, code files, or short reports. Teacher review supports CBC practical-skill evidence.</p>
+        <p class="eyebrow">Evidence Submission Center</p>
+        <h2>Submit Evidence and Update Progress</h2>
+        <p>Use this one form for activity evidence, projects, investigations, practical work, screenshots, code files, documents, photos, or reflection evidence. Submit what you have now; your evidence progress will increase as you add more completed parts.</p>
     </div>
     {% if practical_evidence %}
         <div class="adaptive-item">
-            <strong>{{ practical_evidence.evidence_title }}</strong>
+            <strong>Latest practical/project evidence: {{ practical_evidence.evidence_title }}</strong>
             <p>{{ practical_evidence.evidence_description }}</p>
             <small>Teacher status: {{ practical_evidence.teacher_status }}</small>
         </div>
     {% endif %}
-    <form method="POST" enctype="multipart/form-data" action="{{ url_for('learning.submit_practical_evidence', outcome_id=outcome.outcome_id) }}">
+    <form method="POST" enctype="multipart/form-data" action="{{ url_for('learning.submit_outcome_evidence', outcome_id=outcome.outcome_id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="question-card">
+            <h3>Evidence type</h3>
+            <select name="evidence_type" required style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;">
+                {% for key, label in evidence_type_labels.items() %}
+                    <option value="{{ key }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+            <h3>Activity / project / investigation task</h3>
+            <select name="activity_id" style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;">
+                <option value="">Select only when submitting activity evidence</option>
+                {% for item in activity_cards %}
+                    <option value="{{ item.activity.activity_id }}">{{ item.activity.activity_type }} - {{ item.activity.activity_title }}</option>
+                {% endfor %}
+            </select>
             <h3>Evidence title</h3>
-            <input name="evidence_title" required placeholder="e.g. Vernier caliper practical report" style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;">
-            <h3>Evidence description</h3>
-            <textarea name="evidence_description" rows="3" placeholder="Describe what you did and what this evidence proves..." style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;"></textarea>
+            <input name="evidence_title" placeholder="e.g. Vernier caliper report, ICT tool selection project, group discussion notes" style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;">
+            <h3>Evidence description or reflection</h3>
+            <textarea name="evidence_description" rows="4" placeholder="Describe what you did, observed, created, solved, discussed, or reflected on. Explain what this evidence proves." style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;"></textarea>
             <h3>Optional file</h3>
             <input type="file" name="evidence_file">
+            <label class="option-row" style="margin-top:12px;">
+                <span>Confidence level for reflection evidence</span>
+                <select name="confidence_level" style="margin-left:12px;padding:8px;border-radius:10px;">
+                    <option value="1">1 - Not confident</option>
+                    <option value="2">2 - Slightly confident</option>
+                    <option value="3" selected>3 - Fairly confident</option>
+                    <option value="4">4 - Confident</option>
+                    <option value="5">5 - Very confident</option>
+                </select>
+            </label>
             <label class="option-row" style="margin-top:12px;">
                 <input type="checkbox" name="simulate_offline" value="1">
                 <span>Queue this evidence as an offline submission</span>
             </label>
         </div>
-        <button class="btn-primary" type="submit">Submit Practical Evidence</button>
+        <button class="btn-primary" type="submit">Submit Evidence and Update Progress</button>
     </form>
 </section>
 
@@ -282,32 +327,10 @@
             <small>Confidence level: {{ reflection.confidence_level }}/5</small>
         </div>
     {% else %}
-        <form method="POST" action="{{ url_for('learning.submit_reflection', outcome_id=outcome.outcome_id) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="question-card">
-                <h3>What have you understood from this learning activity?</h3>
-                <textarea name="reflection_text" rows="4" required placeholder="Write your reflection here..." style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;"></textarea>
-                <h3>What concept was most difficult?</h3>
-                <input name="difficult_concept" placeholder="e.g. Reading the smallest scale division" style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;">
-                <h3>What helped you understand?</h3>
-                <input name="helpful_strategy" placeholder="e.g. Worked example, group discussion, diagram, practical activity" style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;">
-                <h3>How can you apply this in real life?</h3>
-                <textarea name="real_life_application" rows="3" placeholder="Connect the concept to school, home or community use..." style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;"></textarea>
-                <h3>What support do you still need?</h3>
-                <input name="support_needed" placeholder="e.g. More practice, teacher demonstration, peer support" style="width:100%;border-radius:14px;padding:14px;border:1px solid #dbe3ef;">
-                <label class="option-row" style="margin-top:12px;">
-                    <span>Confidence level</span>
-                    <select name="confidence_level" style="margin-left:12px;padding:8px;border-radius:10px;">
-                        <option value="1">1 - Not confident</option>
-                        <option value="2">2 - Slightly confident</option>
-                        <option value="3" selected>3 - Fairly confident</option>
-                        <option value="4">4 - Confident</option>
-                        <option value="5">5 - Very confident</option>
-                    </select>
-                </label>
-            </div>
-            <button class="btn-primary" type="submit">Save Reflection Evidence</button>
-        </form>
+        <div class="adaptive-item">
+            <strong>Reflection pending</strong>
+            <p>Use the Evidence Submission Center above and choose Reflection Evidence. Explain what was difficult, what helped, your confidence level, and how you will apply the idea in real life.</p>
+        </div>
     {% endif %}
 </section>
 
@@ -317,14 +340,21 @@
         <h2>{{ practice.assessment_title }}</h2>
         {% if posttest_unlocked %}
             <p>All concept practice scores are at least {{ practice_threshold }}%. The post-test is now unlocked.</p>
+        {% elif needs_more_practice %}
+            <p>Continue adaptive practice for:
+                <strong>{% if weak_concepts %}{{ weak_concepts|join(', ')|replace('_', ' ')|title }}{% else %}this outcome{% endif %}</strong>.
+                Reach {{ practice_threshold }}% or above before the post-test opens.</p>
         {% else %}
-            <p>The system has changed the question set to focus on weak concept(s):
-                <strong>{{ weak_concepts|join(', ')|replace('_', ' ')|title }}</strong>.
-                Master each concept at {{ practice_threshold }}% or above before the post-test opens.</p>
+            <p>Practice is complete. Finish the pending evidence requirement below to open the post-test.</p>
         {% endif %}
     </div>
-    {% if not posttest_unlocked %}
+    {% if not posttest_unlocked and practice_items %}
         {{ assessment_form(practice, practice_items, 'Submit Adaptive Practice') }}
+    {% elif not posttest_unlocked and pretest_attempt %}
+        <div class="adaptive-item">
+            <strong>No extra practice is required right now.</strong>
+            <p>Complete the pending evidence item below, then the post-test will open automatically.</p>
+        </div>
     {% endif %}
 </section>
 {% endif %}
@@ -334,8 +364,17 @@
 <section class="assessment-panel remediation-panel">
     <div class="assessment-header">
         <p class="eyebrow">Post-test Locked</p>
-        <h2>Master Weak Concepts First</h2>
-        <p>The post-test will open after these concept(s) reach {{ practice_threshold }}% in practice: <strong>{{ concepts_not_ready|join(', ')|replace('_', ' ')|title }}</strong>.</p>
+        <h2>Complete Required Evidence</h2>
+        <p>The post-test will open when each pending requirement below is complete.</p>
+    </div>
+    <div class="concept-grid">
+        {% for blocker in posttest_blockers %}
+        <div class="concept-pill weak">
+            <span>{{ blocker.title }}</span>
+            <strong>Pending</strong>
+            <small>{{ blocker.detail }}</small>
+        </div>
+        {% endfor %}
     </div>
 </section>
 {% endif %}

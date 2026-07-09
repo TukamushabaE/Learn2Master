@@ -1,3 +1,5 @@
+from io import BytesIO
+
 from conftest import assessment_id, correct_answers, csrf_token, login, outcome_id
 from werkzeug.security import generate_password_hash
 
@@ -281,6 +283,51 @@ def test_assessment_flow_mastery_unlocks_next_outcome(client, db):
         data["csrf_token"] = csrf_token(client)
         response = client.post(f"/assessment/{aid}/submit", data=data, follow_redirects=False)
         assert response.status_code == 302
+
+    response = client.get(f"/outcome/{ict_lo1}")
+    assert response.status_code == 200
+    assert b"Complete Required Evidence" in response.data
+    assert b"Reflection Required" in response.data
+    assert b"No extra practice is required right now." in response.data
+    assert b"Post-test Stage" not in response.data
+    assert b"Evidence Portfolio Progress" in response.data
+
+    learner = db.execute("SELECT user_id FROM users WHERE username = 'elijah'").fetchone()
+    activity = db.execute(
+        "SELECT activity_id FROM learning_activities WHERE outcome_id = ? ORDER BY activity_id LIMIT 1",
+        (ict_lo1,),
+    ).fetchone()
+    response = client.post(
+        f"/outcome/{ict_lo1}/evidence",
+        data={
+            "evidence_type": "activity",
+            "activity_id": str(activity["activity_id"]),
+            "evidence_title": "Concept map evidence",
+            "evidence_description": "I completed the concept map and labelled the ICT process.",
+            "evidence_file": (BytesIO(b"concept map evidence"), "concept-map.txt"),
+            "csrf_token": csrf_token(client),
+        },
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+
+    activity_submission = db.execute("""
+        SELECT submission_text, evidence_path
+        FROM activity_submissions
+        WHERE learner_id = ? AND outcome_id = ? AND activity_id = ?
+    """, (learner["user_id"], ict_lo1, activity["activity_id"])).fetchone()
+    portfolio = db.execute("""
+        SELECT COUNT(*) AS total
+        FROM evidence_portfolio
+        WHERE learner_id = ? AND outcome_id = ? AND evidence_type LIKE '%Evidence'
+    """, (learner["user_id"], ict_lo1)).fetchone()
+    assert activity_submission["submission_text"].startswith("I completed")
+    assert activity_submission["evidence_path"]
+    assert portfolio["total"] >= 1
+
+    response = client.get(f"/outcome/{ict_lo1}")
+    assert b"Submitted 1 time" in response.data
 
     response = client.post(
         f"/outcome/{ict_lo1}/reflection",

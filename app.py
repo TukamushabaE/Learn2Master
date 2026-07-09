@@ -58,7 +58,7 @@ csp = {
 }
 talisman.init_app(
     app,
-    force_https=(not app.debug and not os.environ.get('TESTING')),
+    force_https=(app.config.get("FORCE_HTTPS", False) and not os.environ.get("TESTING")),
     content_security_policy=csp
 )
 limiter.init_app(app)

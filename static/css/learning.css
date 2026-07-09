@@ -156,6 +156,64 @@
 .adaptive-item small, .activity-card span { color:#0d47a1; font-weight:800; }
 .small-link { color:#0d47a1; font-weight:800; text-decoration:none; }
 .activity-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:16px; }
+.activity-instruction {
+    border-top: 1px solid #e2e8f0;
+    margin-top: 12px;
+    padding-top: 12px;
+}
+.activity-instruction strong {
+    display: block;
+    color: #0f172a;
+    margin-bottom: 4px;
+}
+.activity-status {
+    margin-top: 12px;
+    border-radius: 14px;
+    padding: 10px 12px;
+    font-weight: 800;
+}
+.activity-status.pending {
+    background: #fff7ed;
+    color: #9a3412;
+}
+.activity-status.done {
+    background: #ecfdf5;
+    color: #166534;
+}
+.evidence-progress-card {
+    margin-top: 14px;
+    border: 1px solid #dbe3ef;
+    border-radius: 18px;
+    padding: 16px;
+    background: #f8fafc;
+}
+.progress-summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+}
+.progress-summary strong {
+    display: block;
+    color: #0f172a;
+    font-size: 24px;
+}
+.progress-summary small {
+    display: block;
+    color: #64748b;
+    margin-top: 4px;
+}
+.progress-percent {
+    min-width: 88px;
+    text-align: right;
+    color: #0d47a1;
+    font-size: 30px;
+    font-weight: 900;
+}
+.evidence-track {
+    margin-top: 12px;
+    height: 12px;
+}
 .visual-resource {
     overflow: hidden;
 }

@@ -13,20 +13,29 @@ import database
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJECT_DB = os.path.join(BASE_DIR, "learn2master.db")
+MASTER_DB_DIR = os.path.join(BASE_DIR, ".tmp_test_data")
+MASTER_DB = os.path.join(MASTER_DB_DIR, "learn2master.db")
 
 @pytest.fixture(scope="session", autouse=True)
 def master_db():
     env = os.environ.copy()
+    os.makedirs(MASTER_DB_DIR, exist_ok=True)
+    if os.path.exists(MASTER_DB):
+        os.remove(MASTER_DB)
+
+    conn = sqlite3.connect(MASTER_DB)
+    with open(os.path.join(BASE_DIR, "database_v2.sql"), "r", encoding="utf-8") as schema:
+        conn.executescript(schema.read())
+    conn.commit()
+    conn.close()
+
     env.pop("DATABASE_URL", None)
-    if os.path.exists(PROJECT_DB):
-        os.remove(PROJECT_DB)
-    subprocess.run([sys.executable, "init_db.py"], cwd=BASE_DIR, env=env, check=True, capture_output=True)
-    subprocess.run([sys.executable, "seed_data.py"], cwd=BASE_DIR, env=env, check=True, capture_output=True)
+    subprocess.run([sys.executable, os.path.join(BASE_DIR, "seed_data.py")], cwd=MASTER_DB_DIR, env=env, check=True, capture_output=True)
 
 @pytest.fixture()
 def app(tmp_path):
     db_path = tmp_path / "test.db"
-    shutil.copyfile(PROJECT_DB, str(db_path))
+    shutil.copyfile(MASTER_DB, str(db_path))
 
     # Update globals
     database.DATABASE = str(db_path)
