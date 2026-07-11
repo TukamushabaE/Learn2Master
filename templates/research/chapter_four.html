@@ -1,0 +1,50 @@
+{% extends "layouts/base.html" %}
+{% block title %}Chapter Four Report{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>.print-actions{display:flex;gap:10px;justify-content:flex-end;margin-bottom:14px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.chapter-table{width:100%;border-collapse:collapse;margin-top:10px}.chapter-table th,.chapter-table td{border:1px solid #e2e9f2;padding:8px;text-align:left;vertical-align:top}.chapter-table th{background:#f6f9fd}.chapter-section{break-inside:avoid}@media print{.sidebar,.topbar,.footer,.print-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}.chapter-table{font-size:11px}}</style>
+{% endblock %}
+{% macro table_block(title, columns, rows) %}
+<section class="learn-card chapter-section">
+  <h2>{{ title }}</h2>
+  <table class="chapter-table">
+    <thead><tr>{% for key,label in columns %}<th>{{ label }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for row in rows[:12] %}
+      <tr>{% for key,label in columns %}<td>{{ row.get(key, '') }}</td>{% endfor %}</tr>
+      {% else %}
+      <tr><td colspan="{{ columns|length }}">{{ no_data }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endmacro %}
+{% block content %}
+<div class="print-actions">
+  <a class="button" href="{{ url_for('research.export_full_dataset') }}">Export Full Dataset</a>
+  <button class="button" onclick="window.print()">Print Chapter Four</button>
+</div>
+<section class="hero-panel">
+  <div><p class="eyebrow">Dissertation Chapter Four</p><h1>Research Results Report</h1><p>Printable summary tables for participant profile, pre/post results, gain, mastery, teacher oversight, user acceptance and system usage.</p></div>
+  <div class="hero-badge"><span>Participants</span><strong>{{ metrics.total_participants }}</strong></div>
+</section>
+{{ table_block('Table 4.1 Participant Summary', [('participant_code','Code'),('user_id','User ID'),('role_name','Role'),('school_name','School'),('class_name','Class'),('subject_name','Subject'),('study_phase','Phase'),('active_status','Status')], participants) }}
+{{ table_block('Table 4.2 Pre-test Results', [('participant_code','Code'),('subject','Subject'),('learning_outcome','Outcome'),('score','Score'),('total_marks','Total'),('percentage','Percentage'),('concepts_weak','Weak Concepts')], pretest) }}
+{{ table_block('Table 4.3 Post-test Results', [('participant_code','Code'),('subject','Subject'),('learning_outcome','Outcome'),('score','Score'),('total_marks','Total'),('percentage','Percentage'),('concepts_weak','Weak Concepts')], posttest) }}
+{{ table_block('Table 4.4 Learning Gain', [('participant_code','Code'),('subject','Subject'),('learning_outcome','Outcome'),('pre_test','Pre'),('post_test','Post'),('learning_gain','Gain'),('normalized_gain','Normalized Gain')], learning_gain) }}
+<section class="learn-card chapter-section">
+  <h2>Table 4.5 Mastery Attainment</h2>
+  <p>Mastery attainment rate: <strong>{{ mastery_summary.mastery_attainment_rate }}%</strong>; average attempts to mastery: <strong>{{ mastery_summary.average_attempts_to_mastery }}</strong>; average time to mastery: <strong>{{ mastery_summary.average_time_to_mastery }}h</strong>.</p>
+  <table class="chapter-table"><thead><tr><th>Code</th><th>Outcome</th><th>Status</th><th>Score</th><th>Attempts</th><th>Time</th></tr></thead><tbody>{% for row in mastery[:12] %}<tr><td>{{ row.participant_code }}</td><td>{{ row.learning_outcome }}</td><td>{{ row.mastery_status }}</td><td>{{ row.mastery_score }}</td><td>{{ row.attempts }}</td><td>{{ row.time_to_mastery }}</td></tr>{% else %}<tr><td colspan="6">{{ no_data }}</td></tr>{% endfor %}</tbody></table>
+</section>
+<section class="learn-card chapter-section">
+  <h2>Table 4.6 Teacher Oversight</h2>
+  <p>Interventions: <strong>{{ teacher_summary.number_of_interventions }}</strong>; approval rate: <strong>{{ teacher_summary.approval_rate }}%</strong>; override rate: <strong>{{ teacher_summary.override_rate }}%</strong>; practical evidence reviewed: <strong>{{ teacher_summary.practical_evidence_reviewed }}</strong>.</p>
+</section>
+{{ table_block('Table 4.7 User Acceptance', [('questionnaire_title','Questionnaire'),('respondent_role','Role'),('construct_name','Construct'),('average_score','Average'),('responses','Responses')], questionnaire_results) }}
+<section class="learn-card chapter-section">
+  <h2>Table 4.8 System Usage</h2>
+  <p>System usage count: <strong>{{ metrics.system_usage_count }}</strong>; AI recommendations: <strong>{{ metrics.ai_recommendations }}</strong>; latest data collection activity: <strong>{{ metrics.latest_data_collection_activity }}</strong>.</p>
+  <table class="chapter-table"><thead><tr><th>Source</th><th>Participant</th><th>Action</th><th>Details</th><th>Date</th></tr></thead><tbody>{% for row in system_logs %}<tr><td>{{ row.source }}</td><td>{{ row.participant_code }}</td><td>{{ row.action }}</td><td>{{ row.details }}</td><td>{{ row.created_at }}</td></tr>{% else %}<tr><td colspan="5">{{ no_data }}</td></tr>{% endfor %}</tbody></table>
+</section>
+{% endblock %}

@@ -62,6 +62,10 @@ def subject_detail(subject_id):
     if not subject:
         conn.close()
         return "Subject not found", 404
+    conn.execute("""
+        INSERT INTO activity_logs (learner_id, activity_type, activity_description)
+        VALUES (?, 'Subject Opened', ?)
+    """, (learner_id, f"Opened subject {subject['subject_name']}"))
 
     pathways = conn.execute("""
         SELECT course_id, course_title, course_description, difficulty_level
@@ -88,5 +92,6 @@ def subject_detail(subject_id):
         progress = round((mastered / total) * 100) if total else 0
         pathway_cards.append({"pathway": p, "progress": progress, "mastered": mastered, "total": total})
 
+    conn.commit()
     conn.close()
     return render_template("subject_detail.html", subject=subject, pathway_cards=pathway_cards)

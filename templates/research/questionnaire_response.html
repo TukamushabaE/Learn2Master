@@ -1,0 +1,34 @@
+{% extends "layouts/base.html" %}
+{% block title %}{{ questionnaire.questionnaire_title }}{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>.likert-row{border-bottom:1px solid #e7edf5;padding:14px 0}.likert-options{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}.likert-options label{display:flex;gap:6px;align-items:center;font-weight:700}.comment{width:100%;border:1px solid #d7e0ea;border-radius:8px;padding:8px;margin-top:8px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}</style>
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div><p class="eyebrow">5-point Likert Questionnaire</p><h1>{{ questionnaire.questionnaire_title }}</h1><p>{{ questionnaire.questionnaire_description }}</p></div>
+  <div class="hero-badge"><span>Items</span><strong>{{ items|length }}</strong></div>
+</section>
+<section class="learn-card">
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for item in items %}
+    <div class="likert-row">
+      <strong>{{ loop.index }}. {{ item.item_text }}</strong>
+      <p class="eyebrow">{{ item.construct_name }}</p>
+      <div class="likert-options">
+        {% for score,label in [(1,'Strongly Disagree'),(2,'Disagree'),(3,'Neutral'),(4,'Agree'),(5,'Agree Strongly')] %}
+        <label><input type="radio" name="score_{{ item.id }}" value="{{ score }}" required> {{ score }} {{ label }}</label>
+        {% endfor %}
+      </div>
+      <input class="comment" name="comment_{{ item.id }}" placeholder="Optional comment">
+    </div>
+    {% else %}
+    <p>No data yet.</p>
+    {% endfor %}
+    {% if items %}
+    <button class="button" type="submit">Submit Response</button>
+    {% endif %}
+  </form>
+</section>
+{% endblock %}

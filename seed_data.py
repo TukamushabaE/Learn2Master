@@ -1,15 +1,25 @@
-import sqlite3
+import os
 from werkzeug.security import generate_password_hash
 
-DB_NAME = "learn2master.db"
-conn = sqlite3.connect(DB_NAME)
-conn.row_factory = sqlite3.Row
+from database import get_db
+
+conn = get_db()
 cur = conn.cursor()
 
 
 def get_id(query, params=()):
     row = cur.execute(query, params).fetchone()
     return row[0] if row else None
+
+
+def required_password(env_name):
+    value = os.environ.get(env_name)
+    if not value:
+        raise RuntimeError(
+            f"{env_name} is required before running seed_data.py. "
+            "Do not hard-code production seed passwords."
+        )
+    return value
 
 
 # Roles, school, class, users
@@ -19,34 +29,42 @@ school_admin_role = get_id("SELECT role_id FROM roles WHERE role_name='school_ad
 super_admin_role = get_id("SELECT role_id FROM roles WHERE role_name='super_admin'")
 school_id = get_id("SELECT school_id FROM schools WHERE school_name='Kigezi High School'")
 
-cur.execute("INSERT OR IGNORE INTO classes (class_name, school_id) VALUES (?, ?)", ("Senior One", school_id))
+cur.execute("""
+    INSERT INTO classes (class_name, school_id)
+    SELECT ?, ?
+    WHERE NOT EXISTS (
+        SELECT 1 FROM classes WHERE class_name=? AND school_id=?
+    )
+""", ("Senior One", school_id, "Senior One", school_id))
 class_id = get_id("SELECT class_id FROM classes WHERE class_name='Senior One'")
-cur.execute("INSERT OR IGNORE INTO terms (term_name, sequence_order) VALUES (?, ?)", ("Term One", 1))
+cur.execute("INSERT INTO terms (term_name, sequence_order) VALUES (?, ?) ON CONFLICT DO NOTHING", ("Term One", 1))
 term_id = get_id("SELECT term_id FROM terms WHERE term_name='Term One'")
 
 users = [
-    ("Tukamushaba Elijah", "elijah", "elijah@example.com", "12345", learner_role, school_id, "Learner", 1),
-    ("ICT Physics Teacher", "teacher", "teacher@example.com", "12345", teacher_role, school_id, "Teacher", 3),
-    ("School Administrator", "admin", "admin@example.com", "12345", school_admin_role, school_id, "School Administrator", 4),
-    ("System Owner", "superadmin", "superadmin@example.com", "12345", super_admin_role, school_id, "Super Administrator", 5),
+    ("Tukamushaba Elijah", "elijah", "elijah@example.com", required_password("LEARN2MASTER_SEED_LEARNER_PASSWORD"), learner_role, school_id, "Learner", 1),
+    ("ICT Physics Teacher", "teacher", "teacher@example.com", required_password("LEARN2MASTER_SEED_TEACHER_PASSWORD"), teacher_role, school_id, "Teacher", 3),
+    ("School Administrator", "admin", "admin@example.com", required_password("LEARN2MASTER_SEED_SCHOOL_ADMIN_PASSWORD"), school_admin_role, school_id, "School Administrator", 4),
+    ("System Owner", "superadmin", "superadmin@example.com", required_password("LEARN2MASTER_SEED_SUPER_ADMIN_PASSWORD"), super_admin_role, school_id, "Super Administrator", 5),
 ]
 
 for full_name, username, email, password, role_id, sid, title, security_level in users:
     cur.execute("""
-        INSERT OR IGNORE INTO users
+        INSERT INTO users
         (full_name, username, email, password_hash, role_id, school_id, title,
          account_status, security_level, approved_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, 'Active', ?, CURRENT_TIMESTAMP)
+        ON CONFLICT DO NOTHING
     """, (full_name, username, email, generate_password_hash(password), role_id, sid, title, security_level))
 
 learner_id = get_id("SELECT user_id FROM users WHERE username='elijah'")
 teacher_id = get_id("SELECT user_id FROM users WHERE username='teacher'")
-cur.execute("INSERT OR IGNORE INTO enrollments (learner_id, class_id) VALUES (?, ?)", (learner_id, class_id))
+cur.execute("INSERT INTO enrollments (learner_id, class_id) VALUES (?, ?) ON CONFLICT DO NOTHING", (learner_id, class_id))
 cur.execute("""
-    INSERT OR IGNORE INTO learner_profiles
+    INSERT INTO learner_profiles
     (learner_id, class_level, learning_style, learning_pace, preferred_support, ai_profile_summary)
     VALUES (?, 'Senior One', 'Adaptive / Mixed', 'Not yet classified', 'Notes, video, worked examples and guided practice',
             'Initial learner profile. The AI profile updates after pre-test, practice, reflection and post-test evidence.')
+    ON CONFLICT DO NOTHING
 """, (learner_id,))
 
 # Subjects
@@ -54,10 +72,29 @@ ict_subject = get_id("SELECT subject_id FROM subjects WHERE subject_name='ICT'")
 physics_subject = get_id("SELECT subject_id FROM subjects WHERE subject_name='Physics'")
 for subject_id in (ict_subject, physics_subject):
     cur.execute("""
-        INSERT OR IGNORE INTO teacher_subject_assignments
+        INSERT INTO teacher_subject_assignments
         (teacher_id, subject_id, class_id, school_id, assigned_by)
         VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT DO NOTHING
     """, (teacher_id, subject_id, class_id, school_id, get_id("SELECT user_id FROM users WHERE username='admin'")))
+
+research_participants = [
+    ("L001", learner_id, school_id, class_id, ict_subject, "Pilot", "Granted", "Granted", "Granted", "Active"),
+    ("T001", teacher_id, school_id, class_id, ict_subject, "Pilot", "Granted", "Not Applicable", "Not Applicable", "Active"),
+]
+for participant_code, user_id, sid, cid, subject_id, phase, consent, assent, parent_consent, active_status in research_participants:
+    cur.execute("""
+        INSERT INTO research_participants
+        (participant_code, user_id, school_id, class_id, subject_id, study_phase,
+         consent_status, assent_status, parent_consent_status, active_status)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE NOT EXISTS (
+            SELECT 1 FROM research_participants WHERE participant_code=?
+        )
+    """, (
+        participant_code, user_id, sid, cid, subject_id, phase,
+        consent, assent, parent_consent, active_status, participant_code,
+    ))
 
 topics = [
     (ict_subject, "Introduction to ICT", "Senior One", "Uganda NCDC ICT syllabus", "Computer systems, ICT tools, applications, safety, and responsible use."),
@@ -79,8 +116,9 @@ strand_rows = [
 ]
 for subject_id, strand_name, strand_description in strand_rows:
     cur.execute("""
-        INSERT OR IGNORE INTO strands (subject_id, strand_name, strand_description)
+        INSERT INTO strands (subject_id, strand_name, strand_description)
         VALUES (?, ?, ?)
+        ON CONFLICT DO NOTHING
     """, (subject_id, strand_name, strand_description))
 
 ict_strand = get_id("SELECT strand_id FROM strands WHERE strand_name='Computer Systems and ICT Tools'")
@@ -91,8 +129,9 @@ sub_strand_rows = [
 ]
 for strand_id, sub_name, sub_desc in sub_strand_rows:
     cur.execute("""
-        INSERT OR IGNORE INTO sub_strands (strand_id, sub_strand_name, sub_strand_description)
+        INSERT INTO sub_strands (strand_id, sub_strand_name, sub_strand_description)
         VALUES (?, ?, ?)
+        ON CONFLICT DO NOTHING
     """, (strand_id, sub_name, sub_desc))
 
 ict_substrand = get_id("SELECT sub_strand_id FROM sub_strands WHERE sub_strand_name='ICT concepts, tools and responsible use'")
@@ -104,9 +143,10 @@ competencies = [
 ]
 for subject_id, code, name, desc in competencies:
     cur.execute("""
-        INSERT OR IGNORE INTO competencies
+        INSERT INTO competencies
         (subject_id, competency_code, competency_name, competency_description)
         VALUES (?, ?, ?, ?)
+        ON CONFLICT DO NOTHING
     """, (subject_id, code, name, desc))
 
 cur.execute("UPDATE competencies SET topic_id=?, sub_strand_id=? WHERE competency_code='ICT-S1-T1'", (ict_topic, ict_substrand))
@@ -144,9 +184,10 @@ outcomes = [
 ]
 for item in outcomes:
     cur.execute("""
-        INSERT OR IGNORE INTO learning_outcomes
+        INSERT INTO learning_outcomes
         (competency_id, outcome_code, outcome_name, outcome_description, mastery_threshold, sequence_order)
         VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT DO NOTHING
     """, item)
 
 cur.execute("UPDATE learning_outcomes SET topic_id=?, sub_strand_id=? WHERE competency_id=?", (ict_topic, ict_substrand, ict_comp))
@@ -162,7 +203,7 @@ generic_skill_rows = [
     ("Self-directed learning", "Learners monitor progress, reflect and act on feedback."),
 ]
 for name, desc in generic_skill_rows:
-    cur.execute("INSERT OR IGNORE INTO generic_skills (skill_name, skill_description) VALUES (?, ?)", (name, desc))
+    cur.execute("INSERT INTO generic_skills (skill_name, skill_description) VALUES (?, ?) ON CONFLICT DO NOTHING", (name, desc))
 
 value_rows = [
     ("Responsibility", "Use equipment, data and shared spaces responsibly."),
@@ -170,7 +211,7 @@ value_rows = [
     ("Respect", "Respect peers, teachers, data privacy and school property."),
 ]
 for name, desc in value_rows:
-    cur.execute("INSERT OR IGNORE INTO curriculum_values (value_name, value_description) VALUES (?, ?)", (name, desc))
+    cur.execute("INSERT INTO curriculum_values (value_name, value_description) VALUES (?, ?) ON CONFLICT DO NOTHING", (name, desc))
 
 issue_rows = [
     ("Environmental awareness", "Use resources carefully and reduce waste."),
@@ -178,7 +219,7 @@ issue_rows = [
     ("Digital citizenship", "Use information and technology ethically."),
 ]
 for name, desc in issue_rows:
-    cur.execute("INSERT OR IGNORE INTO cross_cutting_issues (issue_name, issue_description) VALUES (?, ?)", (name, desc))
+    cur.execute("INSERT INTO cross_cutting_issues (issue_name, issue_description) VALUES (?, ?) ON CONFLICT DO NOTHING", (name, desc))
 
 for outcome_code, indicator, criterion in [
     ("ICT-LO1", "Explains ICT terms using real communication examples.", "Identifies information, technology, communication and processing stages correctly."),
@@ -206,12 +247,12 @@ for outcome_code, indicator, criterion in [
     """, (outcome_id, criterion, outcome_id, criterion))
     for skill_name in ("Critical thinking and problem solving", "Communication", "Self-directed learning"):
         skill_id = get_id("SELECT skill_id FROM generic_skills WHERE skill_name=?", (skill_name,))
-        cur.execute("INSERT OR IGNORE INTO outcome_generic_skills (outcome_id, skill_id) VALUES (?, ?)", (outcome_id, skill_id))
+        cur.execute("INSERT INTO outcome_generic_skills (outcome_id, skill_id) VALUES (?, ?) ON CONFLICT DO NOTHING", (outcome_id, skill_id))
     value_id = get_id("SELECT value_id FROM curriculum_values WHERE value_name='Responsibility'")
-    cur.execute("INSERT OR IGNORE INTO outcome_values (outcome_id, value_id) VALUES (?, ?)", (outcome_id, value_id))
+    cur.execute("INSERT INTO outcome_values (outcome_id, value_id) VALUES (?, ?) ON CONFLICT DO NOTHING", (outcome_id, value_id))
     issue_name = "Digital citizenship" if outcome_code.startswith("ICT") else "Health and safety"
     issue_id = get_id("SELECT issue_id FROM cross_cutting_issues WHERE issue_name=?", (issue_name,))
-    cur.execute("INSERT OR IGNORE INTO outcome_cross_cutting_issues (outcome_id, issue_id) VALUES (?, ?)", (outcome_id, issue_id))
+    cur.execute("INSERT INTO outcome_cross_cutting_issues (outcome_id, issue_id) VALUES (?, ?) ON CONFLICT DO NOTHING", (outcome_id, issue_id))
     for level, score, description in [
         ("Beginning", 1, "Evidence is incomplete or needs major teacher support."),
         ("Developing", 2, "Evidence addresses the task but has gaps in accuracy or explanation."),
@@ -1118,6 +1159,60 @@ for k, v, d, category, setting_type in settings:
         SELECT ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM system_settings WHERE setting_key=?)
     """, (k, v, d, category, setting_type, k))
 
+questionnaires = {
+    "Learner Evaluation Questionnaire": {
+        "role": "learner",
+        "description": "5-point Likert evaluation of learner acceptance, usefulness, feedback, engagement and satisfaction.",
+        "items": [
+            ("perceived usefulness", "Learn2Master helped me understand difficult concepts."),
+            ("perceived usefulness", "The system helped me prepare for the post-test."),
+            ("ease of use", "It was easy to move through the learning outcome steps."),
+            ("ease of use", "I could easily find notes, practice and evidence tasks."),
+            ("feedback usefulness", "The feedback helped me know what to improve."),
+            ("feedback usefulness", "AI recommendations matched the concepts I found difficult."),
+            ("engagement", "The practical activities made learning more active."),
+            ("engagement", "The system encouraged me to continue learning."),
+            ("satisfaction", "I am satisfied with using Learn2Master for CBC mastery learning."),
+            ("satisfaction", "I would recommend this system for other learners."),
+        ],
+    },
+    "Teacher Evaluation Questionnaire": {
+        "role": "teacher",
+        "description": "5-point Likert evaluation of teacher monitoring, AI clarity, decision support, CBC alignment and explainability.",
+        "items": [
+            ("usefulness for monitoring", "Learn2Master helped me identify learners who needed support."),
+            ("usefulness for monitoring", "The dashboards made class mastery easier to monitor."),
+            ("AI recommendation clarity", "AI recommendations were clear enough to guide intervention."),
+            ("AI recommendation clarity", "The explanation evidence was understandable."),
+            ("decision support usefulness", "The system supported my decision to approve, override or assign remediation."),
+            ("decision support usefulness", "Teacher review pages saved time when checking learner evidence."),
+            ("CBC alignment", "The system supported CBC practical application and reflection."),
+            ("CBC alignment", "The activities and evidence matched competency-based learning."),
+            ("trust/explainability", "I trusted the mastery decision more when evidence was visible."),
+            ("trust/explainability", "The AI confidence and evidence checklist improved transparency."),
+        ],
+    },
+}
+
+for title, payload in questionnaires.items():
+    cur.execute("""
+        INSERT INTO research_questionnaires
+        (questionnaire_title, respondent_role, questionnaire_description, active_status)
+        VALUES (?, ?, ?, 'Active')
+        ON CONFLICT DO NOTHING
+    """, (title, payload["role"], payload["description"]))
+    questionnaire_id = get_id(
+        "SELECT id FROM research_questionnaires WHERE questionnaire_title=?",
+        (title,),
+    )
+    for order, (construct, item_text) in enumerate(payload["items"], start=1):
+        cur.execute("""
+            INSERT INTO research_questionnaire_items
+            (questionnaire_id, construct_name, item_text, display_order)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT DO NOTHING
+        """, (questionnaire_id, construct, item_text, order))
+
 cur.execute("""
     UPDATE questions
     SET learning_outcome_id = (
@@ -1353,16 +1448,22 @@ cur.execute("""
 
 cur.execute("""
     INSERT INTO activity_logs (learner_id, activity_type, activity_description)
-    VALUES (?, ?, ?)
-""", (learner_id, "System Setup", "Adaptive mastery pathway loaded: pre-test, adaptive notes, video support, practice, post-test, mastery decision, and locked progression."))
+    SELECT ?, ?, ?
+    WHERE NOT EXISTS (
+        SELECT 1 FROM activity_logs
+        WHERE learner_id=? AND activity_type='System Setup'
+    )
+""", (
+    learner_id,
+    "System Setup",
+    "Adaptive mastery pathway loaded: pre-test, adaptive notes, video support, practice, post-test, mastery decision, and locked progression.",
+    learner_id,
+))
 
 conn.commit()
 conn.close()
 
 print("===================================")
 print("Learn2Master Adaptive Mastery Seed Loaded")
-print("Learner: elijah / 12345")
-print("Teacher: teacher / 12345")
-print("School Administrator: admin / 12345")
-print("Super Administrator: superadmin / 12345")
+print("Seed accounts were created or preserved using password environment variables.")
 print("===================================")

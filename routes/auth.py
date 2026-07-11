@@ -2,9 +2,8 @@ from flask import Blueprint, render_template, request, redirect, session, url_fo
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta, timezone
-import sqlite3
 
-from database import get_db
+from database import DatabaseIntegrityError, get_db
 from models import db, User
 from security import csrf_protect
 from routes.guards import role_home_endpoint
@@ -171,7 +170,7 @@ def register():
             ).fetchone()
 
         try:
-            conn.execute("""
+            cur = conn.execute("""
                 INSERT INTO users
                 (full_name, username, email, password_hash, role_id, school_id,
                  account_status, security_level)
@@ -184,13 +183,13 @@ def register():
                 role["role_id"],
                 school["school_id"]
             ))
-            user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            user_id = cur.lastrowid
             record_auth_audit(conn, user_id, "REGISTER_LEARNER", "Self-registration created learner account")
             conn.commit()
             flash("Account created successfully. Please login.", "success")
             return redirect(url_for("auth.home"))
 
-        except sqlite3.IntegrityError:
+        except DatabaseIntegrityError:
             flash("Username or email already exists.", "danger")
             return redirect(url_for("auth.register"))
 

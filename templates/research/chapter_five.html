@@ -1,0 +1,23 @@
+{% extends "layouts/base.html" %}
+{% block title %}Chapter Five Insights{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>.insight-list{display:grid;gap:12px}.insight-list li{border:1px solid #e3ebf5;border-radius:8px;background:#fff;padding:14px;list-style:none}.print-actions{display:flex;justify-content:flex-end;margin-bottom:14px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}@media print{.sidebar,.topbar,.footer,.print-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}}</style>
+{% endblock %}
+{% block content %}
+<div class="print-actions"><button class="button" onclick="window.print()">Print Insights</button></div>
+<section class="hero-panel">
+  <div><p class="eyebrow">Dissertation Chapter Five</p><h1>Discussion and Insights</h1><p>Interpretive summary generated from research dashboard evidence, teacher oversight, AI recommendations and user acceptance records.</p></div>
+</section>
+<section class="learn-card">
+  {% if not has_data %}
+  <p>No data yet. This section will populate after pilot use.</p>
+  {% else %}
+  <ul class="insight-list">
+    {% for insight in insights %}
+    <li>{{ insight }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endblock %}

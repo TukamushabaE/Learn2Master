@@ -4,47 +4,61 @@
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>
+.research-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.research-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.chart-card{border:1px solid #e4ebf4;border-radius:8px;background:#fff;padding:14px}.bar-row{display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:center;margin:10px 0}.bar-track{height:10px;background:#e8eef6;border-radius:999px;overflow:hidden}.bar-fill{height:100%;background:#143d73}.mini-note{color:#687789}
+</style>
 {% endblock %}
 
 {% block content %}
+<div class="research-actions">
+  <a class="research-button" href="{{ url_for('research.participants') }}">Participants</a>
+  <a class="research-button" href="{{ url_for('research.pre_post_results') }}">Pre/Post</a>
+  <a class="research-button" href="{{ url_for('research.learning_gain') }}">Learning Gain</a>
+  <a class="research-button" href="{{ url_for('research.mastery_attainment') }}">Mastery</a>
+  <a class="research-button" href="{{ url_for('research.teacher_oversight') }}">Teacher Oversight</a>
+  <a class="research-button" href="{{ url_for('research.questionnaires') }}">Questionnaires</a>
+  <a class="research-button" href="{{ url_for('research.chapter_four_report') }}">Chapter Four</a>
+  <a class="research-button" href="{{ url_for('research.chapter_five_insights') }}">Chapter Five</a>
+</div>
 <section class="hero-panel">
   <div>
     <p class="eyebrow">Chapter Four Evidence</p>
     <h1>Research Evaluation Dashboard</h1>
-    <p>This dashboard maps directly to the proposal evaluation indicators: mastery attainment, learning gain, feedback responsiveness, teacher oversight, system reliability, and low-resource readiness.</p>
+    <p>Collects dissertation indicators for participants, pre/post-test results, learning gain, mastery, teacher oversight, user acceptance and system reliability.</p>
   </div>
-  <div class="hero-badge"><span>Framework</span><strong>V8 Final</strong></div>
+  <div class="hero-badge"><span>Participants</span><strong>{{ metrics.total_participants }}</strong></div>
 </section>
 
 <div class="cards-grid">
-  <div class="stat-card"><h3>Learners</h3><p class="stat-number">{{ metrics.learners }}</p></div>
-  <div class="stat-card"><h3>Attempts</h3><p class="stat-number">{{ metrics.attempts }}</p></div>
-  <div class="stat-card"><h3>Mastery Rate</h3><p class="stat-number">{{ metrics.mastery_rate }}%</p></div>
-  <div class="stat-card"><h3>Learning Gain</h3><p class="stat-number">{{ metrics.learning_gain }}%</p></div>
-  <div class="stat-card"><h3>Average Pre-test</h3><p class="stat-number">{{ metrics.avg_pretest }}%</p></div>
-  <div class="stat-card"><h3>Average Post-test</h3><p class="stat-number">{{ metrics.avg_posttest }}%</p></div>
-  <div class="stat-card"><h3>AI Recommendations</h3><p class="stat-number">{{ metrics.ai_recommendations }}</p></div>
-  <div class="stat-card"><h3>Teacher Interventions</h3><p class="stat-number">{{ metrics.teacher_interventions }}</p></div>
-  <div class="stat-card"><h3>Time to Mastery</h3><p class="stat-number">{{ metrics.time_to_mastery_hours }}h</p></div>
-  <div class="stat-card"><h3>Feedback Response</h3><p class="stat-number">{{ metrics.feedback_response_hours }}h</p></div>
-  <div class="stat-card"><h3>System Usage</h3><p class="stat-number">{{ metrics.system_usage }}</p></div>
-  <div class="stat-card"><h3>Offline Success</h3><p class="stat-number">{{ metrics.offline_sync_success_rate }}%</p></div>
+  <div class="stat-card"><h3>Total Learners</h3><p class="stat-number">{{ metrics.learners }}</p></div>
+  <div class="stat-card"><h3>Total Teachers</h3><p class="stat-number">{{ metrics.teachers }}</p></div>
+  <div class="stat-card"><h3>Average Pre-test</h3><p class="stat-number">{{ metrics.average_pre_test }}%</p></div>
+  <div class="stat-card"><h3>Average Post-test</h3><p class="stat-number">{{ metrics.average_post_test }}%</p></div>
+  <div class="stat-card"><h3>Average Gain</h3><p class="stat-number">{{ metrics.average_learning_gain }}%</p></div>
+  <div class="stat-card"><h3>Mastery Attainment</h3><p class="stat-number">{{ metrics.mastery_attainment_rate }}%</p></div>
+  <div class="stat-card"><h3>Time to Mastery</h3><p class="stat-number">{{ metrics.average_time_to_mastery }}h</p></div>
+  <div class="stat-card"><h3>Teacher Interventions</h3><p class="stat-number">{{ metrics.teacher_intervention_count }}</p></div>
+  <div class="stat-card"><h3>Questionnaire Responses</h3><p class="stat-number">{{ metrics.questionnaire_response_count }}</p></div>
+  <div class="stat-card"><h3>Learner Satisfaction</h3><p class="stat-number">{{ metrics.average_learner_satisfaction }}</p></div>
+  <div class="stat-card"><h3>Teacher Satisfaction</h3><p class="stat-number">{{ metrics.average_teacher_satisfaction }}</p></div>
+  <div class="stat-card"><h3>System Usage</h3><p class="stat-number">{{ metrics.system_usage_count }}</p></div>
 </div>
 
 <section class="learn-card">
-  <span class="subject-code">V8 Proposal Evidence</span>
-  <h2>Evidence-Based Mastery Components</h2>
-  <div class="evidence-grid">
-    <div><span>Reflections</span><strong>{{ metrics.reflections }}</strong></div>
-    <div><span>Practical Evidence</span><strong>{{ metrics.practical_evidence }}</strong></div>
-    <div><span>Approved Practical</span><strong>{{ metrics.approved_practical }}</strong></div>
-    <div><span>BKT Observations</span><strong>{{ metrics.bkt_observations }}</strong></div>
-    <div><span>Avg BKT Mastery</span><strong>{{ metrics.avg_bkt_mastery }}%</strong></div>
-    <div><span>Offline Pending Sync</span><strong>{{ metrics.offline_pending }}</strong></div>
-    <div><span>Evidence Completion</span><strong>{{ metrics.evidence_completion_rate }}%</strong></div>
-    <div><span>Reflection Completion</span><strong>{{ metrics.reflection_completion_rate }}%</strong></div>
-    <div><span>Practical Approval Rate</span><strong>{{ metrics.practical_evidence_approval_rate }}%</strong></div>
-    <div><span>Cached Resources</span><strong>{{ metrics.cached_resources }}</strong></div>
+  <h2>Research Charts</h2>
+  <div class="chart-grid">
+    {% for title, rows in chart_data.items() %}
+    <div class="chart-card">
+      <h3>{{ title.replace('_',' ')|title }}</h3>
+      {% for row in rows %}
+      <div class="bar-row">
+        <span>{{ row.label }}</span>
+        <div class="bar-track"><div class="bar-fill" style="width: {{ [row.value, 100]|min }}%;"></div></div>
+        <strong>{{ row.value }}</strong>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
   </div>
 </section>
 
@@ -52,21 +66,20 @@
   <h2>Weak Concept Evidence</h2>
   <div class="concept-grid">
   {% for row in weak_concepts %}
-    <div class="concept-pill {% if row.avg_score >= 70 %}good{% else %}weak{% endif %}">
+    <div class="concept-pill {% if row.avg_score and row.avg_score >= 70 %}good{% else %}weak{% endif %}">
       <span>{{ row.concept_tag.replace('_',' ')|title }}</span>
-      <strong>{{ row.avg_score }}%</strong>
+      <strong>{{ row.avg_score or 0 }}%</strong>
       <small>{{ row.evidence }} evidence records</small>
     </div>
   {% else %}
-    <p>No concept evidence has been generated yet.</p>
+    <p>No data yet.</p>
   {% endfor %}
   </div>
 </section>
 
 <section class="learn-card ai-panel">
-  <span class="subject-code">Proposal Traceability</span>
-  <h2>How this supports Chapter Four</h2>
-  <p>The values above can be used to report mastery attainment rate, learning gain, learner response to feedback, teacher oversight effectiveness, and technical readiness for low-resource deployment.</p>
-  <p><a href="{{ url_for('research.research_reports') }}">Open printable research report</a> | <a href="{{ url_for('research.research_reports', format='csv') }}">Export CSV</a> | <a href="/research/export/csv">Direct CSV route</a></p>
+  <h2>Latest Data Collection Activity</h2>
+  <p>{{ metrics.latest_data_collection_activity }}</p>
+  <p class="mini-note">Exports: <a href="{{ url_for('research.export_pre_post') }}">Pre/Post</a> · <a href="{{ url_for('research.export_learning_gain') }}">Learning Gain</a> · <a href="{{ url_for('research.export_mastery') }}">Mastery</a> · <a href="{{ url_for('research.export_questionnaires') }}">Questionnaires</a> · <a href="{{ url_for('research.export_full_dataset') }}">Full Dataset</a></p>
 </section>
 {% endblock %}

@@ -1,0 +1,32 @@
+{% extends "layouts/base.html" %}
+{% block title %}Research Questionnaires{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>.questionnaire-list{display:grid;gap:14px}.questionnaire-card{border:1px solid #e4ebf4;border-radius:8px;padding:16px;background:#fff}.questionnaire-card h3{margin:0 0 6px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:9px 12px;font-weight:800;text-decoration:none}</style>
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div><p class="eyebrow">User Acceptance</p><h1>Research Questionnaires</h1><p>5-point Likert questionnaires for learner and teacher evaluation of usefulness, ease of use, feedback, engagement, CBC alignment and explainability.</p></div>
+  <div class="hero-badge"><span>Forms</span><strong>{{ questionnaires|length }}</strong></div>
+</section>
+<div class="actions">
+  {% if session.get("role") in ["teacher", "school_admin", "super_admin"] %}
+  <a class="button" href="{{ url_for('research.create_questionnaire') }}">Create Questionnaire</a>
+  <a class="button" href="{{ url_for('research.questionnaire_results') }}">View Results</a>
+  {% endif %}
+</div>
+<section class="questionnaire-list">
+  {% for questionnaire in questionnaires %}
+  <article class="questionnaire-card">
+    <h3>{{ questionnaire.questionnaire_title }}</h3>
+    <p>{{ questionnaire.questionnaire_description }}</p>
+    <p><strong>Respondent:</strong> {{ questionnaire.respondent_role|title }} · <strong>Items:</strong> {{ questionnaire.item_count }} · <strong>Responses:</strong> {{ questionnaire.response_count }}</p>
+    <div class="actions">
+      <a class="button" href="{{ url_for('research.respond_questionnaire', questionnaire_id=questionnaire.id) }}">Open Questionnaire</a>
+    </div>
+  </article>
+  {% else %}
+  <section class="learn-card">{{ no_data }}</section>
+  {% endfor %}
+</section>
+{% endblock %}

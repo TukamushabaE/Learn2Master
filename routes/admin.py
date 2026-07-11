@@ -1,11 +1,10 @@
-import sqlite3
-
 import os
+from datetime import datetime, timedelta
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 
-from database import get_db
+from database import DatabaseIntegrityError, get_db
 from engine import get_kb
 from routes.guards import role_required
 from security import csrf_protect
@@ -571,13 +570,14 @@ def assignment_lists(conn, admin=None):
 def save_user_assignments(conn, user_id, role_name, school_id, subject_id=None, class_id=None):
     if role_name == "learner" and class_id:
         conn.execute("DELETE FROM enrollments WHERE learner_id = ?", (user_id,))
-        conn.execute("INSERT OR IGNORE INTO enrollments (learner_id, class_id) VALUES (?, ?)", (user_id, class_id))
+        conn.execute("INSERT INTO enrollments (learner_id, class_id) VALUES (?, ?) ON CONFLICT DO NOTHING", (user_id, class_id))
     elif role_name == "teacher" and subject_id:
         conn.execute("DELETE FROM teacher_subject_assignments WHERE teacher_id = ?", (user_id,))
         conn.execute("""
-            INSERT OR IGNORE INTO teacher_subject_assignments
+            INSERT INTO teacher_subject_assignments
             (teacher_id, subject_id, class_id, school_id, assigned_by)
             VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT DO NOTHING
         """, (user_id, subject_id, class_id, school_id, session.get("user_id")))
 
 
@@ -785,7 +785,7 @@ def create_user():
         try:
             status = normalize_status(request.form.get("account_status", "Active"))
             security_level = normalize_security_level(role_name, request.form.get("security_level"), admin)
-            conn.execute("""
+            cur = conn.execute("""
                 INSERT INTO users
                 (full_name, username, email, phone, title, password_hash, role_id, school_id,
                  account_status, security_level, must_change_password, approved_by, approved_at)
@@ -804,7 +804,7 @@ def create_user():
                 1 if request.form.get("must_change_password") else 0,
                 session.get("user_id"),
             ))
-            user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            user_id = cur.lastrowid
             save_user_assignments(
                 conn,
                 user_id,
@@ -817,7 +817,7 @@ def create_user():
             conn.commit()
             flash("Account created and recorded in the audit trail.", "success")
             return redirect(url_for("admin.users"))
-        except sqlite3.IntegrityError:
+        except DatabaseIntegrityError:
             conn.rollback()
             flash("Could not create account because the username or email already exists.", "danger")
 
@@ -923,7 +923,7 @@ def edit_user(user_id):
             conn.close()
             flash("Account updated.", "success")
             return redirect(url_for("admin.users"))
-        except sqlite3.IntegrityError:
+        except DatabaseIntegrityError:
             conn.rollback()
             conn.close()
             flash("Could not update account because that email is already used.", "danger")
@@ -1002,13 +1002,16 @@ def update_user_status(user_id, action):
         conn.close()
         flash("Account not found or outside your management scope.", "danger")
         return redirect(url_for("admin.users"))
+    locked_until = None
+    if status_map[action] == "Locked":
+        locked_until = (datetime.utcnow() + timedelta(days=1)).isoformat(timespec="seconds")
     conn.execute("""
         UPDATE users
         SET account_status = ?,
-            locked_until = CASE WHEN ? = 'Locked' THEN datetime('now', '+1 day') ELSE NULL END,
+            locked_until = ?,
             failed_login_attempts = CASE WHEN ? = 'Active' THEN 0 ELSE failed_login_attempts END
         WHERE user_id = ?
-    """, (status_map[action], status_map[action], status_map[action], user_id))
+    """, (status_map[action], locked_until, status_map[action], user_id))
     audit(conn, "UPDATE_STATUS", "user", user_id, f"Changed status to {status_map[action]}")
     conn.commit()
     conn.close()
@@ -1159,7 +1162,7 @@ def schools():
             return redirect(url_for("admin.schools"))
         school_name = request.form.get("school_name", "").strip()
         if school_name:
-            conn.execute("INSERT OR IGNORE INTO schools (school_name) VALUES (?)", (school_name,))
+            conn.execute("INSERT INTO schools (school_name) VALUES (?) ON CONFLICT DO NOTHING", (school_name,))
             audit(conn, "CREATE_SCHOOL", "school", school_name, "Added school")
             conn.commit()
             flash("School saved.", "success")
@@ -1255,7 +1258,7 @@ def curriculum():
         if action == "add_subject":
             subject_name = request.form.get("subject_name", "").strip()
             if subject_name:
-                conn.execute("INSERT OR IGNORE INTO subjects (subject_name) VALUES (?)", (subject_name,))
+                conn.execute("INSERT INTO subjects (subject_name) VALUES (?) ON CONFLICT DO NOTHING", (subject_name,))
                 audit(conn, "CURRICULUM_ADD_SUBJECT", "subject", subject_name, "Added curriculum subject")
         elif action == "add_topic":
             conn.execute("""

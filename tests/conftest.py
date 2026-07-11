@@ -10,6 +10,7 @@ os.environ["TESTING"] = "1"
 os.environ["FLASK_DEBUG"] = "1" # Disable HTTPS in Talisman
 
 import database
+import init_db
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJECT_DB = os.path.join(BASE_DIR, "learn2master.db")
@@ -20,16 +21,14 @@ MASTER_DB = os.path.join(MASTER_DB_DIR, "learn2master.db")
 def master_db():
     env = os.environ.copy()
     os.makedirs(MASTER_DB_DIR, exist_ok=True)
-    if os.path.exists(MASTER_DB):
-        os.remove(MASTER_DB)
-
-    conn = sqlite3.connect(MASTER_DB)
-    with open(os.path.join(BASE_DIR, "database_v2.sql"), "r", encoding="utf-8") as schema:
-        conn.executescript(schema.read())
-    conn.commit()
-    conn.close()
+    init_db.run_sqlite(db_path=MASTER_DB, reset=True)
 
     env.pop("DATABASE_URL", None)
+    env["LEARN2MASTER_SQLITE_PATH"] = MASTER_DB
+    env["LEARN2MASTER_SEED_LEARNER_PASSWORD"] = "12345"
+    env["LEARN2MASTER_SEED_TEACHER_PASSWORD"] = "12345"
+    env["LEARN2MASTER_SEED_SCHOOL_ADMIN_PASSWORD"] = "12345"
+    env["LEARN2MASTER_SEED_SUPER_ADMIN_PASSWORD"] = "12345"
     subprocess.run([sys.executable, os.path.join(BASE_DIR, "seed_data.py")], cwd=MASTER_DB_DIR, env=env, check=True, capture_output=True)
 
 @pytest.fixture()
@@ -39,6 +38,7 @@ def app(tmp_path):
 
     # Update globals
     database.DATABASE = str(db_path)
+    os.environ["LEARN2MASTER_SQLITE_PATH"] = str(db_path)
 
     from app import app as flask_app
     from models import db as sqlalchemy_db

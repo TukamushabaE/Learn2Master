@@ -10,8 +10,12 @@ The system is aligned to Uganda Lower Secondary CBC principles and demonstrates 
 
 ```powershell
 pip install -r requirements.txt
-python init_db.py
-python seed_data.py
+python manage.py init-db
+$env:LEARN2MASTER_SEED_LEARNER_PASSWORD="ChooseLocalLearner123"
+$env:LEARN2MASTER_SEED_TEACHER_PASSWORD="ChooseLocalTeacher123"
+$env:LEARN2MASTER_SEED_SCHOOL_ADMIN_PASSWORD="ChooseLocalAdmin123"
+$env:LEARN2MASTER_SEED_SUPER_ADMIN_PASSWORD="ChooseLocalSuper123"
+python manage.py seed-demo-data
 python app.py
 ```
 
@@ -23,10 +27,15 @@ http://127.0.0.1:5000
 
 ## Demo Accounts
 
-- Learner: `elijah` / `12345`
-- Teacher: `teacher` / `12345`
-- School Administrator: `admin` / `12345`
-- Super Administrator: `superadmin` / `12345`
+The demo usernames are `elijah`, `teacher`, `admin`, and `superadmin`. Their passwords are the values you set in the `LEARN2MASTER_SEED_*_PASSWORD` environment variables before running `python manage.py seed-demo-data`.
+
+For a production Supabase/PostgreSQL deployment, create real first users with:
+
+```powershell
+python manage.py create-initial-users
+```
+
+That command reads the first teacher, school administrator, and super administrator from `LEARN2MASTER_BOOTSTRAP_*`, `LEARN2MASTER_SUPER_ADMIN_*`, `LEARN2MASTER_SCHOOL_ADMIN_*`, and `LEARN2MASTER_TEACHER_*` environment variables.
 
 ## Core Modules
 
@@ -78,8 +87,8 @@ http://127.0.0.1:5000
 ## Verification
 
 ```powershell
-python init_db.py
-python seed_data.py
+python manage.py init-db
+python manage.py seed-demo-data
 python -m compileall routes services tests app.py seed_data.py
 python -m pytest -q --basetemp .tmp_pytest -p no:cacheprovider
 ```

@@ -64,12 +64,14 @@ def update_sync_queue(queue_id, action):
         request.form.get("error_message") or "Manual prototype sync failure record.",
         queue_id,
     ))
-    conn.execute("""
+    learner_match = "learner_id IS NULL" if queued["learner_id"] is None else "learner_id=?"
+    learner_params = () if queued["learner_id"] is None else (queued["learner_id"],)
+    conn.execute(f"""
         UPDATE offline_sync_queue
         SET sync_status=?,
             synced_at=CASE WHEN ?='Synced' THEN CURRENT_TIMESTAMP ELSE synced_at END,
             last_error=CASE WHEN ?='Failed' THEN ? ELSE NULL END
-        WHERE learner_id IS ?
+        WHERE {learner_match}
           AND event_type=?
           AND payload=?
           AND sync_status='Pending'
@@ -78,7 +80,7 @@ def update_sync_queue(queue_id, action):
         status_value,
         status_value,
         request.form.get("error_message") or "Manual prototype sync failure record.",
-        queued["learner_id"],
+        *learner_params,
         queued["queue_type"],
         queued["payload"],
     ))

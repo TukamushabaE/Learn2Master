@@ -28,8 +28,11 @@ class Config:
 
     # Database - Supports SQLite default or Supabase/PostgreSQL via DATABASE_URL
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
+    if SQLALCHEMY_DATABASE_URI and SQLALCHEMY_DATABASE_URI.startswith("postgres://"):
+        SQLALCHEMY_DATABASE_URI = SQLALCHEMY_DATABASE_URI.replace("postgres://", "postgresql://", 1)
     if not SQLALCHEMY_DATABASE_URI:
-        SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(BASE_DIR, 'learn2master.db')}"
+        sqlite_path = os.environ.get("LEARN2MASTER_SQLITE_PATH") or os.path.join(BASE_DIR, "learn2master.db")
+        SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:" if sqlite_path == ":memory:" else f"sqlite:///{sqlite_path}"
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 

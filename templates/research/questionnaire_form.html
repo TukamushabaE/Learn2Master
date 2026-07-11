@@ -1,0 +1,32 @@
+{% extends "layouts/base.html" %}
+{% block title %}Create Questionnaire{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>.research-form{display:grid;gap:14px}.research-form label{display:grid;gap:6px;font-weight:800;color:#21364f}.research-form input,.research-form select,.research-form textarea{border:1px solid #d7e0ea;border-radius:8px;padding:10px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}</style>
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div><p class="eyebrow">Questionnaire Module</p><h1>Create Evaluation Questionnaire</h1><p>Enter one item per line using the format <strong>construct | item text</strong>.</p></div>
+</section>
+<section class="learn-card">
+  <form method="post" class="research-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Questionnaire Title
+      <input name="questionnaire_title" required>
+    </label>
+    <label>Respondent Role
+      <select name="respondent_role">
+        <option value="learner">Learner</option>
+        <option value="teacher">Teacher</option>
+      </select>
+    </label>
+    <label>Description
+      <textarea name="questionnaire_description" rows="3"></textarea>
+    </label>
+    <label>Items
+      <textarea name="items_text" rows="12" required placeholder="perceived usefulness | Learn2Master helped me understand difficult concepts."></textarea>
+    </label>
+    <button class="button" type="submit">Create Questionnaire</button>
+  </form>
+</section>
+{% endblock %}

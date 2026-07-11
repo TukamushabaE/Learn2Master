@@ -1,6 +1,11 @@
 PRAGMA foreign_keys = ON;
 
 DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS research_questionnaire_answers;
+DROP TABLE IF EXISTS research_questionnaire_responses;
+DROP TABLE IF EXISTS research_questionnaire_items;
+DROP TABLE IF EXISTS research_questionnaires;
+DROP TABLE IF EXISTS research_participants;
 DROP TABLE IF EXISTS sync_events;
 DROP TABLE IF EXISTS offline_activity_logs;
 DROP TABLE IF EXISTS sync_queue;
@@ -594,6 +599,71 @@ CREATE TABLE IF NOT EXISTS ai_explanations (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (learner_id) REFERENCES users(user_id),
     FOREIGN KEY (outcome_id) REFERENCES learning_outcomes(outcome_id)
+);
+
+CREATE TABLE IF NOT EXISTS research_participants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_code TEXT UNIQUE NOT NULL,
+    user_id INTEGER,
+    school_id INTEGER,
+    class_id INTEGER,
+    subject_id INTEGER,
+    study_phase TEXT DEFAULT 'Pilot',
+    consent_status TEXT DEFAULT 'Pending',
+    assent_status TEXT DEFAULT 'Pending',
+    parent_consent_status TEXT DEFAULT 'Pending',
+    active_status TEXT DEFAULT 'Active',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id),
+    FOREIGN KEY (school_id) REFERENCES schools(school_id),
+    FOREIGN KEY (class_id) REFERENCES classes(class_id),
+    FOREIGN KEY (subject_id) REFERENCES subjects(subject_id),
+    UNIQUE (user_id, study_phase)
+);
+
+CREATE TABLE IF NOT EXISTS research_questionnaires (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    questionnaire_title TEXT UNIQUE NOT NULL,
+    respondent_role TEXT NOT NULL,
+    questionnaire_description TEXT,
+    active_status TEXT DEFAULT 'Active',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS research_questionnaire_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    questionnaire_id INTEGER NOT NULL,
+    construct_name TEXT NOT NULL,
+    item_text TEXT NOT NULL,
+    display_order INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (questionnaire_id) REFERENCES research_questionnaires(id),
+    UNIQUE (questionnaire_id, item_text)
+);
+
+CREATE TABLE IF NOT EXISTS research_questionnaire_responses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    questionnaire_id INTEGER NOT NULL,
+    respondent_user_id INTEGER,
+    participant_id INTEGER,
+    respondent_role TEXT,
+    submitted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (questionnaire_id) REFERENCES research_questionnaires(id),
+    FOREIGN KEY (respondent_user_id) REFERENCES users(user_id),
+    FOREIGN KEY (participant_id) REFERENCES research_participants(id),
+    UNIQUE (questionnaire_id, respondent_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS research_questionnaire_answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    response_id INTEGER NOT NULL,
+    item_id INTEGER NOT NULL,
+    score INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+    comment TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (response_id) REFERENCES research_questionnaire_responses(id),
+    FOREIGN KEY (item_id) REFERENCES research_questionnaire_items(id),
+    UNIQUE (response_id, item_id)
 );
 
 CREATE TABLE IF NOT EXISTS offline_sync_queue (

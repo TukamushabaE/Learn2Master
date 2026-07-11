@@ -3,19 +3,37 @@
 This guide provides instructions for deploying the Learn2Master AI-Enabled Mastery Learning System in a production environment.
 
 ## Infrastructure Requirements
-- **Container Orchestration**: Docker and Docker Compose (or Kubernetes).
-- **Database**: SQLite (default, stored in `instance/`) or a production SQL database (PostgreSQL/MySQL) via `DATABASE_URL`.
-- **Reverse Proxy**: Nginx or Traefik recommended to handle SSL termination (though `Flask-Talisman` handles HSTS/Security headers).
+- **Container Orchestration**: Docker on Render or another container host.
+- **Database**: SQLite for local development and tests; Supabase PostgreSQL in production through `DATABASE_URL`.
+- **Authentication**: Existing Flask authentication and role-based guards. Supabase Auth is not used.
 
 ## Environment Variables
 The following variables should be set in production:
 
 | Variable | Description | Recommended Value |
 | --- | --- | --- |
-| `SECRET_KEY` | Flask security key | A long, random string. |
-| `DATABASE_URL` | DB connection string | `postgresql://user:pass@host/db` |
-| `FLASK_DEBUG` | Debug mode | `False` |
-| `PORT` | Application port | Automatically set by host (Render defaults to 10000) |
+| Variable | Description | Required on Render |
+| --- | --- | --- |
+| `DATABASE_URL` | Supabase PostgreSQL connection string | Yes |
+| `LEARN2MASTER_SECRET_KEY` | Flask signing key | Yes |
+| `LEARN2MASTER_DEBUG` | Debug mode | Yes, set `0` |
+| `LEARN2MASTER_FORCE_HTTPS` | HTTPS redirect control | Recommended `0` on Render unless ProxyFix is configured |
+| `LEARN2MASTER_CSRF_ENABLED` | CSRF protection | Yes, set `1` |
+| `LEARN2MASTER_MAX_UPLOAD_BYTES` | Evidence upload size limit | Optional, e.g. `5242880` |
+| `LEARN2MASTER_BOOTSTRAP_SCHOOL_NAME` | School created/used by bootstrap users | Yes for bootstrap |
+| `LEARN2MASTER_SUPER_ADMIN_USERNAME` | First super admin username | Yes for bootstrap |
+| `LEARN2MASTER_SUPER_ADMIN_EMAIL` | First super admin email | Yes for bootstrap |
+| `LEARN2MASTER_SUPER_ADMIN_FULL_NAME` | First super admin full name | Yes for bootstrap |
+| `LEARN2MASTER_SUPER_ADMIN_PASSWORD` | First super admin password | Yes for bootstrap |
+| `LEARN2MASTER_SCHOOL_ADMIN_USERNAME` | First school admin username | Yes for bootstrap |
+| `LEARN2MASTER_SCHOOL_ADMIN_EMAIL` | First school admin email | Yes for bootstrap |
+| `LEARN2MASTER_SCHOOL_ADMIN_FULL_NAME` | First school admin full name | Yes for bootstrap |
+| `LEARN2MASTER_SCHOOL_ADMIN_PASSWORD` | First school admin password | Yes for bootstrap |
+| `LEARN2MASTER_TEACHER_USERNAME` | First teacher username | Yes for bootstrap |
+| `LEARN2MASTER_TEACHER_EMAIL` | First teacher email | Yes for bootstrap |
+| `LEARN2MASTER_TEACHER_FULL_NAME` | First teacher full name | Yes for bootstrap |
+| `LEARN2MASTER_TEACHER_PASSWORD` | First teacher password | Yes for bootstrap |
+| `PORT` | Application port | Render sets this automatically |
 
 ## Render Deployment (Recommended)
 Learn2Master is optimized for Render as a single **Web Service**. You do not need a separate frontend deployment as Flask serves static assets via WhiteNoise.
@@ -25,11 +43,23 @@ Learn2Master is optimized for Render as a single **Web Service**. You do not nee
 - **Build Command**: `pip install -r requirements.txt`
 - **Start Command**: `gunicorn --bind 0.0.0.0:$PORT --workers 4 app:app`
 
-### Database Setup on Render:
-1. Create a **Render PostgreSQL** instance.
-2. Copy the **Internal Database URL**.
-3. Add it as an environment variable named `DATABASE_URL` in your Web Service settings.
-4. Run the initialization script once via the Render Shell: `python init_db.py`
+### Supabase Database Setup on Render:
+1. Create a Supabase project.
+2. Copy the PostgreSQL connection string from Supabase Database settings.
+3. Add it to the Render Web Service as `DATABASE_URL`.
+4. Do not configure Supabase Auth; Learn2Master uses its Flask login and roles.
+5. Open the Render Shell and run:
+   ```bash
+   python manage.py init-db
+   flask db upgrade
+   python manage.py create-initial-users
+   ```
+6. Optional demo CBC content for dissertation demonstration:
+   ```bash
+   python manage.py seed-demo-data
+   ```
+
+`python manage.py init-db` and `flask db upgrade` are idempotent. They do not drop existing Supabase data. Use `--reset` only against a local development database.
 
 ## Docker Deployment
 1. Build the image:
@@ -45,7 +75,7 @@ Learn2Master is optimized for Render as a single **Web Service**. You do not nee
    ```
 
 ## Database Migrations
-If you modify the database schema (`models.py`), use the following commands to manage migrations:
+If you modify the database schema (`models.py` or `database_v2.sql`), use the following commands:
 
 1. Generate a new migration:
    ```bash
@@ -55,6 +85,13 @@ If you modify the database schema (`models.py`), use the following commands to m
    ```bash
    flask db upgrade
    ```
+
+For first deployment or after pulling schema changes:
+
+```bash
+python manage.py init-db
+flask db upgrade
+```
 
 ## Monitoring & Health
 - **Health Endpoint**: `GET /health` returns `{"status": "healthy"}`.

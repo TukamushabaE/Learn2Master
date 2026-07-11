@@ -7,6 +7,11 @@
 {% block content %}
 <div class="print-actions">
   <a class="button" href="{{ url_for('research.research_reports', format='csv') }}">Export CSV</a>
+  <a class="button" href="{{ url_for('research.export_pre_post') }}">Pre/Post</a>
+  <a class="button" href="{{ url_for('research.export_learning_gain') }}">Learning Gain</a>
+  <a class="button" href="{{ url_for('research.export_mastery') }}">Mastery</a>
+  <a class="button" href="{{ url_for('research.export_questionnaires') }}">Questionnaires</a>
+  <a class="button" href="{{ url_for('research.export_full_dataset') }}">Full Dataset</a>
   <button class="button" onclick="window.print()">Print</button>
 </div>
 <section class="hero-panel">

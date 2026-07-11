@@ -735,6 +735,16 @@ def outcome(outcome_id):
     else:
         stage = "mastered"
 
+    resource_count = len(notes) + len(videos) + len(illustrations) + len(worked_examples) + len(performance_resources)
+    conn.execute("""
+        INSERT INTO activity_logs (learner_id, activity_type, activity_description)
+        VALUES (?, 'Learning Outcome Opened', ?)
+    """, (learner_id, f"Opened learning outcome {outcome['outcome_name']}"))
+    conn.execute("""
+        INSERT INTO activity_logs (learner_id, activity_type, activity_description)
+        VALUES (?, 'Resource Viewed', ?)
+    """, (learner_id, f"Viewed {resource_count} adaptive resource(s) for {outcome['outcome_name']}"))
+    conn.commit()
     conn.close()
     return render_template(
         "learning/outcome.html",
@@ -978,7 +988,7 @@ def submit_practical_evidence(outcome_id):
         JOIN competencies c ON c.competency_id=lo.competency_id
         WHERE lo.outcome_id=?
     """, (outcome_id,)).fetchone()
-    conn.execute("""
+    cur = conn.execute("""
         INSERT INTO practical_evidence
         (learner_id, subject_id, topic_id, outcome_id, competency_id,
          evidence_title, evidence_description, file_path, file_type, file_size_bytes)
@@ -995,7 +1005,7 @@ def submit_practical_evidence(outcome_id):
         file_type,
         file_size,
     ))
-    practical_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    practical_id = cur.lastrowid
     conn.execute("""
         INSERT INTO evidence_portfolio (learner_id, outcome_id, evidence_type, evidence_status, evidence_note)
         VALUES (?, ?, 'Practical Evidence', 'Submitted', ?)
@@ -1237,7 +1247,7 @@ def submit_assessment(assessment_id):
         if unlock_blockers:
             rec["reason"] += " Pending before post-test: " + posttest_blocker_summary(unlock_blockers)
 
-    conn.execute("""
+    cur = conn.execute("""
         INSERT INTO recommendations
         (learner_id, lesson_id, outcome_id, recommendation_reason, recommendation_type,
          evidence_used, weak_concepts, strong_concepts, confidence_score, expected_mastery,
@@ -1259,7 +1269,7 @@ def submit_assessment(assessment_id):
         rec.get("recommended_activity"),
         1 if rec.get("teacher_action_required") else 0,
     ))
-    recommendation_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    recommendation_id = cur.lastrowid
 
     current_evidence = {
         "pretest_completed": pre > 0 or assessment["assessment_type"] == "pretest",

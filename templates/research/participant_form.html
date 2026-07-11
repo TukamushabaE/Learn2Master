@@ -1,0 +1,66 @@
+{% extends "layouts/base.html" %}
+{% block title %}Create Research Participant{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>.research-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.research-form label{display:grid;gap:6px;font-weight:800;color:#21364f}.research-form input,.research-form select,.research-form textarea{border:1px solid #d7e0ea;border-radius:8px;padding:10px}.form-actions{margin-top:18px;display:flex;gap:10px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}</style>
+{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div><p class="eyebrow">Participant Management</p><h1>Create Research Participant</h1><p>Assign a dissertation participant code without exposing unnecessary personal data in reports.</p></div>
+</section>
+<section class="learn-card">
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="research-form">
+      <label>User
+        <select name="user_id">
+          <option value="">No linked user</option>
+          {% for user in users %}
+          <option value="{{ user.user_id }}">{{ user.full_name }} ({{ user.role_name }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Participant Code
+        <input name="participant_code" placeholder="Leave blank for L001/T001 style code">
+      </label>
+      <label>School
+        <select name="school_id">
+          <option value="">Not assigned</option>
+          {% for school in schools %}<option value="{{ school.school_id }}">{{ school.school_name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Class
+        <select name="class_id">
+          <option value="">Not assigned</option>
+          {% for class in classes %}<option value="{{ class.class_id }}">{{ class.class_name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Subject
+        <select name="subject_id">
+          <option value="">Not assigned</option>
+          {% for subject in subjects %}<option value="{{ subject.subject_id }}">{{ subject.subject_name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Study Phase
+        <select name="study_phase">{% for item in study_phases %}<option value="{{ item }}">{{ item }}</option>{% endfor %}</select>
+      </label>
+      <label>Consent
+        <select name="consent_status">{% for item in statuses %}<option value="{{ item }}">{{ item }}</option>{% endfor %}</select>
+      </label>
+      <label>Assent
+        <select name="assent_status">{% for item in statuses %}<option value="{{ item }}">{{ item }}</option>{% endfor %}</select>
+      </label>
+      <label>Parent Consent
+        <select name="parent_consent_status">{% for item in statuses %}<option value="{{ item }}">{{ item }}</option>{% endfor %}</select>
+      </label>
+      <label>Active Status
+        <select name="active_status">{% for item in active_statuses %}<option value="{{ item }}">{{ item }}</option>{% endfor %}</select>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button class="button" type="submit">Save Participant</button>
+      <a class="button" href="{{ url_for('research.participants') }}">Back</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

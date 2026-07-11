@@ -31,6 +31,7 @@ from routes.courses import courses_bp
 from routes.mastery import mastery_bp
 from config import Config
 from security import get_csrf_token
+from database import is_postgres_url, normalize_database_url, sqlite_path_from_url
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -68,10 +69,8 @@ else:
     app.config.setdefault("RATELIMIT_DEFAULT", "200 per day; 50 per hour")
 
 # Production configuration
-db_url = os.environ.get('DATABASE_URL')
+db_url = normalize_database_url(os.environ.get('DATABASE_URL'))
 if db_url:
-    if db_url.startswith("postgres://"):
-        db_url = db_url.replace("postgres://", "postgresql://", 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 elif not app.config.get('SQLALCHEMY_DATABASE_URI'):
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.root_path, 'learn2master.db')
@@ -106,13 +105,11 @@ with app.app_context():
         conn.close()
     except Exception:
         app.logger.info("Database tables appear to be missing. Initializing...")
-        db_url = os.environ.get("DATABASE_URL")
-        if db_url:
-            if db_url.startswith("postgres://"):
-                db_url = db_url.replace("postgres://", "postgresql://", 1)
+        db_url = normalize_database_url(os.environ.get("DATABASE_URL"))
+        if is_postgres_url(db_url):
             init_db.run_postgres(db_url)
         else:
-            init_db.run_sqlite()
+            init_db.run_sqlite(db_path=sqlite_path_from_url(db_url))
         app.logger.info("Database initialization complete.")
 
 login_manager = LoginManager()
