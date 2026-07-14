@@ -1706,10 +1706,10 @@ def ai_configuration():
     settings_rows = conn.execute("""
         SELECT *
         FROM system_settings
-        WHERE setting_category LIKE 'AI%'
+        WHERE setting_category LIKE ?
            OR setting_key IN ('bkt_model', 'at_risk_threshold', 'teacher_review_required')
         ORDER BY setting_category, setting_key
-    """).fetchall()
+    """, ("AI%",)).fetchall()
     bkt = conn.execute("""
         SELECT
             ROUND(CAST(AVG(prior_mastery_probability) AS NUMERIC), 3) AS avg_prior,

@@ -76,3 +76,4 @@ def test_super_admin_curriculum_grouping_pages_render(client):
     assert client.get("/admin/curriculum").status_code == 200
     assert client.get("/admin/competencies").status_code == 200
     assert client.get("/admin/question-bank").status_code == 200
+    assert client.get("/admin/ai-configuration").status_code == 200
