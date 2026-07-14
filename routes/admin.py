@@ -1322,7 +1322,12 @@ def curriculum():
         LEFT JOIN courses ON lessons.course_id = courses.course_id
         LEFT JOIN performance_indicators ON performance_indicators.outcome_id = learning_outcomes.outcome_id
         LEFT JOIN success_criteria ON success_criteria.outcome_id = learning_outcomes.outcome_id
-        GROUP BY learning_outcomes.outcome_id
+        GROUP BY subjects.subject_name, courses.course_title,
+                 competencies.competency_code, competencies.competency_name,
+                 learning_outcomes.outcome_id, learning_outcomes.outcome_code,
+                 learning_outcomes.outcome_name, learning_outcomes.mastery_threshold,
+                 learning_outcomes.sequence_order, learning_outcomes.practical_required,
+                 learning_outcomes.teacher_review_required
         ORDER BY subjects.subject_name, learning_outcomes.sequence_order
     """).fetchall()
     subjects = conn.execute("SELECT * FROM subjects ORDER BY subject_name").fetchall()
@@ -1353,7 +1358,9 @@ def competencies():
         FROM competencies
         JOIN subjects ON competencies.subject_id = subjects.subject_id
         LEFT JOIN learning_outcomes ON learning_outcomes.competency_id = competencies.competency_id
-        GROUP BY competencies.competency_id
+        GROUP BY subjects.subject_name, competencies.competency_id,
+                 competencies.competency_code, competencies.competency_name,
+                 competencies.competency_description
         ORDER BY subjects.subject_name, competencies.competency_code
     """).fetchall()
     conn.close()
@@ -1431,7 +1438,13 @@ def question_bank():
         JOIN courses ON lessons.course_id = courses.course_id
         JOIN subjects ON courses.subject_id = subjects.subject_id
         LEFT JOIN question_options ON question_options.question_id=questions.question_id
-        GROUP BY questions.question_id
+        GROUP BY questions.question_id, subjects.subject_name,
+                 assessments.assessment_type, assessments.assessment_title,
+                 lo.outcome_code, lo.outcome_name, questions.question_text,
+                 questions.concept_tag, questions.question_type,
+                 questions.difficulty_level, questions.bloom_level,
+                 questions.feedback, questions.resource_link,
+                 questions.estimated_time, questions.marks
         ORDER BY subjects.subject_name, assessments.assessment_type, questions.concept_tag, questions.question_id
         LIMIT 200
     """).fetchall()

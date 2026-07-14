@@ -68,3 +68,11 @@ def test_super_admin_can_upload_knowledge_base_material(client, monkeypatch, tmp
     )
 
     assert response.status_code == 302
+
+
+def test_super_admin_curriculum_grouping_pages_render(client):
+    login(client, "superadmin", "12345")
+
+    assert client.get("/admin/curriculum").status_code == 200
+    assert client.get("/admin/competencies").status_code == 200
+    assert client.get("/admin/question-bank").status_code == 200
