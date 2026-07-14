@@ -1,4 +1,5 @@
 import math
+import os
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
@@ -106,7 +107,8 @@ def learner_rows(conn):
         LEFT JOIN learner_profiles lp ON lp.learner_id = learner.user_id
         LEFT JOIN mastery_records mr ON mr.learner_id = learner.user_id
         WHERE r.role_name='learner'
-        GROUP BY learner.user_id
+        GROUP BY learner.user_id, learner.full_name, learner.username, learner.email,
+                 lp.class_level, lp.learning_pace, lp.learning_style
         ORDER BY learner.full_name
     """).fetchall()
 
@@ -743,8 +745,6 @@ def create_student():
 @role_required("teacher", "school_admin")
 @csrf_protect
 def teacher_kb_upload():
-    import magic
-    from werkzeug.utils import secure_filename
     conn = get_db()
     teacher_id = session["user_id"]
     kb = get_kb()
@@ -759,6 +759,7 @@ def teacher_kb_upload():
             filename = secure_filename(file.filename)
             ext = os.path.splitext(filename)[1].lower()
             if ext not in {'.txt', '.md', '.json', '.pdf'}:
+                conn.close()
                 flash("Unsupported file type. Use .txt, .md, .json, or .pdf", "danger")
                 return redirect(url_for("teacher.teacher_kb_upload"))
 
@@ -768,7 +769,7 @@ def teacher_kb_upload():
             file.seek(0)
 
             if usage + file_size > LIMIT:
-                filepath.unlink()
+                conn.close()
                 flash("Upload failed: You have exceeded your 10MB storage limit.", "danger")
                 return redirect(url_for("teacher.teacher_kb_upload"))
 
@@ -787,8 +788,10 @@ def teacher_kb_upload():
                 conn.commit()
                 flash(f"File {filename} uploaded and processed with AI summarization.", "success")
             else:
+                filepath.unlink(missing_ok=True)
                 flash(f"Error processing {filename}.", "danger")
 
+            conn.close()
             return redirect(url_for("teacher.teacher_kb_upload"))
 
     uploads = conn.execute("SELECT * FROM teacher_kb_uploads WHERE teacher_id = ?", (teacher_id,)).fetchall()
