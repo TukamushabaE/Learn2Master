@@ -18,6 +18,7 @@ The following variables should be set in production:
 | `LEARN2MASTER_FORCE_HTTPS` | HTTPS redirect control | Recommended `0` on Render unless ProxyFix is configured |
 | `LEARN2MASTER_SESSION_COOKIE_SECURE` | Restrict session cookies to HTTPS | Set `1` on Render; use `0` only for local HTTP development |
 | `LEARN2MASTER_CSRF_ENABLED` | CSRF protection | Yes, set `1` |
+| `LEARN2MASTER_AUTO_SEED_DEMO` | Idempotently seed dissertation demo content on container start | Set `1` for the hosted demonstration only |
 | `LEARN2MASTER_MAX_UPLOAD_BYTES` | Evidence upload size limit | Optional, e.g. `5242880` |
 | `LEARN2MASTER_BOOTSTRAP_SCHOOL_NAME` | School created/used by bootstrap users | Yes for bootstrap |
 | `LEARN2MASTER_SUPER_ADMIN_USERNAME` | First super admin username | Yes for bootstrap |

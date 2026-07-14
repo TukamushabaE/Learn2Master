@@ -3,7 +3,7 @@ services:
     name: learn2master-cbc
     runtime: python
     plan: free
-    region: frankfurt
+    region: oregon
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 app:app
     healthCheckPath: /health
@@ -23,6 +23,8 @@ services:
         value: "1"
       - key: LEARN2MASTER_CSRF_ENABLED
         value: "1"
+      - key: LEARN2MASTER_AUTO_SEED_DEMO
+        value: "1"
       - key: LEARN2MASTER_SEED_LEARNER_PASSWORD
         sync: false
       - key: LEARN2MASTER_SEED_TEACHER_PASSWORD
@@ -35,7 +37,7 @@ services:
 databases:
   - name: learn2master-db
     plan: free
-    region: frankfurt
+    region: oregon
     databaseName: learn2master
     user: learn2master
     postgresMajorVersion: "18"
