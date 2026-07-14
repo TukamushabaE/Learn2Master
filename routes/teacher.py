@@ -100,7 +100,7 @@ def learner_rows(conn):
                COALESCE(lp.learning_style, 'Adaptive / Mixed') AS learning_style,
                COUNT(mr.mastery_id) AS mastery_records,
                SUM(CASE WHEN mr.mastery_status='Mastered' THEN 1 ELSE 0 END) AS mastered_records,
-               ROUND(AVG(COALESCE(mr.mastery_score, 0)), 1) AS avg_mastery
+               ROUND(CAST(AVG(COALESCE(mr.mastery_score, 0)) AS NUMERIC), 1) AS avg_mastery
         FROM users learner
         JOIN roles r ON learner.role_id = r.role_id
         LEFT JOIN learner_profiles lp ON lp.learner_id = learner.user_id
@@ -126,7 +126,7 @@ def teacher_dashboard():
         ORDER BY ti.created_at DESC LIMIT 8
     """).fetchall()
     weak = conn.execute("""
-        SELECT cm.concept_tag, ROUND(AVG(cm.latest_score),1) AS avg_score, COUNT(*) AS evidence
+        SELECT cm.concept_tag, ROUND(CAST(AVG(cm.latest_score) AS NUMERIC),1) AS avg_score, COUNT(*) AS evidence
         FROM concept_mastery cm
         GROUP BY cm.concept_tag
         ORDER BY avg_score ASC

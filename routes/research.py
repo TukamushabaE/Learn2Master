@@ -301,7 +301,7 @@ def learning_gain_rows(conn):
                       AND l.outcome_id=mastery_records.outcome_id
                ) AS attempts,
                (
-                    SELECT ROUND(AVG(confidence_score),1)
+                    SELECT ROUND(CAST(AVG(confidence_score) AS NUMERIC),1)
                     FROM ai_explanations ax
                     WHERE ax.learner_id=mastery_records.learner_id
                       AND ax.outcome_id=mastery_records.outcome_id
@@ -596,7 +596,7 @@ def questionnaire_result_rows(conn):
         SELECT q.questionnaire_title,
                q.respondent_role,
                qi.construct_name,
-               ROUND(AVG(a.score), 2) AS average_score,
+               ROUND(CAST(AVG(a.score) AS NUMERIC), 2) AS average_score,
                COUNT(DISTINCT r.id) AS responses,
                COUNT(a.id) AS answers
         FROM research_questionnaire_answers a
@@ -621,7 +621,7 @@ def average_questionnaire_score(conn, role=None, construct=None):
         params.append(construct)
     clause = "WHERE " + " AND ".join(where)
     return one(conn, f"""
-        SELECT ROUND(AVG(a.score), 2)
+        SELECT ROUND(CAST(AVG(a.score) AS NUMERIC), 2)
         FROM research_questionnaire_answers a
         JOIN research_questionnaire_responses r ON r.id=a.response_id
         JOIN research_participants rp ON (rp.id=r.participant_id OR (r.participant_id IS NULL AND rp.user_id=r.respondent_user_id))
@@ -747,7 +747,7 @@ def research_metrics(conn):
                  AND {ELIGIBLE_PARTICIPANT_SQL}
         """),
         "avg_ai_confidence": one(conn, f"""
-            SELECT ROUND(AVG(ax.confidence_score),1) FROM ai_explanations ax
+            SELECT ROUND(CAST(AVG(ax.confidence_score) AS NUMERIC),1) FROM ai_explanations ax
             JOIN research_participants rp ON rp.user_id=ax.learner_id
                  AND {ELIGIBLE_PARTICIPANT_SQL}
         """),
@@ -768,7 +768,7 @@ def research_metrics(conn):
 
 def weak_concept_rows(conn, limit=8):
     return [row_dict(row) for row in conn.execute(f"""
-        SELECT concept_tag, ROUND(AVG(latest_score),1) AS avg_score, COUNT(*) AS evidence
+        SELECT concept_tag, ROUND(CAST(AVG(latest_score) AS NUMERIC),1) AS avg_score, COUNT(*) AS evidence
         FROM concept_mastery
         GROUP BY concept_tag
         ORDER BY avg_score ASC
@@ -785,7 +785,7 @@ def full_dataset_rows(conn):
     questionnaire_scores = {}
     for row in conn.execute(f"""
         SELECT rp.participant_code,
-               ROUND(AVG(a.score),2) AS questionnaire_score
+               ROUND(CAST(AVG(a.score) AS NUMERIC),2) AS questionnaire_score
         FROM research_questionnaire_answers a
         JOIN research_questionnaire_responses r ON r.id=a.response_id
         LEFT JOIN users ON users.user_id=r.respondent_user_id

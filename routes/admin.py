@@ -1126,7 +1126,7 @@ def school_report(school_id):
         ORDER BY roles.role_name
     """, (school_id,)).fetchall()
     mastery = conn.execute("""
-        SELECT subjects.subject_name, ROUND(AVG(mastery_records.mastery_score), 1) AS avg_mastery,
+        SELECT subjects.subject_name, ROUND(CAST(AVG(mastery_records.mastery_score) AS NUMERIC), 1) AS avg_mastery,
                COUNT(mastery_records.mastery_id) AS records,
                SUM(CASE WHEN mastery_records.mastery_status='Mastered' THEN 1 ELSE 0 END) AS mastered
         FROM subjects
@@ -1699,18 +1699,18 @@ def ai_configuration():
     """).fetchall()
     bkt = conn.execute("""
         SELECT
-            ROUND(AVG(prior_mastery_probability), 3) AS avg_prior,
-            ROUND(AVG(learn_probability), 3) AS avg_learn,
-            ROUND(AVG(guess_probability), 3) AS avg_guess,
-            ROUND(AVG(slip_probability), 3) AS avg_slip,
-            ROUND(AVG(probability_mastery) * 100, 1) AS avg_mastery,
-            ROUND(AVG(confidence_score), 1) AS avg_confidence,
+            ROUND(CAST(AVG(prior_mastery_probability) AS NUMERIC), 3) AS avg_prior,
+            ROUND(CAST(AVG(learn_probability) AS NUMERIC), 3) AS avg_learn,
+            ROUND(CAST(AVG(guess_probability) AS NUMERIC), 3) AS avg_guess,
+            ROUND(CAST(AVG(slip_probability) AS NUMERIC), 3) AS avg_slip,
+            ROUND(CAST(AVG(probability_mastery) * 100 AS NUMERIC), 1) AS avg_mastery,
+            ROUND(CAST(AVG(confidence_score) AS NUMERIC), 1) AS avg_confidence,
             COUNT(*) AS records
         FROM bkt_mastery
     """).fetchone()
     recommendations = conn.execute("""
         SELECT recommendation_type, teacher_status, COUNT(*) AS total,
-               ROUND(AVG(confidence_score), 1) AS avg_confidence
+               ROUND(CAST(AVG(confidence_score) AS NUMERIC), 1) AS avg_confidence
         FROM recommendations
         GROUP BY recommendation_type, teacher_status
         ORDER BY total DESC
@@ -1796,7 +1796,7 @@ def reports():
     mastery = conn.execute("""
         SELECT subjects.subject_name, COUNT(mastery_records.mastery_id) AS records,
                SUM(CASE WHEN mastery_records.mastery_status='Mastered' THEN 1 ELSE 0 END) AS mastered,
-               ROUND(AVG(mastery_records.mastery_score), 1) AS avg_mastery
+               ROUND(CAST(AVG(mastery_records.mastery_score) AS NUMERIC), 1) AS avg_mastery
         FROM subjects
         LEFT JOIN competencies ON competencies.subject_id = subjects.subject_id
         LEFT JOIN learning_outcomes ON learning_outcomes.competency_id = competencies.competency_id
