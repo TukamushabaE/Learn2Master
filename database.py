@@ -4,6 +4,10 @@ import sqlite3
 from collections.abc import Mapping
 from datetime import date, datetime
 
+from env_loader import load_local_env
+
+load_local_env()
+
 try:
     import psycopg2
     import psycopg2.errors

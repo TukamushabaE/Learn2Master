@@ -18,6 +18,11 @@ class TestProduction(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.location.endswith('/login') or '/login' in response.location)
 
+    def test_health_endpoint_checks_database(self):
+        response = self.client.get('/health')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()['status'], 'healthy')
+
     def test_sync_endpoint_auth(self):
         response = self.client.post('/sync/assessments', json={'attempts': []})
         self.assertEqual(response.status_code, 302)

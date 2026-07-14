@@ -28,9 +28,9 @@
   <div><p class="eyebrow">Dissertation Chapter Four</p><h1>Research Results Report</h1><p>Printable summary tables for participant profile, pre/post results, gain, mastery, teacher oversight, user acceptance and system usage.</p></div>
   <div class="hero-badge"><span>Participants</span><strong>{{ metrics.total_participants }}</strong></div>
 </section>
-{{ table_block('Table 4.1 Participant Summary', [('participant_code','Code'),('user_id','User ID'),('role_name','Role'),('school_name','School'),('class_name','Class'),('subject_name','Subject'),('study_phase','Phase'),('active_status','Status')], participants) }}
-{{ table_block('Table 4.2 Pre-test Results', [('participant_code','Code'),('subject','Subject'),('learning_outcome','Outcome'),('score','Score'),('total_marks','Total'),('percentage','Percentage'),('concepts_weak','Weak Concepts')], pretest) }}
-{{ table_block('Table 4.3 Post-test Results', [('participant_code','Code'),('subject','Subject'),('learning_outcome','Outcome'),('score','Score'),('total_marks','Total'),('percentage','Percentage'),('concepts_weak','Weak Concepts')], posttest) }}
+{{ table_block('Table 4.1 Participant Summary', [('participant_code','Code'),('role_name','Role'),('school_name','School'),('class_name','Class'),('subject_name','Subject'),('study_phase','Phase'),('active_status','Status')], participants) }}
+{{ table_block('Table 4.2 Pre-test Results', [('participant_code','Code'),('subject','Subject'),('learning_outcome','Outcome'),('score','Score'),('total_marks','Total'),('percentage','Percentage'),('date_taken','Date'),('time_spent','Time Spent'),('concepts_weak','Weak Concepts')], pretest) }}
+{{ table_block('Table 4.3 Post-test Results', [('participant_code','Code'),('subject','Subject'),('learning_outcome','Outcome'),('score','Score'),('total_marks','Total'),('percentage','Percentage'),('date_taken','Date'),('time_spent','Time Spent'),('concepts_weak','Weak Concepts')], posttest) }}
 {{ table_block('Table 4.4 Learning Gain', [('participant_code','Code'),('subject','Subject'),('learning_outcome','Outcome'),('pre_test','Pre'),('post_test','Post'),('learning_gain','Gain'),('normalized_gain','Normalized Gain')], learning_gain) }}
 <section class="learn-card chapter-section">
   <h2>Table 4.5 Mastery Attainment</h2>
@@ -44,7 +44,7 @@
 {{ table_block('Table 4.7 User Acceptance', [('questionnaire_title','Questionnaire'),('respondent_role','Role'),('construct_name','Construct'),('average_score','Average'),('responses','Responses')], questionnaire_results) }}
 <section class="learn-card chapter-section">
   <h2>Table 4.8 System Usage</h2>
-  <p>System usage count: <strong>{{ metrics.system_usage_count }}</strong>; AI recommendations: <strong>{{ metrics.ai_recommendations }}</strong>; latest data collection activity: <strong>{{ metrics.latest_data_collection_activity }}</strong>.</p>
+  <p>System usage count: <strong>{{ metrics.system_usage_count }}</strong>; AI recommendations: <strong>{{ metrics.ai_recommendations }}</strong>; sync success: <strong>{% if metrics.sync_success_rate == 'No data yet.' %}{{ metrics.sync_success_rate }}{% else %}{{ metrics.sync_success_rate }}%{% endif %}</strong>; recorded incidents: <strong>{{ metrics.recorded_system_incidents }}</strong>; latest data collection activity: <strong>{{ metrics.latest_data_collection_activity }}</strong>.</p>
   <table class="chapter-table"><thead><tr><th>Source</th><th>Participant</th><th>Action</th><th>Details</th><th>Date</th></tr></thead><tbody>{% for row in system_logs %}<tr><td>{{ row.source }}</td><td>{{ row.participant_code }}</td><td>{{ row.action }}</td><td>{{ row.details }}</td><td>{{ row.created_at }}</td></tr>{% else %}<tr><td colspan="5">{{ no_data }}</td></tr>{% endfor %}</tbody></table>
 </section>
 {% endblock %}

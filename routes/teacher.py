@@ -283,10 +283,20 @@ def mastery_decision(learner_id, outcome_id, action):
         ON CONFLICT(learner_id, outcome_id)
         DO UPDATE SET mastery_status=excluded.mastery_status, updated_at=CURRENT_TIMESTAMP
     """, (learner_id, outcome_id, score, level, status))
+    audit_action = {
+        "approve": "MASTERY_APPROVED",
+        "override": "MASTERY_OVERRIDDEN",
+        "reopen": "LEARNER_REOPENED_FOR_PRACTICE",
+        "remediate": "REMEDIATION_ASSIGNED",
+    }[action]
     conn.execute("""
         INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
         VALUES (?, ?, 'mastery_review', ?, ?)
-    """, (session["user_id"], "TEACHER_" + action.upper(), outcome_id, comment))
+    """, (session["user_id"], audit_action, outcome_id, comment))
+    conn.execute("""
+        INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
+        VALUES (?, 'TEACHER_FEEDBACK_GIVEN', 'mastery_review', ?, ?)
+    """, (session["user_id"], outcome_id, comment))
     conn.commit()
     conn.close()
     flash(f"Mastery decision recorded: {decision}.", "success")
@@ -417,7 +427,7 @@ def review_activity_submission(submission_id):
     """, (session["user_id"], submission["learner_id"], submission["outcome_id"], feedback_text))
     conn.execute("""
         INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
-        VALUES (?, 'ACTIVITY_FEEDBACK', 'activity_submission', ?, ?)
+        VALUES (?, 'TEACHER_FEEDBACK_GIVEN', 'activity_submission', ?, ?)
     """, (session["user_id"], submission_id, feedback_text))
     conn.commit()
     conn.close()

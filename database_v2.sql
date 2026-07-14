@@ -401,6 +401,9 @@ CREATE TABLE assessment_attempts (
     assessment_id INTEGER NOT NULL,
     score REAL DEFAULT 0,
     weak_concepts TEXT,
+    started_at TEXT,
+    completed_at TEXT,
+    time_spent_seconds INTEGER,
     attempted_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (learner_id) REFERENCES users(user_id),
     FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id)

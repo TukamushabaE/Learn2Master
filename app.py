@@ -2,7 +2,7 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 from whitenoise import WhiteNoise
-from flask import Flask, redirect, request, render_template, send_from_directory, session, url_for
+from flask import Flask, jsonify, redirect, request, render_template, send_from_directory, session, url_for
 from flask_login import LoginManager, current_user
 from models import db, User, Role, School
 from extensions import talisman, limiter
@@ -60,7 +60,8 @@ csp = {
 talisman.init_app(
     app,
     force_https=(app.config.get("FORCE_HTTPS", False) and not os.environ.get("TESTING")),
-    content_security_policy=csp
+    content_security_policy=csp,
+    session_cookie_secure=app.config.get("SESSION_COOKIE_SECURE", False),
 )
 limiter.init_app(app)
 if os.environ.get('TESTING'):
@@ -154,6 +155,23 @@ def add_no_cache_headers(response):
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+
+@app.route("/health")
+def health():
+    from database import get_db
+
+    conn = None
+    try:
+        conn = get_db()
+        conn.execute("SELECT 1").fetchone()
+        return jsonify({"status": "healthy", "database": "reachable"})
+    except Exception:
+        app.logger.exception("Health check failed")
+        return jsonify({"status": "unhealthy", "database": "unreachable"}), 503
+    finally:
+        if conn:
+            conn.close()
 
 
 @app.errorhandler(404)

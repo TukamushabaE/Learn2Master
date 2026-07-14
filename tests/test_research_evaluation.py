@@ -1,4 +1,4 @@
-from conftest import csrf_token, login
+from conftest import assessment_id, correct_answers, csrf_token, login, outcome_id
 
 
 def test_research_required_routes_open_for_admin(client):
@@ -88,3 +88,41 @@ def test_research_seeded_participants_and_questionnaires(db):
     assert participants["total"] >= 2
     assert questionnaires["total"] >= 2
     assert items["total"] >= 20
+
+
+def test_assessment_timing_gain_chart_and_consent_filter(client, db):
+    login(client, "elijah", "12345")
+    learning_outcome_id = outcome_id(db, "ICT-LO1")
+    pretest_id = assessment_id(db, "ICT-LO1", "pretest")
+    assert client.get(f"/outcome/{learning_outcome_id}").status_code == 200
+
+    payload = correct_answers(db, pretest_id)
+    payload["csrf_token"] = csrf_token(client)
+    response = client.post(f"/assessment/{pretest_id}/submit", data=payload, follow_redirects=False)
+    assert response.status_code == 302
+
+    timing = db.execute("""
+        SELECT started_at, completed_at, time_spent_seconds
+        FROM assessment_attempts
+        WHERE assessment_id=?
+        ORDER BY attempt_id DESC LIMIT 1
+    """, (pretest_id,)).fetchone()
+    assert timing["started_at"]
+    assert timing["completed_at"]
+    assert timing["time_spent_seconds"] >= 0
+
+    client.get("/logout")
+    login(client, "admin", "12345")
+    results = client.get("/research/pre-post-results")
+    gain = client.get("/research/learning-gain")
+    assert b"L001" in results.data
+    assert b"Participant Pre-test vs Post-test" in gain.data
+
+    db.execute("""
+        UPDATE research_participants
+        SET consent_status='Declined'
+        WHERE participant_code='L001'
+    """)
+    db.commit()
+    filtered = client.get("/research/pre-post-results")
+    assert b"L001" not in filtered.data

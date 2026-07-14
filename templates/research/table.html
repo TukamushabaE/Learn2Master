@@ -3,7 +3,7 @@
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
 <style>
-.research-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:14px}.research-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.research-table-wrap{overflow:auto}.research-table{width:100%;border-collapse:collapse;min-width:900px}.research-table th,.research-table td{border-bottom:1px solid #e7edf5;padding:10px;text-align:left;vertical-align:top}.research-table th{font-size:.78rem;text-transform:uppercase;color:#496174;background:#f8fbff}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:16px 0}.summary-grid div{border:1px solid #e7edf5;border-radius:8px;padding:12px;background:#fff}.summary-grid span{display:block;color:#687789;font-size:.8rem}.summary-grid strong{font-size:1.35rem;color:#10233f}@media print{.sidebar,.topbar,.footer,.research-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}.research-table{min-width:0;font-size:11px}}
+.research-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:14px}.research-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.research-table-wrap{overflow:auto}.research-table{width:100%;border-collapse:collapse;min-width:900px}.research-table th,.research-table td{border-bottom:1px solid #e7edf5;padding:10px;text-align:left;vertical-align:top}.research-table th{font-size:.78rem;text-transform:uppercase;color:#496174;background:#f8fbff}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:16px 0}.summary-grid div{border:1px solid #e7edf5;border-radius:8px;padding:12px;background:#fff}.summary-grid span{display:block;color:#687789;font-size:.8rem}.summary-grid strong{font-size:1.35rem;color:#10233f}.comparison-chart{display:grid;gap:14px}.comparison-row{display:grid;grid-template-columns:minmax(180px,1fr) 2fr;gap:14px;align-items:center}.comparison-label{font-weight:800;color:#21364f}.comparison-bars{display:grid;gap:7px}.comparison-bar{display:grid;grid-template-columns:36px 1fr 48px;gap:8px;align-items:center}.comparison-track{height:11px;background:#e8eef6;border-radius:999px;overflow:hidden}.comparison-fill{display:block;height:100%;background:#6e8fb7}.comparison-fill.post{background:#143d73}@media print{.sidebar,.topbar,.footer,.research-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}.research-table{min-width:0;font-size:11px}}
 </style>
 {% endblock %}
 {% block content %}
@@ -26,6 +26,24 @@
   {% for key, value in summary.items() %}
   <div><span>{{ key.replace('_',' ')|title }}</span><strong>{{ value }}</strong></div>
   {% endfor %}
+</section>
+{% endif %}
+{% if chart %}
+<section class="learn-card">
+  <h2>{{ chart.title }}</h2>
+  <div class="comparison-chart" role="img" aria-label="{{ chart.title }}">
+    {% for item in chart.rows[:20] %}
+    <div class="comparison-row">
+      <div class="comparison-label">{{ item.label }}</div>
+      <div class="comparison-bars">
+        <div class="comparison-bar"><span>Pre</span><span class="comparison-track"><span class="comparison-fill" style="width: {{ [[item.pre|float, 100]|min, 0]|max }}%;"></span></span><strong>{{ item.pre }}%</strong></div>
+        <div class="comparison-bar"><span>Post</span><span class="comparison-track"><span class="comparison-fill post" style="width: {{ [[item.post|float, 100]|min, 0]|max }}%;"></span></span><strong>{{ item.post }}%</strong></div>
+      </div>
+    </div>
+    {% else %}
+    <p>{{ no_data }}</p>
+    {% endfor %}
+  </div>
 </section>
 {% endif %}
 <section class="learn-card">

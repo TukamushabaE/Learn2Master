@@ -6,6 +6,20 @@ from database import get_db
 conn = get_db()
 cur = conn.cursor()
 
+SEED_PASSWORD_ENV_VARS = (
+    "LEARN2MASTER_SEED_LEARNER_PASSWORD",
+    "LEARN2MASTER_SEED_TEACHER_PASSWORD",
+    "LEARN2MASTER_SEED_SCHOOL_ADMIN_PASSWORD",
+    "LEARN2MASTER_SEED_SUPER_ADMIN_PASSWORD",
+)
+
+PLACEHOLDER_PASSWORDS = {
+    "<choose-a-secure-local-password>",
+    "change-this-demo-password",
+    "change-this-long-random-password",
+    "password",
+}
+
 
 def get_id(query, params=()):
     row = cur.execute(query, params).fetchone()
@@ -14,12 +28,27 @@ def get_id(query, params=()):
 
 def required_password(env_name):
     value = os.environ.get(env_name)
-    if not value:
+    if not value or value.strip().lower() in PLACEHOLDER_PASSWORDS:
         raise RuntimeError(
             f"{env_name} is required before running seed_data.py. "
-            "Do not hard-code production seed passwords."
+            "Use a real environment-provided password, not a placeholder."
         )
     return value
+
+
+missing_seed_passwords = [
+    name for name in SEED_PASSWORD_ENV_VARS
+    if not os.environ.get(name) or os.environ.get(name, "").strip().lower() in PLACEHOLDER_PASSWORDS
+]
+if missing_seed_passwords:
+    commands = "\n".join(f'$env:{name}="<choose-a-secure-local-password>"' for name in missing_seed_passwords)
+    raise RuntimeError(
+        "Demo seed passwords are required before running seed_data.py.\n"
+        "Set them in this PowerShell session:\n"
+        f"{commands}\n\n"
+        "Or create a .env file from .env.example and replace the demo password values. "
+        "Passwords are intentionally read from the environment and are never hard-coded."
+    )
 
 
 # Roles, school, class, users
