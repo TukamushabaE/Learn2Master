@@ -17,7 +17,10 @@ class Config:
 
     # Session Security
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SECURE = FORCE_HTTPS
+    SESSION_COOKIE_SECURE = env_flag(
+        "LEARN2MASTER_SESSION_COOKIE_SECURE",
+        "1" if FORCE_HTTPS else "0",
+    )
     MAX_CONTENT_LENGTH = int(os.environ.get("LEARN2MASTER_MAX_UPLOAD_BYTES", 5 * 1024 * 1024))
     CSRF_ENABLED = os.environ.get("LEARN2MASTER_CSRF_ENABLED", "1").lower() not in {"0", "false", "no", "off"}
     UPLOAD_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".txt", ".doc", ".docx", ".py", ".zip"}

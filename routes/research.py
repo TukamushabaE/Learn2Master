@@ -13,6 +13,12 @@ research_bp = Blueprint("research", __name__)
 
 RESEARCH_ROLES = ("school_admin", "super_admin", "teacher")
 NO_DATA = "No data yet."
+ELIGIBLE_PARTICIPANT_SQL = """
+    rp.active_status='Active'
+    AND rp.consent_status='Granted'
+    AND rp.assent_status IN ('Granted', 'Not Applicable')
+    AND rp.parent_consent_status IN ('Granted', 'Not Applicable')
+"""
 
 
 def one(conn, sql, params=()):
@@ -39,6 +45,22 @@ def parse_db_datetime(value):
 def fmt_datetime(value):
     parsed = parse_db_datetime(value)
     return parsed.strftime("%Y-%m-%d %H:%M") if parsed else (value or "")
+
+
+def fmt_duration(seconds):
+    if seconds is None or seconds == "":
+        return "Not recorded"
+    try:
+        total = max(0, int(seconds))
+    except (TypeError, ValueError):
+        return "Not recorded"
+    minutes, remaining_seconds = divmod(total, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {minutes}m {remaining_seconds}s"
+    if minutes:
+        return f"{minutes}m {remaining_seconds}s"
+    return f"{remaining_seconds}s"
 
 
 def average_hours_between(rows, start_key, end_key):
@@ -124,11 +146,21 @@ def participant_rows(conn):
 
 def participant_summary(conn):
     rows = participant_rows(conn)
+    eligible = [
+        row for row in rows
+        if row.get("active_status") == "Active"
+        and row.get("consent_status") == "Granted"
+        and row.get("assent_status") in {"Granted", "Not Applicable"}
+        and row.get("parent_consent_status") in {"Granted", "Not Applicable"}
+    ]
     return {
         "total_participants": len(rows),
         "active_participants": sum(1 for row in rows if row.get("active_status") == "Active"),
         "learners": sum(1 for row in rows if row.get("role_name") == "learner"),
         "teachers": sum(1 for row in rows if row.get("role_name") == "teacher"),
+        "eligible_participants": len(eligible),
+        "eligible_learners": sum(1 for row in eligible if row.get("role_name") == "learner"),
+        "eligible_teachers": sum(1 for row in eligible if row.get("role_name") == "teacher"),
     }
 
 
@@ -178,7 +210,7 @@ def assessment_result_rows(conn, assessment_type=None):
         params.append(assessment_type)
 
     rows = conn.execute(f"""
-        SELECT COALESCE(rp.participant_code, 'U' || CAST(users.user_id AS TEXT)) AS participant_code,
+        SELECT rp.participant_code,
                users.user_id AS learner_id,
                subjects.subject_name AS subject,
                topics.topic_title AS topic,
@@ -187,6 +219,9 @@ def assessment_result_rows(conn, assessment_type=None):
                assessment_attempts.score AS percentage,
                assessments.total_marks,
                assessment_attempts.attempted_at AS date_taken,
+               assessment_attempts.started_at,
+               assessment_attempts.completed_at,
+               assessment_attempts.time_spent_seconds,
                assessment_attempts.weak_concepts AS concepts_weak,
                recommendations.recommendation_reason AS ai_diagnosis,
                (
@@ -201,7 +236,8 @@ def assessment_result_rows(conn, assessment_type=None):
                ) AS answered_items
         FROM assessment_attempts
         JOIN users ON users.user_id=assessment_attempts.learner_id
-        LEFT JOIN research_participants rp ON rp.user_id=users.user_id
+        JOIN research_participants rp ON rp.user_id=users.user_id
+             AND {ELIGIBLE_PARTICIPANT_SQL}
         JOIN assessments ON assessments.assessment_id=assessment_attempts.assessment_id
         JOIN lessons ON lessons.lesson_id=assessments.lesson_id
         JOIN learning_outcomes lo ON lo.outcome_id=lessons.outcome_id
@@ -232,10 +268,11 @@ def assessment_result_rows(conn, assessment_type=None):
             "score": row["concepts_correct"] or 0,
             "total_marks": total_marks,
             "percentage": safe_round(row["percentage"]),
-            "date_taken": fmt_datetime(row["date_taken"]),
-            "start_time": "Not recorded",
-            "end_time": fmt_datetime(row["date_taken"]),
-            "time_spent": "Not recorded",
+            "date_taken": fmt_datetime(row["completed_at"] or row["date_taken"]),
+            "start_time": fmt_datetime(row["started_at"]) or "Not recorded",
+            "end_time": fmt_datetime(row["completed_at"] or row["date_taken"]),
+            "time_spent": fmt_duration(row["time_spent_seconds"]),
+            "time_spent_seconds": row["time_spent_seconds"] if row["time_spent_seconds"] is not None else "",
             "concepts_correct": row["concepts_correct"] or 0,
             "concepts_weak": row["concepts_weak"] or "",
             "ai_diagnosis": row["ai_diagnosis"] or "",
@@ -244,8 +281,8 @@ def assessment_result_rows(conn, assessment_type=None):
 
 
 def learning_gain_rows(conn):
-    rows = conn.execute("""
-        SELECT COALESCE(rp.participant_code, 'U' || CAST(users.user_id AS TEXT)) AS participant_code,
+    rows = conn.execute(f"""
+        SELECT rp.participant_code,
                users.user_id AS learner_id,
                subjects.subject_name AS subject,
                topics.topic_title AS topic,
@@ -264,7 +301,7 @@ def learning_gain_rows(conn):
                       AND l.outcome_id=mastery_records.outcome_id
                ) AS attempts,
                (
-                    SELECT ROUND(AVG(confidence_score),1)
+                    SELECT ROUND(CAST(AVG(confidence_score) AS NUMERIC),1)
                     FROM ai_explanations ax
                     WHERE ax.learner_id=mastery_records.learner_id
                       AND ax.outcome_id=mastery_records.outcome_id
@@ -289,7 +326,8 @@ def learning_gain_rows(conn):
                ) AS teacher_intervention_count
         FROM mastery_records
         JOIN users ON users.user_id=mastery_records.learner_id
-        LEFT JOIN research_participants rp ON rp.user_id=users.user_id
+        JOIN research_participants rp ON rp.user_id=users.user_id
+             AND {ELIGIBLE_PARTICIPANT_SQL}
         JOIN learning_outcomes lo ON lo.outcome_id=mastery_records.outcome_id
         JOIN competencies ON competencies.competency_id=lo.competency_id
         JOIN subjects ON subjects.subject_id=competencies.subject_id
@@ -371,8 +409,8 @@ def feedback_response_hours(conn):
 
 
 def mastery_rows(conn):
-    rows = conn.execute("""
-        SELECT COALESCE(rp.participant_code, 'U' || CAST(users.user_id AS TEXT)) AS participant_code,
+    rows = conn.execute(f"""
+        SELECT rp.participant_code,
                subjects.subject_name AS subject,
                topics.topic_title AS topic,
                lo.outcome_name AS learning_outcome,
@@ -391,7 +429,8 @@ def mastery_rows(conn):
                ) AS attempts
         FROM mastery_records
         JOIN users ON users.user_id=mastery_records.learner_id
-        LEFT JOIN research_participants rp ON rp.user_id=users.user_id
+        JOIN research_participants rp ON rp.user_id=users.user_id
+             AND {ELIGIBLE_PARTICIPANT_SQL}
         JOIN learning_outcomes lo ON lo.outcome_id=mastery_records.outcome_id
         JOIN competencies ON competencies.competency_id=lo.competency_id
         JOIN subjects ON subjects.subject_id=competencies.subject_id
@@ -452,9 +491,9 @@ def mastery_summary(rows, total_learners=0):
 
 
 def teacher_oversight_data(conn):
-    reviews = [row_dict(row) for row in conn.execute("""
+    reviews = [row_dict(row) for row in conn.execute(f"""
         SELECT 'Mastery Review' AS record_type,
-               COALESCE(rp.participant_code, 'U' || CAST(learner.user_id AS TEXT)) AS participant_code,
+               rp.participant_code,
                lo.outcome_name AS learning_outcome,
                tr.decision AS action,
                tr.teacher_comment AS comment,
@@ -462,13 +501,14 @@ def teacher_oversight_data(conn):
                tr.created_at
         FROM teacher_mastery_reviews tr
         JOIN users learner ON learner.user_id=tr.learner_id
-        LEFT JOIN research_participants rp ON rp.user_id=learner.user_id
+        JOIN research_participants rp ON rp.user_id=learner.user_id
+             AND {ELIGIBLE_PARTICIPANT_SQL}
         JOIN learning_outcomes lo ON lo.outcome_id=tr.outcome_id
         ORDER BY tr.created_at DESC
     """).fetchall()]
-    feedback = [row_dict(row) for row in conn.execute("""
+    feedback = [row_dict(row) for row in conn.execute(f"""
         SELECT 'Teacher Feedback' AS record_type,
-               COALESCE(rp.participant_code, 'U' || CAST(learner.user_id AS TEXT)) AS participant_code,
+               rp.participant_code,
                lo.outcome_name AS learning_outcome,
                tf.mastery_approval AS action,
                tf.feedback_text AS comment,
@@ -476,13 +516,14 @@ def teacher_oversight_data(conn):
                tf.created_at
         FROM teacher_feedback tf
         JOIN users learner ON learner.user_id=tf.learner_id
-        LEFT JOIN research_participants rp ON rp.user_id=learner.user_id
+        JOIN research_participants rp ON rp.user_id=learner.user_id
+             AND {ELIGIBLE_PARTICIPANT_SQL}
         JOIN learning_outcomes lo ON lo.outcome_id=tf.outcome_id
         ORDER BY tf.created_at DESC
     """).fetchall()]
-    interventions = [row_dict(row) for row in conn.execute("""
+    interventions = [row_dict(row) for row in conn.execute(f"""
         SELECT 'Teacher Intervention' AS record_type,
-               COALESCE(rp.participant_code, 'U' || CAST(learner.user_id AS TEXT)) AS participant_code,
+               rp.participant_code,
                lo.outcome_name AS learning_outcome,
                ti.intervention_type AS action,
                ti.intervention_note AS comment,
@@ -490,13 +531,14 @@ def teacher_oversight_data(conn):
                ti.created_at
         FROM teacher_interventions ti
         JOIN users learner ON learner.user_id=ti.learner_id
-        LEFT JOIN research_participants rp ON rp.user_id=learner.user_id
+        JOIN research_participants rp ON rp.user_id=learner.user_id
+             AND {ELIGIBLE_PARTICIPANT_SQL}
         JOIN learning_outcomes lo ON lo.outcome_id=ti.outcome_id
         ORDER BY ti.created_at DESC
     """).fetchall()]
-    practical = [row_dict(row) for row in conn.execute("""
+    practical = [row_dict(row) for row in conn.execute(f"""
         SELECT 'Practical Evidence Review' AS record_type,
-               COALESCE(rp.participant_code, 'U' || CAST(learner.user_id AS TEXT)) AS participant_code,
+               rp.participant_code,
                lo.outcome_name AS learning_outcome,
                pe.teacher_status AS action,
                pe.teacher_comment AS comment,
@@ -504,7 +546,8 @@ def teacher_oversight_data(conn):
                COALESCE(pe.reviewed_at, pe.created_at) AS created_at
         FROM practical_evidence pe
         JOIN users learner ON learner.user_id=pe.learner_id
-        LEFT JOIN research_participants rp ON rp.user_id=learner.user_id
+        JOIN research_participants rp ON rp.user_id=learner.user_id
+             AND {ELIGIBLE_PARTICIPANT_SQL}
         JOIN learning_outcomes lo ON lo.outcome_id=pe.outcome_id
         WHERE pe.reviewed_at IS NOT NULL OR pe.teacher_status != 'Pending Review'
         ORDER BY COALESCE(pe.reviewed_at, pe.created_at) DESC
@@ -549,15 +592,17 @@ def questionnaire_rows(conn):
 
 
 def questionnaire_result_rows(conn):
-    return [row_dict(row) for row in conn.execute("""
+    return [row_dict(row) for row in conn.execute(f"""
         SELECT q.questionnaire_title,
                q.respondent_role,
                qi.construct_name,
-               ROUND(AVG(a.score), 2) AS average_score,
+               ROUND(CAST(AVG(a.score) AS NUMERIC), 2) AS average_score,
                COUNT(DISTINCT r.id) AS responses,
                COUNT(a.id) AS answers
         FROM research_questionnaire_answers a
         JOIN research_questionnaire_responses r ON r.id=a.response_id
+        JOIN research_participants rp ON (rp.id=r.participant_id OR (r.participant_id IS NULL AND rp.user_id=r.respondent_user_id))
+             AND {ELIGIBLE_PARTICIPANT_SQL}
         JOIN research_questionnaire_items qi ON qi.id=a.item_id
         JOIN research_questionnaires q ON q.id=qi.questionnaire_id
         GROUP BY q.questionnaire_title, q.respondent_role, qi.construct_name
@@ -566,7 +611,7 @@ def questionnaire_result_rows(conn):
 
 
 def average_questionnaire_score(conn, role=None, construct=None):
-    where = []
+    where = [" ".join(ELIGIBLE_PARTICIPANT_SQL.split())]
     params = []
     if role:
         where.append("q.respondent_role = ?")
@@ -574,10 +619,12 @@ def average_questionnaire_score(conn, role=None, construct=None):
     if construct:
         where.append("qi.construct_name = ?")
         params.append(construct)
-    clause = "WHERE " + " AND ".join(where) if where else ""
+    clause = "WHERE " + " AND ".join(where)
     return one(conn, f"""
-        SELECT ROUND(AVG(a.score), 2)
+        SELECT ROUND(CAST(AVG(a.score) AS NUMERIC), 2)
         FROM research_questionnaire_answers a
+        JOIN research_questionnaire_responses r ON r.id=a.response_id
+        JOIN research_participants rp ON (rp.id=r.participant_id OR (r.participant_id IS NULL AND rp.user_id=r.respondent_user_id))
         JOIN research_questionnaire_items qi ON qi.id=a.item_id
         JOIN research_questionnaires q ON q.id=qi.questionnaire_id
         {clause}
@@ -585,26 +632,28 @@ def average_questionnaire_score(conn, role=None, construct=None):
 
 
 def system_log_rows(conn, limit=120):
-    audit_rows = [row_dict(row) for row in conn.execute("""
+    audit_rows = [row_dict(row) for row in conn.execute(f"""
         SELECT 'Audit Log' AS source, audit_logs.action, audit_logs.entity_type,
                audit_logs.entity_id, audit_logs.details, audit_logs.created_at,
-               COALESCE(rp.participant_code, 'U' || CAST(users.user_id AS TEXT)) AS participant_code
+               COALESCE(rp.participant_code, 'System/Unlinked') AS participant_code
         FROM audit_logs
         LEFT JOIN users ON users.user_id=audit_logs.actor_id
         LEFT JOIN research_participants rp ON rp.user_id=users.user_id
+             AND {ELIGIBLE_PARTICIPANT_SQL}
         ORDER BY audit_logs.created_at DESC
         LIMIT 120
     """).fetchall()]
-    activity_rows = [row_dict(row) for row in conn.execute("""
+    activity_rows = [row_dict(row) for row in conn.execute(f"""
         SELECT 'Activity Log' AS source, activity_logs.activity_type AS action,
                'learner_activity' AS entity_type,
                activity_logs.log_id AS entity_id,
                activity_logs.activity_description AS details,
                activity_logs.created_at,
-               COALESCE(rp.participant_code, 'U' || CAST(users.user_id AS TEXT)) AS participant_code
+               COALESCE(rp.participant_code, 'System/Unlinked') AS participant_code
         FROM activity_logs
         LEFT JOIN users ON users.user_id=activity_logs.learner_id
         LEFT JOIN research_participants rp ON rp.user_id=users.user_id
+             AND {ELIGIBLE_PARTICIPANT_SQL}
         ORDER BY activity_logs.created_at DESC
         LIMIT 120
     """).fetchall()]
@@ -615,21 +664,58 @@ def system_log_rows(conn, limit=120):
     return rows[:limit]
 
 
+def reliability_summary(conn):
+    synced_items = one(conn, "SELECT COALESCE(SUM(synced_count), 0) FROM sync_events")
+    event_failures = one(conn, "SELECT COALESCE(SUM(failed_count), 0) FROM sync_events")
+    queue_failures = one(conn, """
+        SELECT
+            (SELECT COUNT(*) FROM offline_sync_queue
+             WHERE LOWER(COALESCE(sync_status,'')) IN ('failed','error') OR last_error IS NOT NULL) +
+            (SELECT COUNT(*) FROM sync_queue
+             WHERE LOWER(COALESCE(sync_status,'')) IN ('failed','error') OR error_message IS NOT NULL)
+    """)
+    observed_results = synced_items + event_failures
+    return {
+        "sync_events": one(conn, "SELECT COUNT(*) FROM sync_events"),
+        "synced_items": synced_items,
+        "failed_items": event_failures,
+        "recorded_system_incidents": event_failures + queue_failures,
+        "sync_success_rate": percentage(synced_items, observed_results) if observed_results else NO_DATA,
+        "pending_sync_items": one(conn, """
+            SELECT
+                (SELECT COUNT(*) FROM offline_sync_queue WHERE sync_status='Pending') +
+                (SELECT COUNT(*) FROM sync_queue WHERE sync_status='Pending')
+        """),
+    }
+
+
 def research_metrics(conn):
     participants = participant_summary(conn)
     mastery = mastery_rows(conn)
-    total_learners = one(conn, "SELECT COUNT(*) FROM users JOIN roles ON roles.role_id=users.role_id WHERE roles.role_name='learner'")
+    total_learners = participants["eligible_learners"]
     mastery_totals = mastery_summary(mastery, total_learners)
     gains = learning_gain_rows(conn)
     gain_stats = learning_gain_stats(gains)
     oversight_summary, _ = teacher_oversight_data(conn)
     logs = system_log_rows(conn, limit=1)
-    questionnaire_response_count = one(conn, "SELECT COUNT(*) FROM research_questionnaire_responses")
+    reliability = reliability_summary(conn)
+    questionnaire_response_count = one(conn, f"""
+        SELECT COUNT(DISTINCT r.id)
+        FROM research_questionnaire_responses r
+        JOIN research_participants rp ON (rp.id=r.participant_id OR (r.participant_id IS NULL AND rp.user_id=r.respondent_user_id))
+             AND {ELIGIBLE_PARTICIPANT_SQL}
+    """)
     metrics = {
         "total_participants": participants["total_participants"],
-        "learners": total_learners,
-        "teachers": one(conn, "SELECT COUNT(*) FROM users JOIN roles ON users.role_id=roles.role_id WHERE roles.role_name='teacher'"),
-        "attempts": one(conn, "SELECT COUNT(*) FROM assessment_attempts"),
+        "eligible_participants": participants["eligible_participants"],
+        "learners": participants["eligible_learners"],
+        "teachers": participants["eligible_teachers"],
+        "attempts": one(conn, f"""
+            SELECT COUNT(*)
+            FROM assessment_attempts aa
+            JOIN research_participants rp ON rp.user_id=aa.learner_id
+                 AND {ELIGIBLE_PARTICIPANT_SQL}
+        """),
         "average_pre_test": gain_stats["average_pre_test"],
         "average_post_test": gain_stats["average_post_test"],
         "average_learning_gain": gain_stats["average_gain"],
@@ -639,20 +725,37 @@ def research_metrics(conn):
         "questionnaire_response_count": questionnaire_response_count,
         "average_learner_satisfaction": average_questionnaire_score(conn, role="learner", construct="satisfaction"),
         "average_teacher_satisfaction": average_questionnaire_score(conn, role="teacher"),
-        "system_usage_count": one(conn, """
+        "system_usage_count": one(conn, f"""
             SELECT
-                (SELECT COUNT(*) FROM activity_logs) +
-                (SELECT COUNT(*) FROM assessment_attempts) +
-                (SELECT COUNT(*) FROM recommendations) +
-                (SELECT COUNT(*) FROM practical_evidence) +
-                (SELECT COUNT(*) FROM activity_submissions) +
-                (SELECT COUNT(*) FROM audit_logs)
+                (SELECT COUNT(*) FROM activity_logs al
+                 JOIN research_participants rp ON rp.user_id=al.learner_id AND {ELIGIBLE_PARTICIPANT_SQL}) +
+                (SELECT COUNT(*) FROM assessment_attempts aa
+                 JOIN research_participants rp ON rp.user_id=aa.learner_id AND {ELIGIBLE_PARTICIPANT_SQL}) +
+                (SELECT COUNT(*) FROM recommendations rec
+                 JOIN research_participants rp ON rp.user_id=rec.learner_id AND {ELIGIBLE_PARTICIPANT_SQL}) +
+                (SELECT COUNT(*) FROM practical_evidence pe
+                 JOIN research_participants rp ON rp.user_id=pe.learner_id AND {ELIGIBLE_PARTICIPANT_SQL}) +
+                (SELECT COUNT(*) FROM activity_submissions sub
+                 JOIN research_participants rp ON rp.user_id=sub.learner_id AND {ELIGIBLE_PARTICIPANT_SQL}) +
+                (SELECT COUNT(*) FROM audit_logs audit
+                 JOIN research_participants rp ON rp.user_id=audit.actor_id AND {ELIGIBLE_PARTICIPANT_SQL})
         """),
-        "latest_data_collection_activity": logs[0]["created_at"] if logs else NO_DATA,
-        "ai_recommendations": one(conn, "SELECT COUNT(*) FROM recommendations"),
-        "avg_ai_confidence": one(conn, "SELECT ROUND(AVG(confidence_score),1) FROM ai_explanations"),
+        "latest_data_collection_activity": f"{logs[0]['action']} - {logs[0]['created_at']}" if logs else NO_DATA,
+        "ai_recommendations": one(conn, f"""
+            SELECT COUNT(*) FROM recommendations rec
+            JOIN research_participants rp ON rp.user_id=rec.learner_id
+                 AND {ELIGIBLE_PARTICIPANT_SQL}
+        """),
+        "avg_ai_confidence": one(conn, f"""
+            SELECT ROUND(CAST(AVG(ax.confidence_score) AS NUMERIC),1) FROM ai_explanations ax
+            JOIN research_participants rp ON rp.user_id=ax.learner_id
+                 AND {ELIGIBLE_PARTICIPANT_SQL}
+        """),
         "offline_pending": one(conn, "SELECT COUNT(*) FROM offline_sync_queue WHERE sync_status='Pending'"),
         "cached_resources": one(conn, "SELECT COUNT(*) FROM cached_resources WHERE cache_status='Cached'"),
+        "sync_success_rate": reliability["sync_success_rate"],
+        "recorded_system_incidents": reliability["recorded_system_incidents"],
+        "reliability_evidence_count": reliability["sync_events"],
     }
     metrics["avg_pretest"] = metrics["average_pre_test"]
     metrics["avg_posttest"] = metrics["average_post_test"]
@@ -665,7 +768,7 @@ def research_metrics(conn):
 
 def weak_concept_rows(conn, limit=8):
     return [row_dict(row) for row in conn.execute(f"""
-        SELECT concept_tag, ROUND(AVG(latest_score),1) AS avg_score, COUNT(*) AS evidence
+        SELECT concept_tag, ROUND(CAST(AVG(latest_score) AS NUMERIC),1) AS avg_score, COUNT(*) AS evidence
         FROM concept_mastery
         GROUP BY concept_tag
         ORDER BY avg_score ASC
@@ -675,24 +778,32 @@ def weak_concept_rows(conn, limit=8):
 
 def full_dataset_rows(conn):
     gains = learning_gain_rows(conn)
+    mastery_times = {
+        (row["participant_code"], row["subject"], row["topic"], row["learning_outcome"]): row["time_to_mastery"]
+        for row in mastery_rows(conn)
+    }
     questionnaire_scores = {}
-    for row in conn.execute("""
-        SELECT COALESCE(rp.participant_code, 'U' || CAST(users.user_id AS TEXT)) AS participant_code,
-               ROUND(AVG(a.score),2) AS questionnaire_score
+    for row in conn.execute(f"""
+        SELECT rp.participant_code,
+               ROUND(CAST(AVG(a.score) AS NUMERIC),2) AS questionnaire_score
         FROM research_questionnaire_answers a
         JOIN research_questionnaire_responses r ON r.id=a.response_id
         LEFT JOIN users ON users.user_id=r.respondent_user_id
-        LEFT JOIN research_participants rp ON rp.id=r.participant_id OR rp.user_id=users.user_id
-        GROUP BY COALESCE(rp.participant_code, 'U' || CAST(users.user_id AS TEXT))
+        JOIN research_participants rp ON (rp.id=r.participant_id OR (r.participant_id IS NULL AND rp.user_id=users.user_id))
+             AND {ELIGIBLE_PARTICIPANT_SQL}
+        GROUP BY rp.participant_code
     """).fetchall():
         questionnaire_scores[row["participant_code"]] = row["questionnaire_score"]
     for row in gains:
         row["questionnaire_score"] = questionnaire_scores.get(row["participant_code"], "")
-        row["time_to_mastery"] = ""
+        row["time_to_mastery"] = mastery_times.get(
+            (row["participant_code"], row["subject"], row["topic"], row["learning_outcome"]),
+            "Not yet mastered",
+        )
     return gains
 
 
-def render_table(title, subtitle, columns, rows, summary=None, actions=None):
+def render_table(title, subtitle, columns, rows, summary=None, actions=None, chart=None):
     return render_template(
         "research/table.html",
         title=title,
@@ -701,6 +812,7 @@ def render_table(title, subtitle, columns, rows, summary=None, actions=None):
         rows=rows,
         summary=summary or {},
         actions=actions or [],
+        chart=chart,
         no_data=NO_DATA,
     )
 
@@ -740,7 +852,6 @@ def participants():
         "Participant codes protect unnecessary personal data while connecting dissertation evidence to users, schools, classes and subjects.",
         [
             ("participant_code", "Participant Code"),
-            ("user_id", "User ID"),
             ("role_name", "Role"),
             ("school_name", "School"),
             ("class_name", "Class"),
@@ -850,6 +961,8 @@ def assessment_columns():
         ("total_marks", "Total"),
         ("percentage", "Percentage"),
         ("date_taken", "Date Taken"),
+        ("start_time", "Start Time"),
+        ("end_time", "End Time"),
         ("time_spent", "Time Spent"),
         ("concepts_correct", "Concepts Correct"),
         ("concepts_weak", "Weak Concepts"),
@@ -882,6 +995,17 @@ def learning_gain():
         rows,
         summary,
         [{"label": "Export Learning Gain", "url": url_for("research.export_learning_gain")}],
+        chart={
+            "title": "Participant Pre-test vs Post-test",
+            "rows": [
+                {
+                    "label": f"{row['participant_code']} - {row['learning_outcome']}",
+                    "pre": row["pre_test"],
+                    "post": row["post_test"],
+                }
+                for row in rows
+            ],
+        },
     )
 
 
@@ -890,7 +1014,7 @@ def learning_gain():
 def mastery_attainment():
     conn = get_db()
     rows = mastery_rows(conn)
-    summary = mastery_summary(rows, one(conn, "SELECT COUNT(*) FROM users JOIN roles ON roles.role_id=users.role_id WHERE roles.role_name='learner'"))
+    summary = mastery_summary(rows, participant_summary(conn)["eligible_learners"])
     conn.close()
     return render_table(
         "Mastery Attainment Report",
@@ -1002,10 +1126,20 @@ def respond_questionnaire(questionnaire_id):
         ORDER BY display_order, id
     """, (questionnaire_id,)).fetchall()
     participant = conn.execute(
-        "SELECT id FROM research_participants WHERE user_id=? ORDER BY id LIMIT 1",
+        f"""SELECT id FROM research_participants rp
+            WHERE user_id=? AND {ELIGIBLE_PARTICIPANT_SQL}
+            ORDER BY id LIMIT 1""",
         (session.get("user_id"),),
     ).fetchone()
     if request.method == "POST":
+        if questionnaire["respondent_role"] != session.get("role"):
+            conn.close()
+            flash("This questionnaire is assigned to a different participant role.", "warning")
+            return redirect(url_for("research.questionnaires"))
+        if not participant:
+            conn.close()
+            flash("A consented, active research participant record is required before submitting a questionnaire.", "warning")
+            return redirect(url_for("research.questionnaires"))
         existing = conn.execute("""
             SELECT id FROM research_questionnaire_responses
             WHERE questionnaire_id=? AND respondent_user_id=?
@@ -1084,6 +1218,7 @@ def questionnaire_results():
 def system_logs():
     conn = get_db()
     rows = system_log_rows(conn, limit=200)
+    reliability = reliability_summary(conn)
     conn.close()
     return render_table(
         "System Logs for Research",
@@ -1098,6 +1233,7 @@ def system_logs():
             ("created_at", "Date"),
         ],
         rows,
+        reliability,
     )
 
 
@@ -1134,7 +1270,7 @@ def chapter_four_report():
     data["gain_summary"] = learning_gain_stats(data["learning_gain"])
     data["mastery_summary"] = mastery_summary(
         data["mastery"],
-        one(conn, "SELECT COUNT(*) FROM users JOIN roles ON roles.role_id=users.role_id WHERE roles.role_name='learner'"),
+        participant_summary(conn)["eligible_learners"],
     )
     conn.close()
     return render_template("research/chapter_four.html", no_data=NO_DATA, **data)
@@ -1166,8 +1302,15 @@ def chapter_five_insights():
             insights.append(f"User acceptance evidence includes {metrics['questionnaire_response_count']} questionnaire response(s).")
         else:
             insights.append("Usability evidence is pending questionnaire responses.")
-        insights.append("Current limitations include missing assessment start times and exact time-spent values because the operational assessment table stores submission time only.")
-        insights.append("Recommended improvements include recording assessment start/end timestamps, expanding pilot participants, and adding reliability checks from deployment logs.")
+        if metrics["sync_success_rate"] == NO_DATA:
+            insights.append("System reliability evidence is not yet available because no synchronization outcomes have been recorded.")
+        else:
+            insights.append(
+                f"Recorded low-connectivity synchronization succeeded for {metrics['sync_success_rate']}% of observed items, "
+                f"with {metrics['recorded_system_incidents']} recorded failure incident(s)."
+            )
+        insights.append("Current limitations include legacy assessment attempts without exact start times and the absence of external hosting uptime measurements in the local database.")
+        insights.append("Recommended improvements include expanding pilot participants, collecting questionnaire responses, and combining the research logs with production-host uptime monitoring.")
     conn.close()
     return render_template("research/chapter_five.html", has_data=has_data, insights=insights)
 

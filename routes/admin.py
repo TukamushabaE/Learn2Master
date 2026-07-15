@@ -1126,7 +1126,7 @@ def school_report(school_id):
         ORDER BY roles.role_name
     """, (school_id,)).fetchall()
     mastery = conn.execute("""
-        SELECT subjects.subject_name, ROUND(AVG(mastery_records.mastery_score), 1) AS avg_mastery,
+        SELECT subjects.subject_name, ROUND(CAST(AVG(mastery_records.mastery_score) AS NUMERIC), 1) AS avg_mastery,
                COUNT(mastery_records.mastery_id) AS records,
                SUM(CASE WHEN mastery_records.mastery_status='Mastered' THEN 1 ELSE 0 END) AS mastered
         FROM subjects
@@ -1322,7 +1322,12 @@ def curriculum():
         LEFT JOIN courses ON lessons.course_id = courses.course_id
         LEFT JOIN performance_indicators ON performance_indicators.outcome_id = learning_outcomes.outcome_id
         LEFT JOIN success_criteria ON success_criteria.outcome_id = learning_outcomes.outcome_id
-        GROUP BY learning_outcomes.outcome_id
+        GROUP BY subjects.subject_name, courses.course_title,
+                 competencies.competency_code, competencies.competency_name,
+                 learning_outcomes.outcome_id, learning_outcomes.outcome_code,
+                 learning_outcomes.outcome_name, learning_outcomes.mastery_threshold,
+                 learning_outcomes.sequence_order, learning_outcomes.practical_required,
+                 learning_outcomes.teacher_review_required
         ORDER BY subjects.subject_name, learning_outcomes.sequence_order
     """).fetchall()
     subjects = conn.execute("SELECT * FROM subjects ORDER BY subject_name").fetchall()
@@ -1353,7 +1358,9 @@ def competencies():
         FROM competencies
         JOIN subjects ON competencies.subject_id = subjects.subject_id
         LEFT JOIN learning_outcomes ON learning_outcomes.competency_id = competencies.competency_id
-        GROUP BY competencies.competency_id
+        GROUP BY subjects.subject_name, competencies.competency_id,
+                 competencies.competency_code, competencies.competency_name,
+                 competencies.competency_description
         ORDER BY subjects.subject_name, competencies.competency_code
     """).fetchall()
     conn.close()
@@ -1431,7 +1438,13 @@ def question_bank():
         JOIN courses ON lessons.course_id = courses.course_id
         JOIN subjects ON courses.subject_id = subjects.subject_id
         LEFT JOIN question_options ON question_options.question_id=questions.question_id
-        GROUP BY questions.question_id
+        GROUP BY questions.question_id, subjects.subject_name,
+                 assessments.assessment_type, assessments.assessment_title,
+                 lo.outcome_code, lo.outcome_name, questions.question_text,
+                 questions.concept_tag, questions.question_type,
+                 questions.difficulty_level, questions.bloom_level,
+                 questions.feedback, questions.resource_link,
+                 questions.estimated_time, questions.marks
         ORDER BY subjects.subject_name, assessments.assessment_type, questions.concept_tag, questions.question_id
         LIMIT 200
     """).fetchall()
@@ -1693,24 +1706,24 @@ def ai_configuration():
     settings_rows = conn.execute("""
         SELECT *
         FROM system_settings
-        WHERE setting_category LIKE 'AI%'
+        WHERE setting_category LIKE ?
            OR setting_key IN ('bkt_model', 'at_risk_threshold', 'teacher_review_required')
         ORDER BY setting_category, setting_key
-    """).fetchall()
+    """, ("AI%",)).fetchall()
     bkt = conn.execute("""
         SELECT
-            ROUND(AVG(prior_mastery_probability), 3) AS avg_prior,
-            ROUND(AVG(learn_probability), 3) AS avg_learn,
-            ROUND(AVG(guess_probability), 3) AS avg_guess,
-            ROUND(AVG(slip_probability), 3) AS avg_slip,
-            ROUND(AVG(probability_mastery) * 100, 1) AS avg_mastery,
-            ROUND(AVG(confidence_score), 1) AS avg_confidence,
+            ROUND(CAST(AVG(prior_mastery_probability) AS NUMERIC), 3) AS avg_prior,
+            ROUND(CAST(AVG(learn_probability) AS NUMERIC), 3) AS avg_learn,
+            ROUND(CAST(AVG(guess_probability) AS NUMERIC), 3) AS avg_guess,
+            ROUND(CAST(AVG(slip_probability) AS NUMERIC), 3) AS avg_slip,
+            ROUND(CAST(AVG(probability_mastery) * 100 AS NUMERIC), 1) AS avg_mastery,
+            ROUND(CAST(AVG(confidence_score) AS NUMERIC), 1) AS avg_confidence,
             COUNT(*) AS records
         FROM bkt_mastery
     """).fetchone()
     recommendations = conn.execute("""
         SELECT recommendation_type, teacher_status, COUNT(*) AS total,
-               ROUND(AVG(confidence_score), 1) AS avg_confidence
+               ROUND(CAST(AVG(confidence_score) AS NUMERIC), 1) AS avg_confidence
         FROM recommendations
         GROUP BY recommendation_type, teacher_status
         ORDER BY total DESC
@@ -1796,7 +1809,7 @@ def reports():
     mastery = conn.execute("""
         SELECT subjects.subject_name, COUNT(mastery_records.mastery_id) AS records,
                SUM(CASE WHEN mastery_records.mastery_status='Mastered' THEN 1 ELSE 0 END) AS mastered,
-               ROUND(AVG(mastery_records.mastery_score), 1) AS avg_mastery
+               ROUND(CAST(AVG(mastery_records.mastery_score) AS NUMERIC), 1) AS avg_mastery
         FROM subjects
         LEFT JOIN competencies ON competencies.subject_id = subjects.subject_id
         LEFT JOIN learning_outcomes ON learning_outcomes.competency_id = competencies.competency_id
@@ -1849,26 +1862,10 @@ def create_headteacher():
 @role_required("super_admin")
 @csrf_protect
 def admin_kb_upload():
-    import magic
     kb = get_kb()
     if request.method == "POST":
         file = request.files.get("file")
         if file and file.filename:
-            # MIME validation
-            file_content = file.read()
-            mime = magic.from_buffer(file_content, mime=True)
-            allowed_mimes = {
-                'text/plain', 'text/markdown', 'application/json', 'application/pdf',
-                'text/x-markdown'
-            }
-            # Also allow based on extension as fallback or safety
-            ext = os.path.splitext(file.filename)[1].lower()
-            allowed_exts = {'.txt', '.md', '.json', '.pdf'}
-
-            if mime not in allowed_mimes and ext not in allowed_exts:
-                flash(f"Upload failed: Unsupported file type ({mime}).", "danger")
-                return redirect(url_for("admin.admin_kb_upload"))
-
             filename = secure_filename(file.filename)
             ext = os.path.splitext(filename)[1].lower()
             if ext not in {'.txt', '.md', '.json', '.pdf'}:
@@ -1876,6 +1873,7 @@ def admin_kb_upload():
                 return redirect(url_for("admin.admin_kb_upload"))
 
             filepath = kb.directory / filename
+            file.save(str(filepath))
 
             # Use unified processing method
             success, _ = kb.process_file(str(filepath))
@@ -1887,6 +1885,7 @@ def admin_kb_upload():
                 conn.close()
                 flash(f"File {filename} uploaded and KB updated.", "success")
             else:
+                filepath.unlink(missing_ok=True)
                 flash(f"Error processing {filename}.", "danger")
 
             return redirect(url_for("admin.admin_kb_upload"))

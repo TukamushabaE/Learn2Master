@@ -1,4 +1,5 @@
 import math
+import os
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
@@ -100,13 +101,14 @@ def learner_rows(conn):
                COALESCE(lp.learning_style, 'Adaptive / Mixed') AS learning_style,
                COUNT(mr.mastery_id) AS mastery_records,
                SUM(CASE WHEN mr.mastery_status='Mastered' THEN 1 ELSE 0 END) AS mastered_records,
-               ROUND(AVG(COALESCE(mr.mastery_score, 0)), 1) AS avg_mastery
+               ROUND(CAST(AVG(COALESCE(mr.mastery_score, 0)) AS NUMERIC), 1) AS avg_mastery
         FROM users learner
         JOIN roles r ON learner.role_id = r.role_id
         LEFT JOIN learner_profiles lp ON lp.learner_id = learner.user_id
         LEFT JOIN mastery_records mr ON mr.learner_id = learner.user_id
         WHERE r.role_name='learner'
-        GROUP BY learner.user_id
+        GROUP BY learner.user_id, learner.full_name, learner.username, learner.email,
+                 lp.class_level, lp.learning_pace, lp.learning_style
         ORDER BY learner.full_name
     """).fetchall()
 
@@ -126,7 +128,7 @@ def teacher_dashboard():
         ORDER BY ti.created_at DESC LIMIT 8
     """).fetchall()
     weak = conn.execute("""
-        SELECT cm.concept_tag, ROUND(AVG(cm.latest_score),1) AS avg_score, COUNT(*) AS evidence
+        SELECT cm.concept_tag, ROUND(CAST(AVG(cm.latest_score) AS NUMERIC),1) AS avg_score, COUNT(*) AS evidence
         FROM concept_mastery cm
         GROUP BY cm.concept_tag
         ORDER BY avg_score ASC
@@ -283,10 +285,20 @@ def mastery_decision(learner_id, outcome_id, action):
         ON CONFLICT(learner_id, outcome_id)
         DO UPDATE SET mastery_status=excluded.mastery_status, updated_at=CURRENT_TIMESTAMP
     """, (learner_id, outcome_id, score, level, status))
+    audit_action = {
+        "approve": "MASTERY_APPROVED",
+        "override": "MASTERY_OVERRIDDEN",
+        "reopen": "LEARNER_REOPENED_FOR_PRACTICE",
+        "remediate": "REMEDIATION_ASSIGNED",
+    }[action]
     conn.execute("""
         INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
         VALUES (?, ?, 'mastery_review', ?, ?)
-    """, (session["user_id"], "TEACHER_" + action.upper(), outcome_id, comment))
+    """, (session["user_id"], audit_action, outcome_id, comment))
+    conn.execute("""
+        INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
+        VALUES (?, 'TEACHER_FEEDBACK_GIVEN', 'mastery_review', ?, ?)
+    """, (session["user_id"], outcome_id, comment))
     conn.commit()
     conn.close()
     flash(f"Mastery decision recorded: {decision}.", "success")
@@ -417,7 +429,7 @@ def review_activity_submission(submission_id):
     """, (session["user_id"], submission["learner_id"], submission["outcome_id"], feedback_text))
     conn.execute("""
         INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
-        VALUES (?, 'ACTIVITY_FEEDBACK', 'activity_submission', ?, ?)
+        VALUES (?, 'TEACHER_FEEDBACK_GIVEN', 'activity_submission', ?, ?)
     """, (session["user_id"], submission_id, feedback_text))
     conn.commit()
     conn.close()
@@ -733,8 +745,6 @@ def create_student():
 @role_required("teacher", "school_admin")
 @csrf_protect
 def teacher_kb_upload():
-    import magic
-    from werkzeug.utils import secure_filename
     conn = get_db()
     teacher_id = session["user_id"]
     kb = get_kb()
@@ -749,6 +759,7 @@ def teacher_kb_upload():
             filename = secure_filename(file.filename)
             ext = os.path.splitext(filename)[1].lower()
             if ext not in {'.txt', '.md', '.json', '.pdf'}:
+                conn.close()
                 flash("Unsupported file type. Use .txt, .md, .json, or .pdf", "danger")
                 return redirect(url_for("teacher.teacher_kb_upload"))
 
@@ -758,7 +769,7 @@ def teacher_kb_upload():
             file.seek(0)
 
             if usage + file_size > LIMIT:
-                filepath.unlink()
+                conn.close()
                 flash("Upload failed: You have exceeded your 10MB storage limit.", "danger")
                 return redirect(url_for("teacher.teacher_kb_upload"))
 
@@ -777,8 +788,10 @@ def teacher_kb_upload():
                 conn.commit()
                 flash(f"File {filename} uploaded and processed with AI summarization.", "success")
             else:
+                filepath.unlink(missing_ok=True)
                 flash(f"Error processing {filename}.", "danger")
 
+            conn.close()
             return redirect(url_for("teacher.teacher_kb_upload"))
 
     uploads = conn.execute("SELECT * FROM teacher_kb_uploads WHERE teacher_id = ?", (teacher_id,)).fetchall()

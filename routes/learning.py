@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import datetime, timezone
 
 from flask import Blueprint, render_template, request, redirect, session, url_for, flash
 import os
@@ -78,6 +79,33 @@ POSTTEST_SYSTEM_BLOCKERS = {
         "detail": "Upload practical or project evidence for this outcome.",
     },
 }
+
+
+def utc_now_text():
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+
+
+def assessment_timer_key(learner_id, assessment_id):
+    return f"assessment_started:{learner_id}:{assessment_id}"
+
+
+def begin_assessment_timer(learner_id, assessment_id):
+    if assessment_id:
+        session.setdefault(assessment_timer_key(learner_id, assessment_id), utc_now_text())
+
+
+def consume_assessment_timer(learner_id, assessment_id):
+    completed_at = utc_now_text()
+    started_at = session.pop(assessment_timer_key(learner_id, assessment_id), None)
+    try:
+        started = datetime.fromisoformat(started_at) if started_at else datetime.fromisoformat(completed_at)
+        completed = datetime.fromisoformat(completed_at)
+        if started > completed:
+            started = completed
+        elapsed = max(0, int((completed - started).total_seconds()))
+        return started.isoformat(timespec="seconds"), completed_at, elapsed
+    except (TypeError, ValueError):
+        return completed_at, completed_at, 0
 
 
 def concept_label(concept):
@@ -735,6 +763,13 @@ def outcome(outcome_id):
     else:
         stage = "mastered"
 
+    if stage == "pretest" and pretest and pretest_items:
+        begin_assessment_timer(learner_id, pretest["assessment_id"])
+    elif stage == "adaptive_practice" and practice and practice_items:
+        begin_assessment_timer(learner_id, practice["assessment_id"])
+    elif stage == "posttest" and posttest and posttest_items:
+        begin_assessment_timer(learner_id, posttest["assessment_id"])
+
     resource_count = len(notes) + len(videos) + len(illustrations) + len(worked_examples) + len(performance_resources)
     conn.execute("""
         INSERT INTO activity_logs (learner_id, activity_type, activity_description)
@@ -1121,11 +1156,14 @@ def submit_assessment(assessment_id):
     weak_concepts = []
     answered_questions = []
     concept_stats = defaultdict(lambda: {"correct": 0, "total": 0})
+    started_at, completed_at, time_spent_seconds = consume_assessment_timer(learner_id, assessment_id)
 
     cur = conn.execute("""
-        INSERT INTO assessment_attempts (learner_id, assessment_id, score, weak_concepts)
-        VALUES (?, ?, 0, '')
-    """, (learner_id, assessment_id))
+        INSERT INTO assessment_attempts
+        (learner_id, assessment_id, score, weak_concepts, started_at, completed_at,
+         time_spent_seconds, attempted_at)
+        VALUES (?, ?, 0, '', ?, ?, ?, ?)
+    """, (learner_id, assessment_id, started_at, completed_at, time_spent_seconds, completed_at))
     attempt_id = cur.lastrowid
 
     for q in questions:
@@ -1291,7 +1329,16 @@ def submit_assessment(assessment_id):
     conn.execute("""
         INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
         VALUES (?, ?, 'assessment_attempt', ?, ?)
-    """, (learner_id, "ASSESSMENT_SUBMITTED", attempt_id, f"{assessment['assessment_type']} submitted with computed score {score}% and status {status}"))
+    """, (
+        learner_id,
+        {
+            "pretest": "PRE_TEST_SUBMITTED",
+            "practice": "PRACTICE_SUBMITTED",
+            "posttest": "POST_TEST_SUBMITTED",
+        }.get(assessment["assessment_type"], "ASSESSMENT_SUBMITTED"),
+        attempt_id,
+        f"{assessment['assessment_type']} submitted with computed score {score}% and status {status}",
+    ))
     conn.execute("""
         INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
         VALUES (?, 'AI_RECOMMENDATION_GENERATED', 'recommendation', ?, ?)

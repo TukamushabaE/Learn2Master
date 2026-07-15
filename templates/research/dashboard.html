@@ -5,7 +5,7 @@
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
 <style>
-.research-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.research-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.chart-card{border:1px solid #e4ebf4;border-radius:8px;background:#fff;padding:14px}.bar-row{display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:center;margin:10px 0}.bar-track{height:10px;background:#e8eef6;border-radius:999px;overflow:hidden}.bar-fill{height:100%;background:#143d73}.mini-note{color:#687789}
+.research-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.research-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin:0 0 24px}.stat-card{border:1px solid #e4ebf4;border-radius:18px;background:#fff;padding:18px;box-shadow:0 10px 28px rgba(15,35,65,.07)}.stat-card h3{font-size:.82rem;color:#687789;margin:0 0 10px}.stat-number{font-size:1.65rem;font-weight:900;color:#10233f;margin:0}.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.chart-card{border:1px solid #e4ebf4;border-radius:14px;background:#fff;padding:14px}.bar-row{display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:center;margin:10px 0}.bar-track{height:10px;background:#e8eef6;border-radius:999px;overflow:hidden}.bar-fill{height:100%;background:#143d73}.mini-note{color:#687789}
 </style>
 {% endblock %}
 
@@ -30,8 +30,9 @@
 </section>
 
 <div class="cards-grid">
-  <div class="stat-card"><h3>Total Learners</h3><p class="stat-number">{{ metrics.learners }}</p></div>
-  <div class="stat-card"><h3>Total Teachers</h3><p class="stat-number">{{ metrics.teachers }}</p></div>
+  <div class="stat-card"><h3>Eligible Participants</h3><p class="stat-number">{{ metrics.eligible_participants }}</p></div>
+  <div class="stat-card"><h3>Consented Learners</h3><p class="stat-number">{{ metrics.learners }}</p></div>
+  <div class="stat-card"><h3>Consented Teachers</h3><p class="stat-number">{{ metrics.teachers }}</p></div>
   <div class="stat-card"><h3>Average Pre-test</h3><p class="stat-number">{{ metrics.average_pre_test }}%</p></div>
   <div class="stat-card"><h3>Average Post-test</h3><p class="stat-number">{{ metrics.average_post_test }}%</p></div>
   <div class="stat-card"><h3>Average Gain</h3><p class="stat-number">{{ metrics.average_learning_gain }}%</p></div>
@@ -42,6 +43,8 @@
   <div class="stat-card"><h3>Learner Satisfaction</h3><p class="stat-number">{{ metrics.average_learner_satisfaction }}</p></div>
   <div class="stat-card"><h3>Teacher Satisfaction</h3><p class="stat-number">{{ metrics.average_teacher_satisfaction }}</p></div>
   <div class="stat-card"><h3>System Usage</h3><p class="stat-number">{{ metrics.system_usage_count }}</p></div>
+  <div class="stat-card"><h3>Sync Success Rate</h3><p class="stat-number">{% if metrics.sync_success_rate == 'No data yet.' %}{{ metrics.sync_success_rate }}{% else %}{{ metrics.sync_success_rate }}%{% endif %}</p></div>
+  <div class="stat-card"><h3>Recorded Incidents</h3><p class="stat-number">{{ metrics.recorded_system_incidents }}</p></div>
 </div>
 
 <section class="learn-card">
@@ -53,7 +56,7 @@
       {% for row in rows %}
       <div class="bar-row">
         <span>{{ row.label }}</span>
-        <div class="bar-track"><div class="bar-fill" style="width: {{ [row.value, 100]|min }}%;"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="width: {{ [[row.value|float|abs, 100]|min, 0]|max }}%;"></div></div>
         <strong>{{ row.value }}</strong>
       </div>
       {% endfor %}

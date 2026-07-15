@@ -18,6 +18,12 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH = os.path.join(BASE_DIR, "database_v2.sql")
 DEFAULT_SQLITE_DB = os.path.join(BASE_DIR, "learn2master.db")
 
+ASSESSMENT_ATTEMPT_TIMING_COLUMNS = {
+    "started_at": "TEXT",
+    "completed_at": "TEXT",
+    "time_spent_seconds": "INTEGER",
+}
+
 
 def split_sql_statements(sql_script):
     statements = []
@@ -142,6 +148,26 @@ def schema_statements(dialect, reset=False):
     return statements
 
 
+def ensure_sqlite_schema_extensions(conn):
+    """Add non-destructive columns needed by newer research releases."""
+    table = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='assessment_attempts'"
+    ).fetchone()
+    if not table:
+        return
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(assessment_attempts)").fetchall()}
+    for column_name, column_type in ASSESSMENT_ATTEMPT_TIMING_COLUMNS.items():
+        if column_name not in existing:
+            conn.execute(f"ALTER TABLE assessment_attempts ADD COLUMN {column_name} {column_type}")
+
+
+def ensure_postgres_schema_extensions(cur):
+    for column_name, column_type in ASSESSMENT_ATTEMPT_TIMING_COLUMNS.items():
+        cur.execute(
+            f"ALTER TABLE assessment_attempts ADD COLUMN IF NOT EXISTS {column_name} {column_type}"
+        )
+
+
 def run_sqlite(db_path=None, reset=False):
     db_path = db_path or DEFAULT_SQLITE_DB
     if reset and os.path.exists(db_path):
@@ -152,6 +178,7 @@ def run_sqlite(db_path=None, reset=False):
         conn.execute("PRAGMA foreign_keys = ON")
         for statement in schema_statements("sqlite", reset=reset):
             conn.execute(statement)
+        ensure_sqlite_schema_extensions(conn)
         conn.commit()
         print(f"Learn2Master SQLite database initialized at {db_path}.")
     finally:
@@ -172,6 +199,7 @@ def run_postgres(url=None, reset=False):
         with conn.cursor() as cur:
             for statement in schema_statements("postgres", reset=reset):
                 cur.execute(statement)
+            ensure_postgres_schema_extensions(cur)
         conn.commit()
         print("Learn2Master PostgreSQL database initialized safely.")
     except Exception:

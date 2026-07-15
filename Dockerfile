@@ -24,6 +24,6 @@ COPY --chown=appuser:appuser . .
 EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5000/health || false
+  CMD curl -f "http://localhost:${PORT:-5000}/health" || exit 1
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "app:app"]
+CMD ["sh", "-c", "if [ \"${LEARN2MASTER_AUTO_SEED_DEMO:-0}\" = \"1\" ]; then python manage.py seed-demo-data; fi; exec gunicorn --bind 0.0.0.0:${PORT:-5000} --workers ${WEB_CONCURRENCY:-2} app:app"]

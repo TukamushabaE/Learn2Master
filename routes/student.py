@@ -49,7 +49,7 @@ def student_dashboard():
         LEFT JOIN lessons l ON l.course_id = c.course_id
         LEFT JOIN mastery_records mr ON mr.outcome_id = l.outcome_id AND mr.learner_id=?
         WHERE s.subject_name IN ('Physics', 'ICT')
-        GROUP BY c.course_id
+        GROUP BY c.course_id, c.course_title, c.course_description, s.subject_name
         ORDER BY s.subject_name DESC
     """, (learner_id,)).fetchall()
 
@@ -88,7 +88,9 @@ def assessments():
         JOIN learning_outcomes lo ON lessons.outcome_id = lo.outcome_id
         LEFT JOIN assessment_attempts ON assessment_attempts.assessment_id = assessments.assessment_id
             AND assessment_attempts.learner_id = ?
-        GROUP BY assessments.assessment_id
+        GROUP BY assessments.assessment_id, subjects.subject_name, courses.course_title,
+                 lo.outcome_code, lo.outcome_name, lo.sequence_order,
+                 assessments.assessment_type, assessments.assessment_title
         ORDER BY subjects.subject_name, lo.sequence_order, assessments.assessment_type
     """, (learner_id,)).fetchall()
     conn.close()
