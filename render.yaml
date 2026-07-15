@@ -5,7 +5,7 @@ services:
     plan: free
     region: oregon
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 app:app
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 app:app
     healthCheckPath: /health
     initialDeployHook: python manage.py seed-demo-data
     envVars:
@@ -23,6 +23,14 @@ services:
         value: "1"
       - key: LEARN2MASTER_CSRF_ENABLED
         value: "1"
+      - key: LEARN2MASTER_MAX_UPLOAD_BYTES
+        value: "110100480"
+      - key: LEARN2MASTER_MAX_DOCUMENT_BYTES
+        value: "104857600"
+      - key: LEARN2MASTER_TEACHER_KB_LIMIT_BYTES
+        value: "1073741824"
+      - key: GUNICORN_TIMEOUT
+        value: "120"
       - key: LEARN2MASTER_AUTO_SEED_DEMO
         value: "1"
       - key: LEARN2MASTER_SEED_LEARNER_PASSWORD

@@ -2,7 +2,7 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 from whitenoise import WhiteNoise
-from flask import Flask, jsonify, redirect, request, render_template, send_from_directory, session, url_for
+from flask import Flask, flash, jsonify, redirect, request, render_template, send_from_directory, session, url_for
 from flask_login import LoginManager, current_user
 from models import db, User, Role, School
 from extensions import talisman, limiter
@@ -177,6 +177,14 @@ def health():
 @app.errorhandler(404)
 def not_found(error):
     return ("404 - Page not found", 404) if app.config.get("TESTING") else (render_template("errors/404.html"), 404)
+
+
+@app.errorhandler(413)
+def upload_too_large(error):
+    if request.path == "/teacher/kb/upload":
+        flash("Upload failed: each document is limited to 100 MB.", "danger")
+        return redirect(url_for("teacher.teacher_kb_upload"))
+    return "413 - Upload too large", 413
 
 
 @app.errorhandler(500)

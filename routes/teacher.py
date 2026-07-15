@@ -7,7 +7,12 @@ from routes.guards import role_required
 from database import get_db
 from security import csrf_protect
 from services.analytics_engine import teacher_overview, recent_ai_recommendations
-from engine import get_kb
+from engine import (
+    MAX_FILE_BYTES,
+    SUPPORTED_DOCUMENT_EXTENSIONS,
+    TEACHER_KB_STORAGE_LIMIT_BYTES,
+    get_kb,
+)
 
 teacher_bp = Blueprint("teacher", __name__)
 
@@ -748,18 +753,21 @@ def teacher_kb_upload():
     conn = get_db()
     teacher_id = session["user_id"]
 
-    # Check 10MB limit
+    # A teacher can build a 1 GB knowledge base from bounded individual uploads.
     usage = conn.execute("SELECT SUM(original_size_bytes) FROM teacher_kb_uploads WHERE teacher_id = ?", (teacher_id,)).fetchone()[0] or 0
-    LIMIT = 10 * 1024 * 1024 # 10MB
+    limit = TEACHER_KB_STORAGE_LIMIT_BYTES
 
     if request.method == "POST":
         file = request.files.get("file")
         if file and file.filename:
             filename = secure_filename(file.filename)
             ext = os.path.splitext(filename)[1].lower()
-            if ext not in {'.txt', '.md', '.json', '.pdf'}:
+            if not filename or ext not in SUPPORTED_DOCUMENT_EXTENSIONS:
                 conn.close()
-                flash("Unsupported file type. Use .txt, .md, .json, or .pdf", "danger")
+                flash(
+                    "Unsupported or unsafe file type. Choose one of the document formats listed below.",
+                    "danger",
+                )
                 return redirect(url_for("teacher.teacher_kb_upload"))
 
             # Calculate file size before saving
@@ -767,9 +775,18 @@ def teacher_kb_upload():
             file_size = file.tell()
             file.seek(0)
 
-            if usage + file_size > LIMIT:
+            if file_size > MAX_FILE_BYTES:
                 conn.close()
-                flash("Upload failed: You have exceeded your 10MB storage limit.", "danger")
+                flash(
+                    f"Upload failed: each document is limited to {MAX_FILE_BYTES // (1024 * 1024)} MB. "
+                    "The 1 GB allowance is the total knowledge-base quota.",
+                    "danger",
+                )
+                return redirect(url_for("teacher.teacher_kb_upload"))
+
+            if usage + file_size > limit:
+                conn.close()
+                flash("Upload failed: You have exceeded your 1 GB knowledge-base quota.", "danger")
                 return redirect(url_for("teacher.teacher_kb_upload"))
 
             try:
@@ -805,7 +822,7 @@ def teacher_kb_upload():
                 filepath.unlink(missing_ok=True)
                 flash(
                     f"{filename} could not be summarized within the production safety limits. "
-                    "Try a text/Markdown file or a simpler PDF.",
+                    "Try exporting it to PDF, DOCX, ODT, or plain text.",
                     "danger",
                 )
 
@@ -814,4 +831,11 @@ def teacher_kb_upload():
 
     uploads = conn.execute("SELECT * FROM teacher_kb_uploads WHERE teacher_id = ?", (teacher_id,)).fetchall()
     conn.close()
-    return render_template("teacher/kb_upload.html", uploads=uploads, usage=usage, limit=LIMIT)
+    return render_template(
+        "teacher/kb_upload.html",
+        uploads=uploads,
+        usage=usage,
+        limit=limit,
+        per_file_limit=MAX_FILE_BYTES,
+        allowed_extensions=sorted(SUPPORTED_DOCUMENT_EXTENSIONS),
+    )
