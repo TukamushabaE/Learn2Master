@@ -1,6 +1,6 @@
 import math
 import os
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 from routes.guards import role_required
@@ -747,7 +747,6 @@ def create_student():
 def teacher_kb_upload():
     conn = get_db()
     teacher_id = session["user_id"]
-    kb = get_kb()
 
     # Check 10MB limit
     usage = conn.execute("SELECT SUM(original_size_bytes) FROM teacher_kb_uploads WHERE teacher_id = ?", (teacher_id,)).fetchone()[0] or 0
@@ -773,11 +772,26 @@ def teacher_kb_upload():
                 flash("Upload failed: You have exceeded your 10MB storage limit.", "danger")
                 return redirect(url_for("teacher.teacher_kb_upload"))
 
-            filepath = kb.directory / filename
-            file.save(str(filepath))
+            try:
+                kb = get_kb()
+            except Exception:
+                current_app.logger.exception("Knowledge base initialization failed")
+                conn.close()
+                flash("The AI knowledge base is temporarily unavailable. Please try again.", "danger")
+                return redirect(url_for("teacher.teacher_kb_upload"))
 
-            # Use unified processing method with summarization forced for teachers
-            success, summary_size = kb.process_file(str(filepath), metadata={"teacher_id": teacher_id}, summarize=True)
+            filepath = kb.directory / filename
+            try:
+                file.save(str(filepath))
+                # Use unified processing method with summarization forced for teachers
+                success, summary_size = kb.process_file(
+                    str(filepath),
+                    metadata={"teacher_id": teacher_id},
+                    summarize=True,
+                )
+            except Exception:
+                current_app.logger.exception("Study material processing failed")
+                success, summary_size = False, 0
 
             if success:
                 # Record upload
@@ -789,7 +803,11 @@ def teacher_kb_upload():
                 flash(f"File {filename} uploaded and processed with AI summarization.", "success")
             else:
                 filepath.unlink(missing_ok=True)
-                flash(f"Error processing {filename}.", "danger")
+                flash(
+                    f"{filename} could not be summarized within the production safety limits. "
+                    "Try a text/Markdown file or a simpler PDF.",
+                    "danger",
+                )
 
             conn.close()
             return redirect(url_for("teacher.teacher_kb_upload"))

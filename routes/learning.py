@@ -280,10 +280,11 @@ def is_outcome_unlocked(conn, learner_id, outcome):
 
 def get_required_concepts(conn, outcome_id):
     rows = conn.execute("""
-        SELECT DISTINCT concept_tag
+        SELECT concept_tag
         FROM adaptive_notes
         WHERE outcome_id = ?
-        ORDER BY priority, concept_tag
+        GROUP BY concept_tag
+        ORDER BY MIN(priority), concept_tag
     """, (outcome_id,)).fetchall()
     return [row["concept_tag"] for row in rows]
 
