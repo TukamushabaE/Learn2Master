@@ -4,6 +4,10 @@ from datetime import datetime, timezone
 
 from werkzeug.security import generate_password_hash
 
+from env_loader import load_local_env
+
+load_local_env()
+
 import init_db
 from models import db, Role, School, User
 

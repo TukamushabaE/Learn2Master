@@ -3,6 +3,10 @@ import os
 import re
 import sqlite3
 
+from env_loader import load_local_env
+
+load_local_env()
+
 try:
     import psycopg2
 except ImportError:  # pragma: no cover - SQLite-only environments do not need psycopg2.

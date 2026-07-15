@@ -1,14 +1,10 @@
 import os
 
-try:
-    from dotenv import load_dotenv
-except ImportError:  # Keeps the prototype runnable before dependencies are installed.
-    load_dotenv = None
+from env_loader import load_local_env
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-if load_dotenv:
-    load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_local_env()
 
 
 def env_flag(name, default="0"):
