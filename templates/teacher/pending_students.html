@@ -1,33 +1,39 @@
-{% extends "base.html" %}
+{% extends "layouts/base.html" %}
+{% block title %}Pending Students{% endblock %}
 {% block content %}
-<div class="container mt-4">
-    <h2>Pending Student Registrations</h2>
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Full Name</th>
-                <th>Username</th>
-                <th>Email</th>
-                <th>Action</th>
-            </tr>
-        </thead>
+<div class="teacher-page">
+  <section class="hero-panel">
+    <div>
+      <p class="eyebrow">School Account Review</p>
+      <h1>Pending Student Registrations</h1>
+      <p>Review learner registrations from your school before granting access.</p>
+    </div>
+    <div class="hero-badge"><span>Pending</span><strong>{{ students|length }}</strong></div>
+  </section>
+
+  <section class="teacher-panel">
+    <div class="teacher-table-wrap">
+      <table class="teacher-table">
+        <thead><tr><th>Full Name</th><th>Username</th><th>Email</th><th>Action</th></tr></thead>
         <tbody>
-            {% for student in students %}
-            <tr>
-                <td>{{ student.full_name }}</td>
-                <td>{{ student.username }}</td>
-                <td>{{ student.email }}</td>
-                <td>
-                    <form action="{{ url_for('teacher.approve_student', user_id=student.user_id) }}" method="POST">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-success btn-sm">Approve</button>
-                    </form>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="4">No pending students.</td></tr>
-            {% endfor %}
+          {% for student in students %}
+          <tr>
+            <td>{{ student.full_name }}</td>
+            <td>{{ student.username }}</td>
+            <td>{{ student.email or 'Not provided' }}</td>
+            <td>
+              <form action="{{ url_for('teacher.approve_student', user_id=student.user_id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="teacher-button success">Approve</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No pending students.</td></tr>
+          {% endfor %}
         </tbody>
-    </table>
+      </table>
+    </div>
+  </section>
 </div>
 {% endblock %}

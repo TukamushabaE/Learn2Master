@@ -3,7 +3,22 @@
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
 <style>
-.research-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:14px}.research-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.research-table-wrap{overflow:auto}.research-table{width:100%;border-collapse:collapse;min-width:900px}.research-table th,.research-table td{border-bottom:1px solid #e7edf5;padding:10px;text-align:left;vertical-align:top}.research-table th{font-size:.78rem;text-transform:uppercase;color:#496174;background:#f8fbff}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:16px 0}.summary-grid div{border:1px solid #e7edf5;border-radius:8px;padding:12px;background:#fff}.summary-grid span{display:block;color:#687789;font-size:.8rem}.summary-grid strong{font-size:1.35rem;color:#10233f}.comparison-chart{display:grid;gap:14px}.comparison-row{display:grid;grid-template-columns:minmax(180px,1fr) 2fr;gap:14px;align-items:center}.comparison-label{font-weight:800;color:#21364f}.comparison-bars{display:grid;gap:7px}.comparison-bar{display:grid;grid-template-columns:36px 1fr 48px;gap:8px;align-items:center}.comparison-track{height:11px;background:#e8eef6;border-radius:999px;overflow:hidden}.comparison-fill{display:block;height:100%;background:#6e8fb7}.comparison-fill.post{background:#143d73}@media print{.sidebar,.topbar,.footer,.research-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}.research-table{min-width:0;font-size:11px}}
+.research-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:14px}
+.research-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}
+.research-filter-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end}
+.research-filter-form label{display:grid;gap:6px;font-size:.78rem;font-weight:800;color:#496174}
+.research-filter-form select,.research-filter-form input{width:100%;border:1px solid #d7e0ea;border-radius:8px;padding:9px;background:#fff}
+.research-filter-actions{display:flex;gap:8px;flex-wrap:wrap}
+.research-table-wrap{overflow:auto}.research-table{width:100%;border-collapse:collapse;min-width:900px}
+.research-table th,.research-table td{border-bottom:1px solid #e7edf5;padding:10px;text-align:left;vertical-align:top}
+.research-table th{font-size:.78rem;text-transform:uppercase;color:#496174;background:#f8fbff}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:16px 0}
+.summary-grid div{border:1px solid #e7edf5;border-radius:8px;padding:12px;background:#fff}
+.summary-grid span{display:block;color:#687789;font-size:.8rem}.summary-grid strong{font-size:1.35rem;color:#10233f}
+.comparison-chart{display:grid;gap:14px}.comparison-row{display:grid;grid-template-columns:minmax(180px,1fr) 2fr;gap:14px;align-items:center}
+.comparison-label{font-weight:800;color:#21364f}.comparison-bars{display:grid;gap:7px}.comparison-bar{display:grid;grid-template-columns:36px 1fr 48px;gap:8px;align-items:center}
+.comparison-track{height:11px;background:#e8eef6;border-radius:999px;overflow:hidden}.comparison-fill{display:block;height:100%;background:#6e8fb7}.comparison-fill.post{background:#143d73}
+@media print{.sidebar,.topbar,.footer,.research-actions,.research-filter-panel{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}.research-table{min-width:0;font-size:11px}}
 </style>
 {% endblock %}
 {% block content %}
@@ -21,6 +36,34 @@
   </div>
   <div class="hero-badge"><span>Records</span><strong>{{ rows|length }}</strong></div>
 </section>
+{% if filter_options %}
+<section class="learn-card research-filter-panel">
+  <h2>Filters</h2>
+  <form method="get" class="research-filter-form">
+    <label>Study Phase
+      <select name="study_phase"><option value="">All phases</option>{% for item in filter_options.study_phases %}<option value="{{ item }}" {% if filters.study_phase == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select>
+    </label>
+    <label>School
+      <select name="school_id"><option value="">All schools</option>{% for item in filter_options.schools %}<option value="{{ item.school_id }}" {% if filters.school_id == item.school_id %}selected{% endif %}>{{ item.school_name }}</option>{% endfor %}</select>
+    </label>
+    <label>Class
+      <select name="class_id"><option value="">All classes</option>{% for item in filter_options.classes %}<option value="{{ item.class_id }}" {% if filters.class_id == item.class_id %}selected{% endif %}>{{ item.class_name }}</option>{% endfor %}</select>
+    </label>
+    <label>Subject
+      <select name="subject_id"><option value="">All subjects</option>{% for item in filter_options.subjects %}<option value="{{ item.subject_id }}" {% if filters.subject_id == item.subject_id %}selected{% endif %}>{{ item.subject_name }}</option>{% endfor %}</select>
+    </label>
+    <label>Topic
+      <select name="topic_id"><option value="">All topics</option>{% for item in filter_options.topics %}<option value="{{ item.topic_id }}" {% if filters.topic_id == item.topic_id %}selected{% endif %}>{{ item.topic_title }}</option>{% endfor %}</select>
+    </label>
+    <label>Learning Outcome
+      <select name="outcome_id"><option value="">All outcomes</option>{% for item in filter_options.outcomes %}<option value="{{ item.outcome_id }}" {% if filters.outcome_id == item.outcome_id %}selected{% endif %}>{{ item.outcome_code }} - {{ item.outcome_name }}</option>{% endfor %}</select>
+    </label>
+    <label>From Date<input type="date" name="date_from" value="{{ filters.date_from or '' }}"></label>
+    <label>To Date<input type="date" name="date_to" value="{{ filters.date_to or '' }}"></label>
+    <div class="research-filter-actions"><button class="research-button" type="submit">Apply Filters</button><a class="research-button" href="{{ request.path }}">Clear</a></div>
+  </form>
+</section>
+{% endif %}
 {% if summary %}
 <section class="summary-grid">
   {% for key, value in summary.items() %}
@@ -58,11 +101,11 @@
         {% for row in rows %}
         <tr>
           {% for key, label in columns %}
-          <td>{{ row.get(key, '') }}</td>
+          <td>{% if key == '_view_url' %}<a href="{{ row.get(key) }}">View / edit</a>{% else %}{{ row.get(key, '') }}{% endif %}</td>
           {% endfor %}
         </tr>
         {% else %}
-        <tr><td colspan="{{ columns|length }}">{{ no_data }}</td></tr>
+        <tr><td colspan="{{ columns|length }}">{{ empty_message }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

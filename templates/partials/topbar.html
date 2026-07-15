@@ -1,11 +1,11 @@
 <header class="topbar">
     <div class="topbar-search">
-        <span>🔎</span>
+        <span aria-hidden="true">&#128269;</span>
         <input type="search" placeholder="Search subjects, competencies, lessons...">
     </div>
     <div class="topbar-actions">
         <span class="pill">CBC</span>
-        <span class="icon-button">🔔</span>
+        <span class="icon-button" aria-label="Notifications">&#128276;</span>
         <div class="user-chip">
             <div class="avatar">{{ (session.get('full_name','U')[:1]).upper() }}</div>
             <div>

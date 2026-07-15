@@ -11,6 +11,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/cards.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/subjects.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/teacher.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive.css') }}">
     {% block styles %}{% endblock %}
 </head>
@@ -43,6 +45,7 @@
         </main>
     </div>
     <script src="{{ url_for('static', filename='js/offline.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/password_visibility.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

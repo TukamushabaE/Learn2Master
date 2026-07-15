@@ -20,9 +20,10 @@
   <article class="questionnaire-card">
     <h3>{{ questionnaire.questionnaire_title }}</h3>
     <p>{{ questionnaire.questionnaire_description }}</p>
-    <p><strong>Respondent:</strong> {{ questionnaire.respondent_role|title }} · <strong>Items:</strong> {{ questionnaire.item_count }} · <strong>Responses:</strong> {{ questionnaire.response_count }}</p>
+    <p><strong>Respondent:</strong> {{ questionnaire.respondent_role|title }} · <strong>Phase:</strong> {{ questionnaire.study_phase }} · <strong>Items:</strong> {{ questionnaire.item_count }} · <strong>Responses:</strong> {{ questionnaire.response_count }}</p>
     <div class="actions">
       <a class="button" href="{{ url_for('research.respond_questionnaire', questionnaire_id=questionnaire.id) }}">Open Questionnaire</a>
+      {% if session.get("role") in ["teacher", "school_admin", "super_admin"] %}<a class="button" href="{{ url_for('research.edit_questionnaire', questionnaire_id=questionnaire.id) }}">Edit Instrument</a>{% endif %}
     </div>
   </article>
   {% else %}

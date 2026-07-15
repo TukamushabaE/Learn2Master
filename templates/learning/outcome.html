@@ -40,6 +40,17 @@
     <div class="hero-badge"><span>AI Confidence</span><strong>{{ outcome.mastery_score }}%</strong></div>
 </section>
 
+{% if configuration_warnings %}
+<section class="learn-card configuration-warning" role="status">
+    <span class="subject-code">Configuration notice</span>
+    <h2>Some optional learning evidence is not available yet</h2>
+    <ul>
+        {% for warning in configuration_warnings %}<li>{{ warning }}</li>{% endfor %}
+    </ul>
+    <p>The available parts of this outcome remain usable. An administrator should complete the missing curriculum records before formal data collection.</p>
+</section>
+{% endif %}
+
 <section class="mastery-flow-card">
     <div class="flow-step {% if pretest_attempt %}done{% else %}active{% endif %}">1<br><span>Pre-test</span></div>
     <div class="flow-line"></div>
@@ -135,14 +146,26 @@
     </section>
 </div>
 
-{% if not pretest_attempt %}
+{% if not pretest %}
+<section class="assessment-panel remediation-panel">
+    <div class="assessment-header">
+        <p class="eyebrow">Diagnostic Stage</p>
+        <h2>Pre-test not configured</h2>
+        <p>This learning outcome cannot begin formal assessment until an administrator adds its pre-test.</p>
+    </div>
+</section>
+{% elif not pretest_attempt %}
 <section class="assessment-panel">
     <div class="assessment-header">
         <p class="eyebrow">Diagnostic Stage</p>
         <h2>{{ pretest.assessment_title }}</h2>
         <p>Attempt the pre-test first. It identifies weak concepts and determines which notes and videos should be recommended.</p>
     </div>
-    {{ assessment_form(pretest, pretest_items, 'Submit Pre-test and Generate Adaptive Path') }}
+    {% if pretest_items %}
+        {{ assessment_form(pretest, pretest_items, 'Submit Pre-test and Generate Adaptive Path') }}
+    {% else %}
+        <div class="adaptive-item"><strong>No pre-test questions are available.</strong><p>An administrator must add questions before this assessment can be submitted.</p></div>
+    {% endif %}
 </section>
 {% endif %}
 
@@ -337,7 +360,7 @@
 <section class="assessment-panel">
     <div class="assessment-header">
         <p class="eyebrow">Adaptive Practice Stage</p>
-        <h2>{{ practice.assessment_title }}</h2>
+        <h2>{{ practice.assessment_title if practice else 'Adaptive practice not configured' }}</h2>
         {% if posttest_unlocked %}
             <p>All concept practice scores are at least {{ practice_threshold }}%. The post-test is now unlocked.</p>
         {% elif needs_more_practice %}
@@ -348,7 +371,9 @@
             <p>Practice is complete. Finish the pending evidence requirement below to open the post-test.</p>
         {% endif %}
     </div>
-    {% if not posttest_unlocked and practice_items %}
+    {% if not practice %}
+        <div class="adaptive-item"><strong>Practice is unavailable.</strong><p>An administrator must configure adaptive practice for this outcome.</p></div>
+    {% elif not posttest_unlocked and practice_items %}
         {{ assessment_form(practice, practice_items, 'Submit Adaptive Practice') }}
     {% elif not posttest_unlocked and pretest_attempt %}
         <div class="adaptive-item">
@@ -379,14 +404,18 @@
 </section>
 {% endif %}
 
-{% if posttest_unlocked %}
+{% if posttest_unlocked and posttest %}
 <section class="assessment-panel posttest-panel">
     <div class="assessment-header">
         <p class="eyebrow">Post-test Stage</p>
         <h2>{{ posttest.assessment_title }}</h2>
         <p>The mastery algorithm uses CBC evidence: pre-test completion, learning practice, weak-concept resolution, and post-test performance. Next outcome unlocks only after evidence-based mastery is achieved.</p>
     </div>
-    {{ assessment_form(posttest, posttest_items, 'Submit Post-test and Calculate Mastery') }}
+    {% if posttest_items %}
+        {{ assessment_form(posttest, posttest_items, 'Submit Post-test and Calculate Mastery') }}
+    {% else %}
+        <div class="adaptive-item"><strong>No post-test questions are available.</strong><p>An administrator must add questions before mastery can be evaluated.</p></div>
+    {% endif %}
 </section>
 {% endif %}
 

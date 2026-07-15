@@ -1,45 +1,68 @@
-{% extends "base.html" %}
+{% extends "layouts/base.html" %}
+{% block title %}Upload Study Materials{% endblock %}
 {% block content %}
-<div class="container mt-4">
-    <h2>Upload Study Materials (AI Knowledge Base)</h2>
-    <div class="alert alert-info">
-        <strong>Storage Usage:</strong> {{ (usage / 1024 / 1024 / 1024) | round(3) }} GB / {{ (limit / 1024 / 1024 / 1024) | round(0) }} GB
-        <br><small>Maximum per document: {{ (per_file_limit / 1024 / 1024) | round(0) }} MB. Add multiple documents up to the 1 GB total quota.</small>
+<div class="teacher-page">
+  <section class="hero-panel">
+    <div>
+      <p class="eyebrow">AI Knowledge Base</p>
+      <h1>Upload Study Materials</h1>
+      <p>Add curriculum documents for bounded AI extraction and summarization.</p>
     </div>
+    <div class="hero-badge"><span>Storage quota</span><strong>1 GB</strong></div>
+  </section>
+
+  <section class="teacher-panel">
+    <div class="teacher-actions" style="margin-top:0">
+      {% if cloud_storage_enabled %}
+      <span class="teacher-status connected">Supabase Storage connected</span>
+      <span class="teacher-help">Private bucket: {{ cloud_storage_bucket }}</span>
+      {% else %}
+      <span class="teacher-status warning">Supabase Storage not configured</span>
+      <span class="teacher-help">Processed summaries remain in the database; uploaded originals remain temporary until cloud storage is configured.</span>
+      {% endif %}
+    </div>
+    <div class="teacher-usage">
+      <strong>Used: {{ (usage / 1024 / 1024 / 1024) | round(3) }} GB of {{ (limit / 1024 / 1024 / 1024) | round(0) }} GB</strong>
+      <span>Maximum per document: {{ (per_file_limit / 1024 / 1024) | round(0) }} MB. Add multiple documents up to the total quota.</span>
+    </div>
+  </section>
+
+  <section class="teacher-panel">
+    <h2>Upload and Summarize</h2>
     <form method="POST" enctype="multipart/form-data">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="mb-3">
-            <label>Select Document</label>
-            <input type="file" name="file" class="form-control" accept="{{ allowed_extensions | join(',') }}" required>
-            <small>Supported: PDF, Word, Excel, PowerPoint, OpenDocument, RTF, EPUB, email, text, Markdown, CSV, JSON, XML, HTML, YAML, LaTeX, and related document formats.</small>
-        </div>
-        <button type="submit" class="btn btn-primary">Upload & Summarize with AI</button>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="teacher-field">Select Document
+        <input type="file" name="file" class="teacher-file-input" accept="{{ allowed_extensions | join(',') }}" required>
+        <small>Supported: PDF, Word, Excel, PowerPoint, OpenDocument, RTF, EPUB, email, text, Markdown, CSV, JSON, XML, HTML, YAML, LaTeX, and related document formats.</small>
+      </label>
+      <div class="teacher-actions">
+        <button type="submit" class="teacher-button">Upload and Summarize with AI</button>
+        <a class="teacher-button secondary" href="{{ url_for('teacher.teacher_kb_view') }}">View Knowledge Base</a>
+      </div>
     </form>
+    <p class="teacher-help">Encrypted, password-protected, executable, archive, media, and proprietary formats without readable document text are rejected.</p>
+  </section>
 
-    <p class="text-muted mt-2"><small>Encrypted, password-protected, executable, archive, media, and proprietary formats without readable document text are rejected. On the current free Render service, uploaded originals use temporary filesystem storage and can be lost after a restart or redeploy.</small></p>
-
-    <h3 class="mt-4">Your Uploads</h3>
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Filename</th>
-                <th>Original Size</th>
-                <th>AI Summary Size</th>
-                <th>Date</th>
-            </tr>
-        </thead>
+  <section class="teacher-panel">
+    <h2>Your Uploads</h2>
+    <div class="teacher-table-wrap">
+      <table class="teacher-table">
+        <thead><tr><th>Filename</th><th>Original Size</th><th>AI Summary</th><th>Storage</th><th>Date</th></tr></thead>
         <tbody>
-            {% for upload in uploads %}
-            <tr>
-                <td>{{ upload.filename }}</td>
-                <td>{{ (upload.original_size_bytes / 1024) | round(1) }} KB</td>
-                <td>{{ upload.summary_size_bytes }} bytes</td>
-                <td>{{ upload.created_at }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="4">No uploads yet.</td></tr>
-            {% endfor %}
+          {% for upload in uploads %}
+          <tr>
+            <td>{{ upload.filename }}</td>
+            <td>{{ (upload.original_size_bytes / 1024) | round(1) }} KB</td>
+            <td>{{ upload.summary_size_bytes }} bytes</td>
+            <td><span class="teacher-status {{ 'connected' if upload.storage_provider == 'supabase' else 'warning' }}">{{ upload.storage_status or 'Legacy record' }}</span></td>
+            <td>{{ upload.created_at }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">No uploads yet.</td></tr>
+          {% endfor %}
         </tbody>
-    </table>
+      </table>
+    </div>
+  </section>
 </div>
 {% endblock %}

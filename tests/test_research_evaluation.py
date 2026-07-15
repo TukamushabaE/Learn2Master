@@ -17,6 +17,7 @@ def test_research_required_routes_open_for_admin(client):
         "/research/questionnaires/create",
         "/research/questionnaire-results",
         "/research/system-logs",
+        "/research/chapter-guide",
         "/research/chapter-four-report",
         "/research/chapter-five-insights",
     ]

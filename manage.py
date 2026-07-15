@@ -128,6 +128,8 @@ def main():
     seed_parser = subcommands.add_parser("seed-demo-data", help="Seed CBC demo content using environment-provided passwords.")
     seed_parser.set_defaults(seed_demo=True)
 
+    subcommands.add_parser("migrate", help="Apply tracked additive schema migrations without deleting data.")
+
     users_parser = subcommands.add_parser("create-initial-users", help="Create the first super admin, school admin, and teacher.")
     users_parser.add_argument("--update-passwords", action="store_true", help="Rotate passwords for existing bootstrap users from env vars.")
 
@@ -139,6 +141,11 @@ def main():
             init_db.run_postgres(db_url, reset=args.reset)
         else:
             init_db.run_sqlite(db_path=init_db.sqlite_path_from_url(db_url), reset=args.reset)
+        return
+
+    if args.command == "migrate":
+        init_db.ensure_current_schema(os.environ.get("DATABASE_URL"))
+        print("Additive schema migrations applied successfully.")
         return
 
     if args.command == "seed-demo-data":

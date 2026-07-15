@@ -1,0 +1,10 @@
+{% extends "layouts/base.html" %}
+{% block title %}Participant {{ participant.participant_code }}{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}"><style>.record-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}.record-grid div{padding:12px;border:1px solid #dfe7f0;border-radius:9px}.record-grid span{display:block;color:#607085;font-size:.8rem}.button{display:inline-block;background:#143d73;color:white;padding:10px 14px;border-radius:8px;text-decoration:none;font-weight:800}.history{width:100%;border-collapse:collapse}.history td,.history th{padding:9px;border-bottom:1px solid #e7edf5;text-align:left}</style>{% endblock %}
+{% block content %}
+<section class="hero-panel"><div><p class="eyebrow">Coded research record</p><h1>{{ participant.participant_code }}</h1><p>Identity is shown only to authorized research roles; exports use the participant code.</p></div><a class="button" href="{{ url_for('research.edit_participant', participant_id=participant.id) }}">Edit participant</a></section>
+<section class="learn-card record-grid">
+{% for label, value in [('Role',participant.role_name),('Study phase',participant.study_phase),('School',participant.school_name),('Class',participant.class_name),('Subject',participant.subject_name),('Consent',participant.consent_status),('Assent',participant.assent_status),('Parent consent',participant.parent_consent_status),('Status',participant.active_status),('Enrolled',participant.enrolled_at),('Withdrawn',participant.withdrawn_at)] %}<div><span>{{ label }}</span><strong>{{ value or 'Not assigned' }}</strong></div>{% endfor %}
+</section>
+<section class="learn-card"><h2>Audit history</h2><table class="history"><thead><tr><th>Action</th><th>Details</th><th>Date</th></tr></thead><tbody>{% for item in history %}<tr><td>{{ item.action }}</td><td>{{ item.details }}</td><td>{{ item.created_at }}</td></tr>{% else %}<tr><td colspan="3">No audit events yet.</td></tr>{% endfor %}</tbody></table></section>
+{% endblock %}

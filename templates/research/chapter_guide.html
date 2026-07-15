@@ -1,0 +1,92 @@
+{% extends "layouts/base.html" %}
+{% block title %}Chapter 4 and 5 Guide{% endblock %}
+{% block content %}
+<div class="teacher-page">
+  <section class="hero-panel">
+    <div>
+      <p class="eyebrow">Dissertation evidence guide</p>
+      <h1>Writing Chapters 4 and 5</h1>
+      <p>A practical path from the approved methodology to defensible results and discussion.</p>
+    </div>
+    <div class="hero-badge"><span>Evidence streams started</span><strong>{{ readiness.present_count }}/{{ readiness.total_count }}</strong></div>
+  </section>
+
+  <section class="teacher-panel guidance-alert">
+    <h2>What the clean copy contains</h2>
+    <p>The supplied clean copy is a research proposal and ends after Chapter 3. It defines the methodology and indicators for the future results, but it does not contain completed Chapters 4 or 5. This guide therefore follows that methodology without inventing participants, findings, significance tests, interview themes, or conclusions.</p>
+  </section>
+
+  <section class="teacher-panel">
+    <h2>Evidence collection order</h2>
+    <ol class="guidance-steps">
+      <li><strong>Confirm approval and consent.</strong><span>Register only approved, consented participants and use participant codes in exports.</span></li>
+      <li><strong>Capture the baseline.</strong><span>Administer and record the pre-test before the intervention.</span></li>
+      <li><strong>Run the pilot consistently.</strong><span>Use the system for the agreed period while recording attempts, mastery, time, feedback and teacher interventions.</span></li>
+      <li><strong>Capture outcomes.</strong><span>Record the matching post-test and check that every comparison is paired to the same participant and learning outcome.</span></li>
+      <li><strong>Collect acceptance evidence.</strong><span>Administer the approved learner and teacher questionnaires; code interviews manually using the approved qualitative procedure.</span></li>
+      <li><strong>Check, export and analyse.</strong><span>Resolve missing or duplicate records, export the datasets, then apply only the statistical tests approved by your supervisor.</span></li>
+    </ol>
+  </section>
+
+  <section class="teacher-panel">
+    <div class="teacher-section-heading">
+      <div><p class="eyebrow">Live evidence check</p><h2>Readiness does not mean completeness</h2></div>
+      <a class="teacher-button secondary" href="{{ url_for('research.research_dashboard') }}">Open Research Dashboard</a>
+    </div>
+    <div class="guidance-grid">
+      {% for item in readiness["items"] %}
+      <a class="guidance-card {{ 'ready' if item.present else 'pending' }}" href="{{ url_for(item.route) }}">
+        <span class="teacher-status {{ 'connected' if item.present else 'warning' }}">{{ 'Evidence started' if item.present else 'Pending' }}</span>
+        <strong>{{ item.label }}</strong>
+        <small>{{ item.evidence }}</small>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="guidance-columns">
+    <section class="teacher-panel">
+      <p class="eyebrow">Chapter 4</p>
+      <h2>Results and Analysis</h2>
+      <ol class="guidance-outline">
+        <li><strong>4.1 Introduction</strong> — restate what evidence the chapter presents.</li>
+        <li><strong>4.2 Participants</strong> — planned versus eligible sample, roles and completeness.</li>
+        <li><strong>4.3 Pre/Post Results</strong> — paired descriptive results by learning outcome.</li>
+        <li><strong>4.4 Learning Gain</strong> — mean, range, variance/standard deviation and approved gain calculation.</li>
+        <li><strong>4.5 Mastery</strong> — attainment, attempts and time to mastery.</li>
+        <li><strong>4.6 Feedback and Oversight</strong> — AI recommendations, teacher interventions, approvals and overrides.</li>
+        <li><strong>4.7 User Acceptance</strong> — questionnaire summaries and manually verified qualitative themes.</li>
+        <li><strong>4.8 Reliability and Summary</strong> — system use, synchronization incidents and a factual chapter summary.</li>
+      </ol>
+      <p class="teacher-help">Do not claim statistical significance unless the approved test, assumptions, sample and result are documented.</p>
+      <a class="teacher-button" href="{{ url_for('research.chapter_four_report') }}">Open Chapter 4 Evidence</a>
+    </section>
+
+    <section class="teacher-panel">
+      <p class="eyebrow">Chapter 5</p>
+      <h2>Discussion and Conclusions</h2>
+      <ol class="guidance-outline">
+        <li><strong>5.1 Introduction</strong> — explain how the discussion is organized.</li>
+        <li><strong>5.2 Discussion by objective</strong> — finding, meaning, comparison with Chapter 2 literature, then the design-science contribution.</li>
+        <li><strong>5.3 Implications</strong> — implications for CBC teachers, learners, schools and system design.</li>
+        <li><strong>5.4 Limitations</strong> — sample, setting, duration, measurement and technical limitations.</li>
+        <li><strong>5.5 Recommendations</strong> — evidence-based recommendations for practice and future work.</li>
+        <li><strong>5.6 Conclusion</strong> — answer the research objectives without introducing new results.</li>
+      </ol>
+      <p class="teacher-help">Keep Chapter 4 factual. Interpret and compare those findings in Chapter 5.</p>
+      <a class="teacher-button" href="{{ url_for('research.chapter_five_insights') }}">Open Chapter 5 Workspace</a>
+    </section>
+  </div>
+
+  <section class="teacher-panel guidance-rules">
+    <h2>Research integrity rules</h2>
+    <ul>
+      <li>Never use demo accounts or synthetic records as dissertation evidence.</li>
+      <li>Use participant codes, consent status and the approved study dates.</li>
+      <li>Leave a section as “{{ no_data }}” until genuine evidence exists.</li>
+      <li>Keep raw results separate from discussion and recommendations.</li>
+      <li>Ask your supervisor to approve the final statistical tests and qualitative coding procedure.</li>
+    </ul>
+  </section>
+</div>
+{% endblock %}

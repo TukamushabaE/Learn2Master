@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import hashlib
+import mimetypes
 import time
 import threading
 import re
@@ -73,6 +74,19 @@ _groq_circuit_open_until = 0.0
 FAILURE_THRESHOLD = 5
 BACKOFF_SECONDS = 60
 
+
+def supabase_secret_key():
+    return (
+        os.environ.get("SUPABASE_SECRET_KEY")
+        or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        or os.environ.get("SUPABASE_KEY")
+    )
+
+
+def supabase_storage_configured():
+    """Return configuration state without constructing a client or making a request."""
+    return bool(os.environ.get("SUPABASE_URL") and supabase_secret_key() and create_client)
+
 def calculate_bkt(current_p, correct):
     p_transit = float(os.environ.get('BKT_TRANSIT', 0.1))
     p_slip = float(os.environ.get('BKT_SLIP', 0.1))
@@ -117,12 +131,17 @@ class KnowledgeBase:
         self.embeddings = None
         self.hf_client = None
         self.supabase: Client = None
+        self.storage_bucket = os.environ.get("SUPABASE_STORAGE_BUCKET", "knowledge-base")
+        self.vector_sync_enabled = os.environ.get("SUPABASE_VECTOR_ENABLED", "0").lower() in {
+            "1", "true", "yes", "on",
+        }
         self._lock = threading.Lock()
         self._processed_files = {}
+        self._processed_text = {}
 
         # Initialize clients
         supabase_url = os.environ.get("SUPABASE_URL")
-        supabase_key = os.environ.get("SUPABASE_KEY")
+        supabase_key = supabase_secret_key()
         if supabase_url and supabase_key and create_client:
             try:
                 self.supabase = create_client(supabase_url, supabase_key)
@@ -137,6 +156,7 @@ class KnowledgeBase:
 
         self.load_processed_files_metadata()
         self.load_and_process()
+        self.load_persisted_summaries()
 
     def load_processed_files_metadata(self):
         if self.processed_files_path.exists():
@@ -155,11 +175,82 @@ class KnowledgeBase:
             logger.error(f"Error saving processed files metadata: {e}")
 
     def _get_file_hash(self, filepath):
-        hasher = hashlib.md5()
+        hasher = hashlib.sha256()
         with open(filepath, 'rb') as f:
             for block in iter(lambda: f.read(1024 * 1024), b""):
                 hasher.update(block)
         return hasher.hexdigest()
+
+    def file_hash(self, filepath):
+        return self._get_file_hash(filepath)
+
+    @property
+    def storage_enabled(self):
+        return bool(self.supabase)
+
+    def processed_text_for(self, filepath):
+        return self._processed_text.get(self._get_file_hash(filepath), "")
+
+    def upload_source_document(self, filepath, teacher_id, content_type=None):
+        """Upload a source document to the configured private Supabase bucket."""
+        if not self.supabase:
+            raise RuntimeError("Supabase Storage is not configured.")
+        filepath = Path(filepath)
+        content_hash = self._get_file_hash(filepath)
+        safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", filepath.name).strip(".-") or "document"
+        storage_path = f"teachers/{int(teacher_id)}/{content_hash[:16]}-{safe_name}"
+        detected_type = content_type or mimetypes.guess_type(filepath.name)[0] or "application/octet-stream"
+        with open(filepath, "rb") as source:
+            self.supabase.storage.from_(self.storage_bucket).upload(
+                path=storage_path,
+                file=source,
+                file_options={
+                    "content-type": detected_type,
+                    "cache-control": "3600",
+                    "upsert": "true",
+                },
+            )
+        return {
+            "provider": "supabase",
+            "bucket": self.storage_bucket,
+            "path": storage_path,
+            "content_hash": content_hash,
+            "mime_type": detected_type,
+        }
+
+    def delete_source_document(self, storage_path):
+        if self.supabase and storage_path:
+            self.supabase.storage.from_(self.storage_bucket).remove([storage_path])
+
+    def load_persisted_summaries(self):
+        """Restore processed summaries without re-downloading private originals."""
+        conn = None
+        try:
+            from database import get_db
+
+            conn = get_db()
+            rows = conn.execute("""
+                SELECT filename, content_hash, processed_text
+                FROM teacher_kb_uploads
+                WHERE processed_text IS NOT NULL AND processed_text <> ''
+                ORDER BY created_at ASC
+            """).fetchall()
+            for row in rows:
+                text = str(row["processed_text"] or "").strip()[:MAX_EXTRACTED_TEXT_CHARS]
+                if not text:
+                    continue
+                content_hash = row["content_hash"] or hashlib.sha256(text.encode("utf-8")).hexdigest()
+                self._processed_text[content_hash] = text
+                for chunk in self._recursive_split(text):
+                    if len(self.chunks) >= MAX_KB_ENTRIES:
+                        return
+                    if chunk not in self.chunks:
+                        self.chunks.append(chunk)
+        except Exception as exc:
+            logger.warning(f"Persisted knowledge-base summaries could not be loaded: {exc}")
+        finally:
+            if conn is not None:
+                conn.close()
 
     def _read_bounded_text(self, filepath):
         with open(filepath, "r", encoding="utf-8", errors="replace") as source:
@@ -315,9 +406,9 @@ class KnowledgeBase:
 
         file_hash = self._get_file_hash(filepath)
         processed_state = self._processed_files.get(filename)
-        if processed_state == file_hash:
+        if processed_state == file_hash and file_hash in self._processed_text:
             logger.info(f"Skipping {filename}, already processed.")
-            return True, 0
+            return True, len(self._processed_text[file_hash])
         if processed_state == f"failed:{file_hash}":
             logger.warning(f"Skipping {filename}, extraction previously failed.")
             return False, 0
@@ -360,6 +451,7 @@ class KnowledgeBase:
                 logger.error(f"Error generating embeddings for {filename}: {e}")
 
         with self._lock:
+            self._processed_text[file_hash] = text
             self.chunks.extend(new_chunks)
             if embeddings_list and np:
                 new_emb_array = np.array(embeddings_list)
@@ -370,7 +462,7 @@ class KnowledgeBase:
 
             # Sync to Supabase
             supabase_success = True
-            if self.supabase and embeddings_list:
+            if self.supabase and self.vector_sync_enabled and embeddings_list:
                 try:
                     data_to_insert = [
                         {
@@ -395,30 +487,15 @@ class KnowledgeBase:
         if not self.directory.exists():
             self.directory.mkdir(parents=True, exist_ok=True)
 
-        # 1. Sync from Supabase Storage if available
-        if self.supabase:
-            try:
-                res = self.supabase.storage.from_("knowledge-base").list()
-                for file_info in res:
-                    fname = file_info['name']
-                    if fname.startswith('.') or fname.startswith('_'): continue
-                    local_path = self.directory / fname
-                    if not local_path.exists():
-                        logger.info(f"Downloading {fname} from Supabase Storage...")
-                        with open(local_path, 'wb') as f:
-                            data = self.supabase.storage.from_("knowledge-base").download(fname)
-                            f.write(data)
-            except Exception as e:
-                logger.error(f"Supabase Storage sync error: {e}")
-
-        # 2. Process all files in directory
+        # Process bundled/local files. Private teacher originals stay in Supabase;
+        # their bounded summaries are restored from the application database.
         for filename in sorted(os.listdir(self.directory)):
             if filename.startswith('_'): continue
             filepath = self.directory / filename
             if filepath.is_file() and filepath.stat().st_size <= MAX_FILE_BYTES:
                 self.process_file(str(filepath))
 
-        # 3. Load dynamic KB entries
+        # Load dynamic KB entries
         if self.dynamic_kb_path.exists():
             try:
                 with open(self.dynamic_kb_path, 'r') as f:
@@ -440,10 +517,10 @@ class KnowledgeBase:
     def search(self, query, top_k=3):
         query_embedding = self.get_query_embedding(query)
         if query_embedding is None:
-            return []
+            return self._lexical_search(query, top_k)
 
         if not np:
-            return []
+            return self._lexical_search(query, top_k)
 
         # Ensure query_embedding is a 1D array for Supabase/dot product
         if isinstance(query_embedding, list):
@@ -453,7 +530,7 @@ class KnowledgeBase:
         elif isinstance(query_embedding, np.ndarray) and query_embedding.ndim > 1:
             query_embedding = query_embedding.flatten()
 
-        if self.supabase:
+        if self.supabase and self.vector_sync_enabled:
             try:
                 # Using Supabase rpc for vector similarity search
                 # Requires a 'match_kb_chunks' function in Supabase
@@ -472,8 +549,13 @@ class KnowledgeBase:
                 logger.error(f"Supabase search error: {e}. Falling back to local.")
 
         with self._lock:
-            if not self.chunks or self.embeddings is None:
-                return []
+            use_lexical_fallback = (
+                not self.chunks
+                or self.embeddings is None
+                or len(self.embeddings) != len(self.chunks)
+            )
+        if use_lexical_fallback:
+            return self._lexical_search(query, top_k)
 
         try:
             with self._lock:
@@ -495,7 +577,21 @@ class KnowledgeBase:
                 return [self.chunks[i] for i in top_indices]
         except Exception as e:
             logger.error(f"Local search error: {e}")
+            return self._lexical_search(query, top_k)
+
+    def _lexical_search(self, query, top_k=3):
+        terms = {term for term in re.findall(r"[a-z0-9]+", query.lower()) if len(term) > 2}
+        if not terms:
             return []
+        with self._lock:
+            scored = []
+            for index, chunk in enumerate(self.chunks):
+                lowered = chunk.lower()
+                score = sum(lowered.count(term) for term in terms)
+                if score:
+                    scored.append((score, -index, chunk))
+        scored.sort(reverse=True)
+        return [item[2] for item in scored[:top_k]]
 
     def add_knowledge(self, text, metadata=None):
         text = text.strip()
@@ -513,7 +609,7 @@ class KnowledgeBase:
             except Exception as e:
                 logger.error(f"Error generating embeddings in add_knowledge: {e}")
 
-        if self.supabase and embeddings_list:
+        if self.supabase and self.vector_sync_enabled and embeddings_list:
             try:
                 data_to_insert = [
                     {'content': chunk, 'embedding': emb, 'metadata': metadata or {}}

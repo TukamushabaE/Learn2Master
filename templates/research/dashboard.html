@@ -11,11 +11,17 @@
 
 {% block content %}
 <div class="research-actions">
+  <a class="research-button" href="{{ url_for('research.chapter_guide') }}">Chapter 4 &amp; 5 Guide</a>
   <a class="research-button" href="{{ url_for('research.participants') }}">Participants</a>
   <a class="research-button" href="{{ url_for('research.pre_post_results') }}">Pre/Post</a>
   <a class="research-button" href="{{ url_for('research.learning_gain') }}">Learning Gain</a>
   <a class="research-button" href="{{ url_for('research.mastery_attainment') }}">Mastery</a>
   <a class="research-button" href="{{ url_for('research.teacher_oversight') }}">Teacher Oversight</a>
+  <a class="research-button" href="{{ url_for('research.feedback_responsiveness') }}">Feedback Responsiveness</a>
+  <a class="research-button" href="{{ url_for('research.system_reliability') }}">Reliability</a>
+  <a class="research-button" href="{{ url_for('research.data_integrity') }}">Data Integrity</a>
+  <a class="research-button" href="{{ url_for('research.data_collection_readiness') }}">Collection Readiness</a>
+  <a class="research-button" href="{{ url_for('research.proposal_traceability') }}">Proposal Traceability</a>
   <a class="research-button" href="{{ url_for('research.questionnaires') }}">Questionnaires</a>
   <a class="research-button" href="{{ url_for('research.chapter_four_report') }}">Chapter Four</a>
   <a class="research-button" href="{{ url_for('research.chapter_five_insights') }}">Chapter Five</a>
@@ -45,6 +51,9 @@
   <div class="stat-card"><h3>System Usage</h3><p class="stat-number">{{ metrics.system_usage_count }}</p></div>
   <div class="stat-card"><h3>Sync Success Rate</h3><p class="stat-number">{% if metrics.sync_success_rate == 'No data yet.' %}{{ metrics.sync_success_rate }}{% else %}{{ metrics.sync_success_rate }}%{% endif %}</p></div>
   <div class="stat-card"><h3>Recorded Incidents</h3><p class="stat-number">{{ metrics.recorded_system_incidents }}</p></div>
+  <div class="stat-card"><h3>Recommendation Follow-through</h3><p class="stat-number">{{ metrics.recommendation_follow_through_rate }}%</p></div>
+  <div class="stat-card"><h3>Recorded Event Success</h3><p class="stat-number">{{ metrics.recorded_event_success_rate }}</p></div>
+  <div class="stat-card"><h3>Median Response Time</h3><p class="stat-number">{{ metrics.median_response_time_ms }} ms</p></div>
 </div>
 
 <section class="learn-card">
@@ -83,6 +92,6 @@
 <section class="learn-card ai-panel">
   <h2>Latest Data Collection Activity</h2>
   <p>{{ metrics.latest_data_collection_activity }}</p>
-  <p class="mini-note">Exports: <a href="{{ url_for('research.export_pre_post') }}">Pre/Post</a> · <a href="{{ url_for('research.export_learning_gain') }}">Learning Gain</a> · <a href="{{ url_for('research.export_mastery') }}">Mastery</a> · <a href="{{ url_for('research.export_questionnaires') }}">Questionnaires</a> · <a href="{{ url_for('research.export_full_dataset') }}">Full Dataset</a></p>
+  <p class="mini-note">Exports: <a href="{{ url_for('research.export_pre_post') }}">Pre/Post</a> · <a href="{{ url_for('research.export_learning_gain') }}">Learning Gain</a> · <a href="{{ url_for('research.export_mastery') }}">Mastery</a> · <a href="{{ url_for('research.export_feedback_responsiveness') }}">Feedback</a> · <a href="{{ url_for('research.export_teacher_oversight') }}">Teacher Oversight</a> · <a href="{{ url_for('research.export_system_reliability') }}">Reliability</a> · <a href="{{ url_for('research.export_questionnaires') }}">Questionnaires</a> · <a href="{{ url_for('research.export_full_dataset') }}">Full Dataset</a></p>
 </section>
 {% endblock %}
