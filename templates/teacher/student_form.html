@@ -1,26 +1,39 @@
-{% extends "base.html" %}
+{% extends "layouts/base.html" %}
+{% block title %}Create Student{% endblock %}
 {% block content %}
-<div class="container mt-4">
-    <h2>Create Student Account</h2>
+<div class="teacher-page">
+  <section class="hero-panel">
+    <div>
+      <p class="eyebrow">Teacher Account Management</p>
+      <h1>Create Student Account</h1>
+      <p>Create an active learner account for your school. The password field includes a Show/Hide control.</p>
+    </div>
+    <div class="hero-badge"><span>Account</span><strong>New</strong></div>
+  </section>
+
+  <section class="teacher-panel">
     <form method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="mb-3">
-            <label>Full Name</label>
-            <input type="text" name="full_name" class="form-control" required>
-        </div>
-        <div class="mb-3">
-            <label>Username</label>
-            <input type="text" name="username" class="form-control" required>
-        </div>
-        <div class="mb-3">
-            <label>Email</label>
-            <input type="email" name="email" class="form-control">
-        </div>
-        <div class="mb-3">
-            <label>Password</label>
-            <input type="password" name="password" class="form-control" required>
-        </div>
-        <button type="submit" class="btn btn-primary">Create Student</button>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="teacher-form-grid">
+        <label class="teacher-field">Full Name
+          <input type="text" name="full_name" autocomplete="name" required>
+        </label>
+        <label class="teacher-field">Username
+          <input type="text" name="username" autocomplete="username" required>
+        </label>
+        <label class="teacher-field">Email
+          <input type="email" name="email" autocomplete="email">
+        </label>
+        <label class="teacher-field">Temporary Password
+          <input type="password" name="password" autocomplete="new-password" minlength="8" required>
+          <small>Use at least eight characters with letters and numbers.</small>
+        </label>
+      </div>
+      <div class="teacher-actions">
+        <button type="submit" class="teacher-button">Create Student</button>
+        <a class="teacher-button secondary" href="{{ url_for('teacher.teacher_dashboard') }}">Cancel</a>
+      </div>
     </form>
+  </section>
 </div>
 {% endblock %}

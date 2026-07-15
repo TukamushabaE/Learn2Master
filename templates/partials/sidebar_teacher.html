@@ -7,26 +7,39 @@
         </div>
     </div>
 
-    <nav class="side-nav">
-        <a href="{{ url_for('teacher.teacher_dashboard') }}" class="nav-link">Home <span>Dashboard</span></a>
-        <a href="{{ url_for('teacher.learners') }}" class="nav-link">Class <span>Learners</span></a>
-        <a href="{{ url_for('teacher.pending_reviews') }}" class="nav-link">Review <span>Pending Reviews</span></a>
-        <a href="{{ url_for('teacher.mastery_monitor') }}" class="nav-link">Goal <span>Mastery Monitor</span></a>
-        <a href="{{ url_for('teacher.question_bank') }}" class="nav-link">QBank <span>Question Bank</span></a>
-        <a href="{{ url_for('teacher.ai_insights') }}" class="nav-link">AI <span>AI Insights</span></a>
-        <a href="{{ url_for('ai.explanations') }}" class="nav-link">XAI <span>AI Explanations</span></a>
-        <a href="{{ url_for('teacher.practical_evidence') }}" class="nav-link">Lab <span>Practical Evidence</span></a>
-        <a href="{{ url_for('analytics.analytics_dashboard') }}" class="nav-link">Data <span>Class Analytics</span></a>
-        <a href="{{ url_for('teacher.reports') }}" class="nav-link">Print <span>Reports</span></a>
-        <a href="{{ url_for('offline.sync_queue') }}" class="nav-link">Sync <span>Offline Queue</span></a>
-        <a href="{{ url_for('framework.alignment') }}" class="nav-link">Map <span>Framework Alignment</span></a>
-        <a href="{{ url_for('research.research_dashboard') }}" class="nav-link">Research <span>Research Dashboard</span></a>
-        <a href="{{ url_for('research.pre_post_results') }}" class="nav-link">PrePost <span>Pre/Post Results</span></a>
-        <a href="{{ url_for('research.learning_gain') }}" class="nav-link">Gain <span>Learning Gain</span></a>
-        <a href="{{ url_for('research.teacher_oversight') }}" class="nav-link">Teach <span>Teacher Oversight</span></a>
-        <a href="{{ url_for('research.questionnaires') }}" class="nav-link">Likert <span>Questionnaires</span></a>
-        <a href="{{ url_for('research.chapter_four_report') }}" class="nav-link">Ch4 <span>Chapter Four</span></a>
-        <a href="{{ url_for('research.research_reports') }}" class="nav-link">CSV <span>Research Reports</span></a>
+    {% set endpoint = request.endpoint or '' %}
+    <nav class="side-nav" aria-label="Teacher navigation">
+        <span class="nav-section-label">Teaching</span>
+        <a href="{{ url_for('teacher.teacher_dashboard') }}" class="nav-link {{ 'active' if endpoint == 'teacher.teacher_dashboard' }}">Home <span>Dashboard</span></a>
+        <a href="{{ url_for('teacher.learners') }}" class="nav-link {{ 'active' if endpoint in ['teacher.learners', 'teacher.learner_detail', 'teacher.learner_portfolio'] }}">Class <span>Learners</span></a>
+        <a href="{{ url_for('teacher.pending_students') }}" class="nav-link {{ 'active' if endpoint == 'teacher.pending_students' }}">Join <span>Pending Students</span></a>
+        <a href="{{ url_for('teacher.assign_subjects') }}" class="nav-link {{ 'active' if endpoint == 'teacher.assign_subjects' }}">Assign <span>Assign Subjects</span></a>
+        <a href="{{ url_for('teacher.create_student') }}" class="nav-link {{ 'active' if endpoint == 'teacher.create_student' }}">Add <span>Create Student</span></a>
+        <a href="{{ url_for('teacher.pending_reviews') }}" class="nav-link {{ 'active' if endpoint == 'teacher.pending_reviews' }}">Review <span>Pending Reviews</span></a>
+        <a href="{{ url_for('teacher.mastery_monitor') }}" class="nav-link {{ 'active' if endpoint == 'teacher.mastery_monitor' }}">Goal <span>Mastery Monitor</span></a>
+        <a href="{{ url_for('teacher.question_bank') }}" class="nav-link {{ 'active' if endpoint in ['teacher.question_bank', 'teacher.create_question'] }}">QBank <span>Question Bank</span></a>
+        <a href="{{ url_for('teacher.practical_evidence') }}" class="nav-link {{ 'active' if endpoint == 'teacher.practical_evidence' }}">Lab <span>Practical Evidence</span></a>
+
+        <span class="nav-section-label">AI and evidence</span>
+        <a href="{{ url_for('teacher.ai_insights') }}" class="nav-link {{ 'active' if endpoint == 'teacher.ai_insights' }}">AI <span>AI Insights</span></a>
+        <a href="{{ url_for('ai.explanations') }}" class="nav-link {{ 'active' if endpoint == 'ai.explanations' }}">XAI <span>AI Explanations</span></a>
+        <a href="{{ url_for('teacher.teacher_kb_upload') }}" class="nav-link {{ 'active' if endpoint == 'teacher.teacher_kb_upload' }}">Upload <span>Study Materials</span></a>
+        <a href="{{ url_for('teacher.teacher_kb_view') }}" class="nav-link {{ 'active' if endpoint == 'teacher.teacher_kb_view' }}">KB <span>Knowledge Base</span></a>
+        <a href="{{ url_for('analytics.analytics_dashboard') }}" class="nav-link {{ 'active' if endpoint == 'analytics.analytics_dashboard' }}">Data <span>Class Analytics</span></a>
+        <a href="{{ url_for('teacher.reports') }}" class="nav-link {{ 'active' if endpoint == 'teacher.reports' }}">Print <span>Reports</span></a>
+        <a href="{{ url_for('offline.sync_queue') }}" class="nav-link {{ 'active' if endpoint == 'offline.sync_queue' }}">Sync <span>Offline Queue</span></a>
+        <a href="{{ url_for('framework.alignment') }}" class="nav-link {{ 'active' if endpoint == 'framework.alignment' }}">Map <span>Framework Alignment</span></a>
+
+        <span class="nav-section-label">Dissertation</span>
+        <a href="{{ url_for('research.research_dashboard') }}" class="nav-link {{ 'active' if endpoint == 'research.research_dashboard' }}">Research <span>Research Dashboard</span></a>
+        <a href="{{ url_for('research.pre_post_results') }}" class="nav-link {{ 'active' if endpoint == 'research.pre_post_results' }}">PrePost <span>Pre/Post Results</span></a>
+        <a href="{{ url_for('research.learning_gain') }}" class="nav-link {{ 'active' if endpoint == 'research.learning_gain' }}">Gain <span>Learning Gain</span></a>
+        <a href="{{ url_for('research.teacher_oversight') }}" class="nav-link {{ 'active' if endpoint == 'research.teacher_oversight' }}">Teach <span>Teacher Oversight</span></a>
+        <a href="{{ url_for('research.questionnaires') }}" class="nav-link {{ 'active' if endpoint.startswith('research.questionnaire') }}">Likert <span>Questionnaires</span></a>
+        <a href="{{ url_for('research.chapter_guide') }}" class="nav-link {{ 'active' if endpoint == 'research.chapter_guide' }}">Guide <span>Chapters 4 and 5</span></a>
+        <a href="{{ url_for('research.chapter_four_report') }}" class="nav-link {{ 'active' if endpoint == 'research.chapter_four_report' }}">Ch4 <span>Chapter Four</span></a>
+        <a href="{{ url_for('research.chapter_five_insights') }}" class="nav-link {{ 'active' if endpoint == 'research.chapter_five_insights' }}">Ch5 <span>Chapter Five</span></a>
+        <a href="{{ url_for('research.research_reports') }}" class="nav-link {{ 'active' if endpoint == 'research.research_reports' }}">CSV <span>Research Reports</span></a>
         <a href="{{ url_for('auth.logout') }}" class="nav-link">Exit <span>Logout</span></a>
     </nav>
 </aside>

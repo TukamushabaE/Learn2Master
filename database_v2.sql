@@ -1,5 +1,7 @@
 PRAGMA foreign_keys = ON;
 
+DROP TABLE IF EXISTS research_events;
+DROP TABLE IF EXISTS schema_migrations;
 DROP TABLE IF EXISTS audit_logs;
 DROP TABLE IF EXISTS research_questionnaire_answers;
 DROP TABLE IF EXISTS research_questionnaire_responses;
@@ -69,6 +71,12 @@ CREATE TABLE roles (
     role_id INTEGER PRIMARY KEY AUTOINCREMENT,
     role_name TEXT UNIQUE NOT NULL,
     display_name TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version TEXT PRIMARY KEY,
+    description TEXT NOT NULL,
+    applied_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE schools (
@@ -471,6 +479,10 @@ CREATE TABLE recommendations (
     recommended_activity TEXT,
     teacher_action_required INTEGER DEFAULT 0,
     teacher_status TEXT DEFAULT 'Pending Review',
+    viewed_at TEXT,
+    first_response_at TEXT,
+    followed_at TEXT,
+    response_evidence TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (learner_id) REFERENCES users(user_id),
     FOREIGN KEY (lesson_id) REFERENCES lessons(lesson_id),
@@ -557,8 +569,11 @@ CREATE TABLE IF NOT EXISTS teacher_interventions (
     outcome_id INTEGER NOT NULL,
     intervention_type TEXT NOT NULL,
     intervention_note TEXT NOT NULL,
+    intervention_reason TEXT,
     status TEXT DEFAULT 'Assigned',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    responded_at TEXT,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (teacher_id) REFERENCES users(user_id),
     FOREIGN KEY (learner_id) REFERENCES users(user_id),
     FOREIGN KEY (outcome_id) REFERENCES learning_outcomes(outcome_id)
@@ -574,6 +589,7 @@ CREATE TABLE IF NOT EXISTS teacher_feedback (
     mastery_approval TEXT DEFAULT 'Pending',
     remediation_assigned TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    responded_at TEXT,
     FOREIGN KEY (teacher_id) REFERENCES users(user_id),
     FOREIGN KEY (learner_id) REFERENCES users(user_id),
     FOREIGN KEY (outcome_id) REFERENCES learning_outcomes(outcome_id)
@@ -616,7 +632,10 @@ CREATE TABLE IF NOT EXISTS research_participants (
     assent_status TEXT DEFAULT 'Pending',
     parent_consent_status TEXT DEFAULT 'Pending',
     active_status TEXT DEFAULT 'Active',
+    enrolled_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    withdrawn_at TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id),
     FOREIGN KEY (school_id) REFERENCES schools(school_id),
     FOREIGN KEY (class_id) REFERENCES classes(class_id),
@@ -629,6 +648,7 @@ CREATE TABLE IF NOT EXISTS research_questionnaires (
     questionnaire_title TEXT UNIQUE NOT NULL,
     respondent_role TEXT NOT NULL,
     questionnaire_description TEXT,
+    study_phase TEXT DEFAULT 'Pilot',
     active_status TEXT DEFAULT 'Active',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -639,6 +659,7 @@ CREATE TABLE IF NOT EXISTS research_questionnaire_items (
     construct_name TEXT NOT NULL,
     item_text TEXT NOT NULL,
     display_order INTEGER DEFAULT 1,
+    required INTEGER DEFAULT 1,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (questionnaire_id) REFERENCES research_questionnaires(id),
     UNIQUE (questionnaire_id, item_text)
@@ -650,7 +671,9 @@ CREATE TABLE IF NOT EXISTS research_questionnaire_responses (
     respondent_user_id INTEGER,
     participant_id INTEGER,
     respondent_role TEXT,
+    started_at TEXT DEFAULT CURRENT_TIMESTAMP,
     submitted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    completion_status TEXT DEFAULT 'Submitted',
     FOREIGN KEY (questionnaire_id) REFERENCES research_questionnaires(id),
     FOREIGN KEY (respondent_user_id) REFERENCES users(user_id),
     FOREIGN KEY (participant_id) REFERENCES research_participants(id),
@@ -876,6 +899,13 @@ CREATE TABLE IF NOT EXISTS teacher_kb_uploads (
     filename TEXT NOT NULL,
     original_size_bytes INTEGER NOT NULL,
     summary_size_bytes INTEGER,
+    processed_text TEXT,
+    content_hash TEXT,
+    mime_type TEXT,
+    storage_provider TEXT DEFAULT 'database_summary',
+    storage_bucket TEXT,
+    storage_path TEXT,
+    storage_status TEXT DEFAULT 'Processed summary persisted; original not cloud-stored',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (teacher_id) REFERENCES users(user_id)
 );
@@ -890,6 +920,38 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (actor_id) REFERENCES users(user_id)
 );
+
+CREATE TABLE IF NOT EXISTS research_events (
+    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor_id INTEGER,
+    actor_role TEXT,
+    event_type TEXT NOT NULL,
+    entity_type TEXT,
+    entity_id TEXT,
+    session_identifier TEXT,
+    response_time_ms REAL,
+    event_status TEXT DEFAULT 'Success',
+    metadata_json TEXT,
+    error_category TEXT,
+    offline_status TEXT DEFAULT 'Online',
+    occurred_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (actor_id) REFERENCES users(user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_attempts_learner_assessment_time
+    ON assessment_attempts (learner_id, assessment_id, attempted_at);
+CREATE INDEX IF NOT EXISTS idx_mastery_learner_outcome
+    ON mastery_records (learner_id, outcome_id);
+CREATE INDEX IF NOT EXISTS idx_recommendations_learner_outcome_time
+    ON recommendations (learner_id, outcome_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_participants_phase_status
+    ON research_participants (study_phase, active_status, consent_status);
+CREATE INDEX IF NOT EXISTS idx_questionnaire_responses_participant
+    ON research_questionnaire_responses (participant_id, submitted_at);
+CREATE INDEX IF NOT EXISTS idx_research_events_type_time
+    ON research_events (event_type, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_research_events_actor_time
+    ON research_events (actor_id, occurred_at);
 
 INSERT INTO roles (role_name, display_name) VALUES
 ('super_admin', 'Super Administrator'),

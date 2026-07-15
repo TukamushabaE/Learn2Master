@@ -1,6 +1,6 @@
 # Learn2Master V8 Dissertation Final Edition
 
-Learn2Master is an AI-enabled Flask and SQLite information system prototype for the MSc Information Systems dissertation:
+Learn2Master is an AI-enabled Flask information system with SQLite/PostgreSQL support for the MSc Information Systems dissertation:
 
 **An AI-Enabled Framework for Mastery-Based Learning under CBC**
 
@@ -49,6 +49,8 @@ That command reads the first teacher, school administrator, and super administra
 - Practical evidence upload and rubric-based teacher review
 - Learner and teacher competency portfolios
 - Research dashboard with printable and CSV reports
+- Chapter 4 and 5 evidence-readiness and writing guide
+- Private Supabase Storage for teacher source documents with database-persisted AI summaries
 - Offline foundation with sync queue, cached resources and service worker route
 - Admin question-bank create/edit with concept, competency, Bloom level, difficulty and resource metadata
 - Teacher pending-review queue, intervention history, learner detail review and teacher question creation
@@ -81,6 +83,7 @@ That command reads the first teacher, school administrator, and super administra
 - `/learner/portfolio`
 - `/ai/explanations`
 - `/research/dashboard`
+- `/research/chapter-guide`
 - `/research/reports`
 - `/research/export/csv`
 
@@ -95,7 +98,7 @@ python -m pytest -q --basetemp .tmp_pytest -p no:cacheprovider
 
 ## Documentation
 
-See `docs/` for proposal alignment, curriculum alignment, architecture, database dictionary, guides, testing protocol and demo script.
+See `docs/` for proposal alignment, curriculum alignment, architecture, database dictionary, guides, testing protocol and demo script. Production Supabase and safe Render migration steps are in `docs/SUPABASE_SETUP.md`.
 
 ## GitHub Workflow
 

@@ -21,12 +21,19 @@
 {% endmacro %}
 {% block content %}
 <div class="print-actions">
+  <a class="button" href="{{ url_for('research.chapter_guide') }}">Open Chapter Guide</a>
   <a class="button" href="{{ url_for('research.export_full_dataset') }}">Export Full Dataset</a>
   <button class="button" onclick="window.print()">Print Chapter Four</button>
 </div>
 <section class="hero-panel">
   <div><p class="eyebrow">Dissertation Chapter Four</p><h1>Research Results Report</h1><p>Printable summary tables for participant profile, pre/post results, gain, mastery, teacher oversight, user acceptance and system usage.</p></div>
   <div class="hero-badge"><span>Participants</span><strong>{{ metrics.total_participants }}</strong></div>
+</section>
+<section class="learn-card chapter-section">
+  <p><strong>Generated:</strong> {{ generated_at }} · <strong>Valid paired cases:</strong> {{ gain_summary.valid_pairs }} · <strong>Excluded/unpaired pre-test cases:</strong> {{ excluded_unpaired_cases }}</p>
+  <p><strong>Applied filters:</strong> {{ filters if filters else 'All eligible records' }}</p>
+  <strong>Evidence streams started: {{ readiness.present_count }} of {{ readiness.total_count }}.</strong>
+  <p>Presence is not a completeness or validity claim. Verify the sample and approved analysis before using these tables in the dissertation.</p>
 </section>
 {{ table_block('Table 4.1 Participant Summary', [('participant_code','Code'),('role_name','Role'),('school_name','School'),('class_name','Class'),('subject_name','Subject'),('study_phase','Phase'),('active_status','Status')], participants) }}
 {{ table_block('Table 4.2 Pre-test Results', [('participant_code','Code'),('subject','Subject'),('learning_outcome','Outcome'),('score','Score'),('total_marks','Total'),('percentage','Percentage'),('date_taken','Date'),('time_spent','Time Spent'),('concepts_weak','Weak Concepts')], pretest) }}
@@ -47,4 +54,8 @@
   <p>System usage count: <strong>{{ metrics.system_usage_count }}</strong>; AI recommendations: <strong>{{ metrics.ai_recommendations }}</strong>; sync success: <strong>{% if metrics.sync_success_rate == 'No data yet.' %}{{ metrics.sync_success_rate }}{% else %}{{ metrics.sync_success_rate }}%{% endif %}</strong>; recorded incidents: <strong>{{ metrics.recorded_system_incidents }}</strong>; latest data collection activity: <strong>{{ metrics.latest_data_collection_activity }}</strong>.</p>
   <table class="chapter-table"><thead><tr><th>Source</th><th>Participant</th><th>Action</th><th>Details</th><th>Date</th></tr></thead><tbody>{% for row in system_logs %}<tr><td>{{ row.source }}</td><td>{{ row.participant_code }}</td><td>{{ row.action }}</td><td>{{ row.details }}</td><td>{{ row.created_at }}</td></tr>{% else %}<tr><td colspan="5">{{ no_data }}</td></tr>{% endfor %}</tbody></table>
 </section>
+{{ table_block('Table 4.9 AI Feedback Responsiveness', [('participant_code','Code'),('learning_outcome','Outcome'),('generated_at','Generated'),('viewed','Viewed'),('followed','Followed'),('response_delay_hours','Delay (h)'),('performance_change','Performance Change')], feedback_rows) }}
+<section class="learn-card chapter-section"><h2>Table 4.10 Recorded System Reliability</h2><p>{{ reliability_summary.scope_note }}</p><p>Recorded events: <strong>{{ reliability_summary.recorded_events }}</strong>; success rate: <strong>{{ reliability_summary.recorded_success_rate }}</strong>; median response time: <strong>{{ reliability_summary.median_response_time_ms }}</strong>; application errors: <strong>{{ reliability_summary.application_errors }}</strong>.</p></section>
+{{ table_block('Table 4.11 Data Quality Review', [('category','Category'),('severity','Status'),('issue','Check'),('count','Affected')], integrity.findings) }}
+<section class="learn-card chapter-section"><h2>Table 4.12 Objective-level Summary</h2><table class="chapter-table"><thead><tr><th>Objective</th><th>Evidence</th><th>Valid cases</th></tr></thead><tbody><tr><td>Learning gain</td><td>{{ gain_summary.average_gain }} percentage points mean paired gain</td><td>{{ gain_summary.valid_pairs }}</td></tr><tr><td>Mastery</td><td>{{ mastery_summary.mastery_attainment_rate }}% of represented outcome records</td><td>{{ mastery|length }}</td></tr><tr><td>Adaptive feedback</td><td>{{ feedback_summary.follow_through_rate }}% recorded follow-through</td><td>{{ feedback_summary.recommendations_generated }}</td></tr><tr><td>Teacher oversight</td><td>{{ teacher_summary.number_of_interventions }} intervention(s)</td><td>{{ teacher_summary.learners_supported_by_teacher }}</td></tr><tr><td>System operation</td><td>{{ reliability_summary.recorded_success_rate }} recorded event success rate</td><td>{{ reliability_summary.recorded_events }}</td></tr></tbody></table></section>
 {% endblock %}

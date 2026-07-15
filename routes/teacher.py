@@ -12,6 +12,7 @@ from engine import (
     SUPPORTED_DOCUMENT_EXTENSIONS,
     TEACHER_KB_STORAGE_LIMIT_BYTES,
     get_kb,
+    supabase_storage_configured,
 )
 
 teacher_bp = Blueprint("teacher", __name__)
@@ -752,6 +753,8 @@ def create_student():
 def teacher_kb_upload():
     conn = get_db()
     teacher_id = session["user_id"]
+    cloud_storage_enabled = supabase_storage_configured()
+    cloud_storage_bucket = os.environ.get("SUPABASE_STORAGE_BUCKET", "knowledge-base")
 
     # A teacher can build a 1 GB knowledge base from bounded individual uploads.
     usage = conn.execute("SELECT SUM(original_size_bytes) FROM teacher_kb_uploads WHERE teacher_id = ?", (teacher_id,)).fetchone()[0] or 0
@@ -798,8 +801,39 @@ def teacher_kb_upload():
                 return redirect(url_for("teacher.teacher_kb_upload"))
 
             filepath = kb.directory / filename
+            storage_info = {
+                "provider": "database_summary",
+                "bucket": None,
+                "path": None,
+                "content_hash": None,
+                "mime_type": file.mimetype or "application/octet-stream",
+            }
             try:
                 file.save(str(filepath))
+            except Exception:
+                current_app.logger.exception("Study material could not be saved temporarily")
+                conn.close()
+                flash("The document could not be staged for processing. Please try again.", "danger")
+                return redirect(url_for("teacher.teacher_kb_upload"))
+
+            if cloud_storage_enabled:
+                try:
+                    storage_info = kb.upload_source_document(
+                        str(filepath),
+                        teacher_id,
+                        content_type=file.mimetype,
+                    )
+                except Exception:
+                    current_app.logger.exception("Supabase Storage upload failed")
+                    filepath.unlink(missing_ok=True)
+                    conn.close()
+                    flash(
+                        "The private Supabase upload failed. Check the bucket name and backend secret, then try again.",
+                        "danger",
+                    )
+                    return redirect(url_for("teacher.teacher_kb_upload"))
+
+            try:
                 # Use unified processing method with summarization forced for teachers
                 success, summary_size = kb.process_file(
                     str(filepath),
@@ -811,25 +845,69 @@ def teacher_kb_upload():
                 success, summary_size = False, 0
 
             if success:
-                # Record upload
-                conn.execute("""
-                    INSERT INTO teacher_kb_uploads (teacher_id, filename, original_size_bytes, summary_size_bytes)
-                    VALUES (?, ?, ?, ?)
-                """, (teacher_id, filename, file_size, summary_size))
-                conn.commit()
-                flash(f"File {filename} uploaded and processed with AI summarization.", "success")
+                processed_text_reader = getattr(kb, "processed_text_for", None)
+                processed_text = processed_text_reader(str(filepath)) if processed_text_reader else ""
+                hash_reader = getattr(kb, "file_hash", None)
+                content_hash = storage_info.get("content_hash") or (
+                    hash_reader(str(filepath)) if hash_reader else None
+                )
+                storage_status = (
+                    "Private original stored in Supabase"
+                    if storage_info.get("provider") == "supabase"
+                    else "Processed summary persisted; original not cloud-stored"
+                )
+                try:
+                    conn.execute("""
+                        INSERT INTO teacher_kb_uploads (
+                            teacher_id, filename, original_size_bytes, summary_size_bytes,
+                            processed_text, content_hash, mime_type, storage_provider,
+                            storage_bucket, storage_path, storage_status
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        teacher_id,
+                        filename,
+                        file_size,
+                        summary_size,
+                        processed_text,
+                        content_hash,
+                        storage_info.get("mime_type"),
+                        storage_info.get("provider"),
+                        storage_info.get("bucket"),
+                        storage_info.get("path"),
+                        storage_status,
+                    ))
+                    conn.commit()
+                    suffix = " and backed up privately to Supabase" if cloud_storage_enabled else ""
+                    flash(f"File {filename} uploaded and summarized{suffix}.", "success")
+                except Exception:
+                    conn.rollback()
+                    if storage_info.get("path") and hasattr(kb, "delete_source_document"):
+                        try:
+                            kb.delete_source_document(storage_info["path"])
+                        except Exception:
+                            current_app.logger.exception("Supabase upload rollback failed")
+                    current_app.logger.exception("Study material metadata could not be saved")
+                    flash("The document was processed, but its upload record could not be saved. Please try again.", "danger")
             else:
-                filepath.unlink(missing_ok=True)
+                if storage_info.get("path") and hasattr(kb, "delete_source_document"):
+                    try:
+                        kb.delete_source_document(storage_info["path"])
+                    except Exception:
+                        current_app.logger.exception("Supabase upload cleanup failed")
                 flash(
                     f"{filename} could not be summarized within the production safety limits. "
                     "Try exporting it to PDF, DOCX, ODT, or plain text.",
                     "danger",
                 )
 
+            filepath.unlink(missing_ok=True)
             conn.close()
             return redirect(url_for("teacher.teacher_kb_upload"))
 
-    uploads = conn.execute("SELECT * FROM teacher_kb_uploads WHERE teacher_id = ?", (teacher_id,)).fetchall()
+    uploads = conn.execute(
+        "SELECT * FROM teacher_kb_uploads WHERE teacher_id = ? ORDER BY created_at DESC, upload_id DESC",
+        (teacher_id,),
+    ).fetchall()
     conn.close()
     return render_template(
         "teacher/kb_upload.html",
@@ -838,4 +916,6 @@ def teacher_kb_upload():
         limit=limit,
         per_file_limit=MAX_FILE_BYTES,
         allowed_extensions=sorted(SUPPORTED_DOCUMENT_EXTENSIONS),
+        cloud_storage_enabled=cloud_storage_enabled,
+        cloud_storage_bucket=cloud_storage_bucket,
     )

@@ -63,3 +63,28 @@ def test_sqlite_initialization_is_repeatable_without_deleting_data(tmp_path):
         assert role_count >= 4
     finally:
         conn.close()
+
+
+def test_teacher_upload_schema_extensions_are_added_non_destructively(tmp_path):
+    db_path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE assessment_attempts (attempt_id INTEGER PRIMARY KEY)")
+    conn.execute("""
+        CREATE TABLE teacher_kb_uploads (
+            upload_id INTEGER PRIMARY KEY,
+            teacher_id INTEGER,
+            filename TEXT,
+            original_size_bytes INTEGER,
+            summary_size_bytes INTEGER,
+            created_at TEXT
+        )
+    """)
+    init_db.ensure_sqlite_schema_extensions(conn)
+    conn.commit()
+
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(teacher_kb_uploads)")}
+    conn.close()
+    assert {
+        "processed_text", "content_hash", "mime_type", "storage_provider",
+        "storage_bucket", "storage_path", "storage_status",
+    } <= columns

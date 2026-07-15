@@ -41,6 +41,11 @@ class Config:
     HF_TOKEN = os.environ.get("HF_TOKEN")
     TRAINING_API_URL = os.environ.get("TRAINING_API_URL")
 
-    # Supabase Integration (for additional cloud features if needed)
+    # Supabase Storage. The secret key is backend-only and must never be sent to browsers.
     SUPABASE_URL = os.environ.get("SUPABASE_URL")
-    SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+    SUPABASE_SECRET_KEY = (
+        os.environ.get("SUPABASE_SECRET_KEY")
+        or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        or os.environ.get("SUPABASE_KEY")
+    )
+    SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "knowledge-base")

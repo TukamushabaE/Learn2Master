@@ -24,6 +24,65 @@ ASSESSMENT_ATTEMPT_TIMING_COLUMNS = {
     "time_spent_seconds": "INTEGER",
 }
 
+TEACHER_KB_UPLOAD_COLUMNS = {
+    "processed_text": "TEXT",
+    "content_hash": "TEXT",
+    "mime_type": "TEXT",
+    "storage_provider": "TEXT DEFAULT 'database_summary'",
+    "storage_bucket": "TEXT",
+    "storage_path": "TEXT",
+    "storage_status": "TEXT DEFAULT 'Processed summary persisted; original not cloud-stored'",
+}
+
+TABLE_COLUMN_EXTENSIONS = {
+    "assessment_attempts": ASSESSMENT_ATTEMPT_TIMING_COLUMNS,
+    "teacher_kb_uploads": TEACHER_KB_UPLOAD_COLUMNS,
+    "research_participants": {
+        "enrolled_at": "TEXT DEFAULT CURRENT_TIMESTAMP",
+        "withdrawn_at": "TEXT",
+        "updated_at": "TEXT DEFAULT CURRENT_TIMESTAMP",
+    },
+    "research_questionnaires": {
+        "study_phase": "TEXT DEFAULT 'Pilot'",
+    },
+    "research_questionnaire_items": {
+        "required": "INTEGER DEFAULT 1",
+    },
+    "research_questionnaire_responses": {
+        "started_at": "TEXT DEFAULT CURRENT_TIMESTAMP",
+        "completion_status": "TEXT DEFAULT 'Submitted'",
+    },
+    "recommendations": {
+        "viewed_at": "TEXT",
+        "first_response_at": "TEXT",
+        "followed_at": "TEXT",
+        "response_evidence": "TEXT",
+    },
+    "teacher_interventions": {
+        "intervention_reason": "TEXT",
+        "responded_at": "TEXT",
+        "updated_at": "TEXT DEFAULT CURRENT_TIMESTAMP",
+    },
+    "teacher_feedback": {
+        "responded_at": "TEXT",
+    },
+}
+
+SCHEMA_MIGRATIONS = (
+    (
+        "20260715_01_additive_current_schema",
+        "Create missing current application and research tables without dropping data",
+    ),
+    (
+        "20260715_02_research_evaluation_columns",
+        "Add timing, consent lifecycle, feedback responsiveness, storage and evaluation columns",
+    ),
+    (
+        "20260715_03_research_indexes",
+        "Add indexes used by assessment pairing, mastery, questionnaires and reliability reports",
+    ),
+)
+
 
 def split_sql_statements(sql_script):
     statements = []
@@ -150,22 +209,126 @@ def schema_statements(dialect, reset=False):
 
 def ensure_sqlite_schema_extensions(conn):
     """Add non-destructive columns needed by newer research releases."""
-    table = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='assessment_attempts'"
-    ).fetchone()
-    if not table:
-        return
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(assessment_attempts)").fetchall()}
-    for column_name, column_type in ASSESSMENT_ATTEMPT_TIMING_COLUMNS.items():
-        if column_name not in existing:
-            conn.execute(f"ALTER TABLE assessment_attempts ADD COLUMN {column_name} {column_type}")
+    for table_name, columns in TABLE_COLUMN_EXTENSIONS.items():
+        table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,),
+        ).fetchone()
+        if not table:
+            continue
+        existing = {
+            row[1]
+            for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        }
+        for column_name, column_type in columns.items():
+            if column_name not in existing:
+                conn.execute(
+                    f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+                )
 
 
 def ensure_postgres_schema_extensions(cur):
-    for column_name, column_type in ASSESSMENT_ATTEMPT_TIMING_COLUMNS.items():
-        cur.execute(
-            f"ALTER TABLE assessment_attempts ADD COLUMN IF NOT EXISTS {column_name} {column_type}"
+    for table_name, columns in TABLE_COLUMN_EXTENSIONS.items():
+        for column_name, column_type in columns.items():
+            postgres_type = column_type
+            if column_name.endswith(("_at", "_until")) and column_type.upper().startswith("TEXT"):
+                postgres_type = re.sub(r"^TEXT", "TIMESTAMP", column_type, flags=re.IGNORECASE)
+            cur.execute(
+                f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {column_name} {postgres_type}"
+            )
+
+
+def _additive_schema_statements(dialect):
+    return [
+        statement
+        for statement in schema_statements(dialect, reset=False)
+        if statement.lstrip().upper().startswith(("CREATE TABLE", "CREATE INDEX"))
+    ]
+
+
+def _record_sqlite_migrations(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version TEXT PRIMARY KEY,
+            description TEXT NOT NULL,
+            applied_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
+    """)
+    for version, description in SCHEMA_MIGRATIONS:
+        conn.execute("""
+            INSERT OR IGNORE INTO schema_migrations (version, description)
+            VALUES (?, ?)
+        """, (version, description))
+
+
+def _record_postgres_migrations(cur):
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version TEXT PRIMARY KEY,
+            description TEXT NOT NULL,
+            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    for version, description in SCHEMA_MIGRATIONS:
+        cur.execute("""
+            INSERT INTO schema_migrations (version, description)
+            VALUES (%s, %s)
+            ON CONFLICT (version) DO NOTHING
+        """, (version, description))
+
+
+def latest_schema_version(conn):
+    try:
+        row = conn.execute(
+            "SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1"
+        ).fetchone()
+        return row[0] if row else "unversioned"
+    except Exception:
+        return "unversioned"
+
+
+def ensure_current_schema(url=None):
+    """Apply idempotent additive migrations to an existing database."""
+    normalized_url = normalize_database_url(url)
+    if is_postgres_url(normalized_url):
+        if not psycopg2:
+            raise RuntimeError("psycopg2-binary is required for PostgreSQL schema upgrades.")
+        conn = psycopg2.connect(normalized_url)
+        try:
+            with conn.cursor() as cur:
+                statements = _additive_schema_statements("postgres")
+                for statement in statements:
+                    if statement.lstrip().upper().startswith("CREATE TABLE"):
+                        cur.execute(statement)
+                ensure_postgres_schema_extensions(cur)
+                for statement in statements:
+                    if statement.lstrip().upper().startswith("CREATE INDEX"):
+                        cur.execute(statement)
+                _record_postgres_migrations(cur)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        return
+
+    db_path = sqlite_path_from_url(normalized_url)
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("PRAGMA foreign_keys = ON")
+        statements = _additive_schema_statements("sqlite")
+        for statement in statements:
+            if statement.lstrip().upper().startswith("CREATE TABLE"):
+                conn.execute(statement)
+        ensure_sqlite_schema_extensions(conn)
+        for statement in statements:
+            if statement.lstrip().upper().startswith("CREATE INDEX"):
+                conn.execute(statement)
+        _record_sqlite_migrations(conn)
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def run_sqlite(db_path=None, reset=False):
@@ -179,6 +342,7 @@ def run_sqlite(db_path=None, reset=False):
         for statement in schema_statements("sqlite", reset=reset):
             conn.execute(statement)
         ensure_sqlite_schema_extensions(conn)
+        _record_sqlite_migrations(conn)
         conn.commit()
         print(f"Learn2Master SQLite database initialized at {db_path}.")
     finally:
@@ -200,6 +364,7 @@ def run_postgres(url=None, reset=False):
             for statement in schema_statements("postgres", reset=reset):
                 cur.execute(statement)
             ensure_postgres_schema_extensions(cur)
+            _record_postgres_migrations(cur)
         conn.commit()
         print("Learn2Master PostgreSQL database initialized safely.")
     except Exception:

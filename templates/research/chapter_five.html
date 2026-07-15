@@ -5,19 +5,22 @@
 <style>.insight-list{display:grid;gap:12px}.insight-list li{border:1px solid #e3ebf5;border-radius:8px;background:#fff;padding:14px;list-style:none}.print-actions{display:flex;justify-content:flex-end;margin-bottom:14px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}@media print{.sidebar,.topbar,.footer,.print-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}}</style>
 {% endblock %}
 {% block content %}
-<div class="print-actions"><button class="button" onclick="window.print()">Print Insights</button></div>
+<div class="print-actions"><a class="button" href="{{ url_for('research.chapter_guide') }}">Open Chapter Guide</a><button class="button" onclick="window.print()">Print Insights</button></div>
 <section class="hero-panel">
   <div><p class="eyebrow">Dissertation Chapter Five</p><h1>Discussion and Insights</h1><p>Interpretive summary generated from research dashboard evidence, teacher oversight, AI recommendations and user acceptance records.</p></div>
 </section>
 <section class="learn-card">
+  <p><strong>Evidence streams started:</strong> {{ readiness.present_count }} of {{ readiness.total_count }}. Discuss only verified evidence collected for the approved study.</p>
   {% if not has_data %}
   <p>No data yet. This section will populate after pilot use.</p>
   {% else %}
   <ul class="insight-list">
     {% for insight in insights %}
-    <li>{{ insight }}</li>
+    <li><strong>{{ insight.statement }}</strong><br><small>Metric: {{ insight.metric }} · Source: {{ insight.source }} · Valid cases: {{ insight.valid_cases }} · Scope: {{ insight.scope }} · Evidence type: {{ insight.evidence_type }}</small></li>
     {% endfor %}
   </ul>
+  <h2>Manual qualitative interpretation</h2>
+  <p>No qualitative themes are generated automatically. Add only themes produced through the approved coding procedure, with quotations and participant identifiers handled according to the ethics protocol.</p>
   {% endif %}
 </section>
 {% endblock %}

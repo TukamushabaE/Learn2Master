@@ -1,8 +1,9 @@
 import os
 import logging
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from whitenoise import WhiteNoise
-from flask import Flask, flash, jsonify, redirect, request, render_template, send_from_directory, session, url_for
+from flask import Flask, flash, g, jsonify, redirect, request, render_template, send_from_directory, session, url_for
 from flask_login import LoginManager, current_user
 from models import db, User, Role, School
 from extensions import talisman, limiter
@@ -32,6 +33,10 @@ from routes.mastery import mastery_bp
 from config import Config
 from security import get_csrf_token
 from database import is_postgres_url, normalize_database_url, sqlite_path_from_url
+from services.research_events import finish_request_tracking, start_request_tracking
+
+APPLICATION_VERSION = "8.1-research-readiness"
+APPLICATION_STARTED_AT = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -80,7 +85,7 @@ elif not app.config.get('SQLALCHEMY_DATABASE_URI'):
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Logging Configuration
-if not app.debug:
+if not app.debug and not os.environ.get("TESTING"):
     if not os.path.exists('logs'):
         os.mkdir('logs')
     file_handler = RotatingFileHandler('logs/learn2master.log', maxBytes=10240, backupCount=10)
@@ -104,6 +109,8 @@ with app.app_context():
         # Attempt a simple query to see if the database is initialized
         conn.execute("SELECT 1 FROM users LIMIT 1")
         conn.close()
+        init_db.ensure_current_schema(db_url)
+        app.logger.info("Database schema extensions are current.")
     except Exception:
         app.logger.info("Database tables appear to be missing. Initializing...")
         db_url = normalize_database_url(os.environ.get("DATABASE_URL"))
@@ -139,6 +146,11 @@ def inject_security_helpers():
 def service_worker():
     return send_from_directory(app.root_path, "service-worker.js", mimetype="application/javascript")
 
+
+@app.before_request
+def begin_operational_event():
+    start_request_tracking()
+
 @app.before_request
 def enforce_password_change():
     allowed_endpoints = {"auth.change_password", "auth.logout", "static", "service_worker"}
@@ -155,6 +167,11 @@ def add_no_cache_headers(response):
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+
+@app.after_request
+def record_operational_event(response):
+    return finish_request_tracking(response)
 
 
 @app.route("/health")
@@ -174,6 +191,27 @@ def health():
             conn.close()
 
 
+@app.route("/version")
+def version():
+    from database import get_db
+    from init_db import latest_schema_version
+
+    conn = None
+    schema_version = "unavailable"
+    try:
+        conn = get_db()
+        schema_version = latest_schema_version(conn)
+    finally:
+        if conn:
+            conn.close()
+    return jsonify({
+        "application_version": APPLICATION_VERSION,
+        "git_commit": os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT_SHA") or "local-unset",
+        "deployment_timestamp": os.environ.get("RENDER_DEPLOYMENT_TIMESTAMP") or APPLICATION_STARTED_AT,
+        "database_schema_version": schema_version,
+    })
+
+
 @app.errorhandler(404)
 def not_found(error):
     return ("404 - Page not found", 404) if app.config.get("TESTING") else (render_template("errors/404.html"), 404)
@@ -189,7 +227,21 @@ def upload_too_large(error):
 
 @app.errorhandler(500)
 def server_error(error):
-    return ("500 - Server error", 500) if app.config.get("TESTING") else (render_template("errors/500.html"), 500)
+    reference = getattr(g, "request_reference", "ERR500")
+    original = getattr(error, "original_exception", None) or error
+    g.request_error_category = type(original).__name__
+    app.logger.error(
+        "application_error path=%s user_id=%s role=%s exception_type=%s request_reference=%s",
+        request.path,
+        session.get("user_id"),
+        session.get("role"),
+        type(original).__name__,
+        reference,
+        exc_info=(type(original), original, original.__traceback__),
+    )
+    if app.config.get("TESTING"):
+        return "500 - Server error", 500
+    return render_template("errors/500.html", reference_id=reference), 500
 
 
 app.register_blueprint(auth_bp)

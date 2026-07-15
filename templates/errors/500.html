@@ -86,7 +86,7 @@
       <h1 class="error-title">Something Went Wrong</h1>
       <p class="error-description">Our server encountered an unexpected error. Our team has been notified.</p>
       <a href="/" class="btn">Go to Dashboard</a>
-      <div class="error-ref">Ref: ERR-500-L2M</div>
+      <div class="error-ref">Ref: {{ reference_id or 'ERR-500-L2M' }}</div>
     </div>
   </main>
 </body>

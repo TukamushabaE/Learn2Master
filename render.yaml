@@ -5,9 +5,9 @@ services:
     plan: free
     region: oregon
     buildCommand: pip install -r requirements.txt
+    preDeployCommand: python manage.py migrate
     startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 app:app
     healthCheckPath: /health
-    initialDeployHook: python manage.py seed-demo-data
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -31,8 +31,16 @@ services:
         value: "1073741824"
       - key: GUNICORN_TIMEOUT
         value: "120"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: "knowledge-base"
+      - key: SUPABASE_VECTOR_ENABLED
+        value: "0"
       - key: LEARN2MASTER_AUTO_SEED_DEMO
-        value: "1"
+        value: "0"
       - key: LEARN2MASTER_SEED_LEARNER_PASSWORD
         sync: false
       - key: LEARN2MASTER_SEED_TEACHER_PASSWORD

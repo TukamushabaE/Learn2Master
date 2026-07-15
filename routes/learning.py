@@ -1,7 +1,8 @@
 from collections import defaultdict
 from datetime import datetime, timezone
+from functools import wraps
 
-from flask import Blueprint, render_template, request, redirect, session, url_for, flash
+from flask import Blueprint, current_app, flash, g, redirect, render_template, request, session, url_for
 import os
 import uuid
 from werkzeug.utils import secure_filename
@@ -58,6 +59,10 @@ ACTIVITY_GUIDANCE = {
     },
 }
 POSTTEST_SYSTEM_BLOCKERS = {
+    "pretest_not_available": {
+        "title": "Pre-test Not Configured",
+        "detail": "A teacher or administrator must configure the pre-test before this pathway can continue.",
+    },
     "pretest_required": {
         "title": "Pre-test Required",
         "detail": "Complete the diagnostic pre-test before the post-test can open.",
@@ -69,6 +74,10 @@ POSTTEST_SYSTEM_BLOCKERS = {
     "practice_required": {
         "title": "Adaptive Practice Required",
         "detail": f"Score at least {PRACTICE_CONCEPT_THRESHOLD}% in adaptive practice.",
+    },
+    "posttest_not_available": {
+        "title": "Post-test Not Configured",
+        "detail": "A teacher or administrator must configure the post-test before mastery can be evaluated.",
     },
     "reflection_required": {
         "title": "Reflection Required",
@@ -83,6 +92,40 @@ POSTTEST_SYSTEM_BLOCKERS = {
 
 def utc_now_text():
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+
+
+def outcome_route_diagnostics(view):
+    @wraps(view)
+    def wrapped(outcome_id, *args, **kwargs):
+        g.outcome_stage = "route_started"
+        try:
+            response = view(outcome_id, *args, **kwargs)
+            current_app.logger.info(
+                "outcome_route_completed path=%s user_id=%s role=%s outcome_id=%s stage=%s request_reference=%s",
+                request.path,
+                session.get("user_id"),
+                session.get("role"),
+                outcome_id,
+                getattr(g, "outcome_stage", "completed"),
+                getattr(g, "request_reference", "unavailable"),
+            )
+            return response
+        except Exception as exc:
+            g.request_error_category = type(exc).__name__
+            current_app.logger.exception(
+                "outcome_route_failed path=%s user_id=%s role=%s outcome_id=%s stage=%s "
+                "exception_type=%s safe_message=%s request_reference=%s",
+                request.path,
+                session.get("user_id"),
+                session.get("role"),
+                outcome_id,
+                getattr(g, "outcome_stage", "unknown"),
+                type(exc).__name__,
+                str(exc).replace("\n", " ")[:240],
+                getattr(g, "request_reference", "unavailable"),
+            )
+            raise
+    return wrapped
 
 
 def assessment_timer_key(learner_id, assessment_id):
@@ -375,6 +418,16 @@ def posttest_unlock_status(conn, learner_id, outcome_id, required_concepts):
     if not practice:
         return False, ["practice_not_available"]
 
+    posttest = conn.execute("""
+        SELECT a.assessment_id
+        FROM assessments a
+        JOIN lessons l ON a.lesson_id = l.lesson_id
+        WHERE l.outcome_id = ? AND a.assessment_type = 'posttest'
+        LIMIT 1
+    """, (outcome_id,)).fetchone()
+    if not posttest:
+        return False, ["posttest_not_available"]
+
     practice_attempt = get_latest_attempt(conn, learner_id, practice["assessment_id"])
     if not practice_attempt:
         return False, ["practice_required"]
@@ -592,10 +645,13 @@ def pathway(course_id):
 
 @learning_bp.route("/outcome/<int:outcome_id>")
 @role_required("learner")
+@outcome_route_diagnostics
 def outcome(outcome_id):
     learner_id = session["user_id"]
+    g.outcome_stage = "database_connect"
     conn = get_db()
 
+    g.outcome_stage = "outcome_query"
     outcome = conn.execute("""
         SELECT
             lo.*, c.course_id, c.course_title, s.subject_name,
@@ -609,9 +665,9 @@ def outcome(outcome_id):
             COALESCE(mr.mastery_status, 'Not Started') AS mastery_status,
             COALESCE(mr.mastery_level, 'Beginning') AS mastery_level
         FROM learning_outcomes lo
-        JOIN lessons ON lessons.outcome_id = lo.outcome_id
-        JOIN courses c ON lessons.course_id = c.course_id
-        JOIN subjects s ON c.subject_id = s.subject_id
+        LEFT JOIN lessons ON lessons.outcome_id = lo.outcome_id
+        LEFT JOIN courses c ON lessons.course_id = c.course_id
+        LEFT JOIN subjects s ON c.subject_id = s.subject_id
         LEFT JOIN mastery_records mr
             ON mr.outcome_id = lo.outcome_id AND mr.learner_id = ?
         WHERE lo.outcome_id = ?
@@ -621,11 +677,22 @@ def outcome(outcome_id):
         conn.close()
         return "Outcome not found", 404
 
+    if not outcome["lesson_id"] or not outcome["course_id"] or not outcome["subject_name"]:
+        g.outcome_stage = "curriculum_validation"
+        conn.close()
+        return render_template(
+            "learning/outcome_configuration_error.html",
+            outcome=outcome,
+            request_reference=getattr(g, "request_reference", "unavailable"),
+        ), 200
+
+    g.outcome_stage = "prerequisite_check"
     if not is_outcome_unlocked(conn, learner_id, outcome):
         conn.close()
         flash("This learning outcome is locked. Master the previous outcome first.", "warning")
         return redirect(url_for("learning.pathway", course_id=outcome["course_id"]))
 
+    g.outcome_stage = "assessment_loading"
     pretest = get_assessment(conn, outcome["lesson_id"], "pretest")
     practice = get_assessment(conn, outcome["lesson_id"], "practice")
     posttest = get_assessment(conn, outcome["lesson_id"], "posttest")
@@ -634,7 +701,15 @@ def outcome(outcome_id):
     practice_attempt = get_latest_attempt(conn, learner_id, practice["assessment_id"]) if practice else None
     posttest_attempt = get_latest_attempt(conn, learner_id, posttest["assessment_id"]) if posttest else None
 
+    configuration_warnings = []
+    for label, assessment in (("pre-test", pretest), ("practice", practice), ("post-test", posttest)):
+        if not assessment:
+            configuration_warnings.append(f"The {label} assessment has not been configured for this learning outcome.")
+
+    g.outcome_stage = "concept_and_evidence_loading"
     required_concepts = get_required_concepts(conn, outcome_id)
+    if not required_concepts:
+        configuration_warnings.append("No adaptive concept notes are configured for this learning outcome.")
     concept_map = get_concept_mastery(conn, learner_id, outcome_id)
     posttest_unlocked, unlock_blockers = posttest_unlock_status(conn, learner_id, outcome_id, required_concepts)
     system_blockers, concepts_not_ready = split_posttest_blockers(unlock_blockers)
@@ -722,15 +797,25 @@ def outcome(outcome_id):
     bkt_rows = bkt_summary(conn, learner_id, outcome_id)
     concepts_resolved = weak_concepts_resolved(conn, learner_id, outcome_id)
 
+    g.outcome_stage = "recommendation_loading"
     latest_recommendation = conn.execute("""
-        SELECT recommendation_reason, recommendation_type, evidence_used, expected_mastery,
+        SELECT recommendation_id, recommendation_reason, recommendation_type, evidence_used, expected_mastery,
                estimated_study_minutes, recommended_resource, recommended_activity,
-               teacher_action_required, teacher_status, created_at
+               teacher_action_required, teacher_status, viewed_at, created_at
         FROM recommendations
         WHERE learner_id = ? AND outcome_id = ?
         ORDER BY created_at DESC
         LIMIT 1
     """, (learner_id, outcome_id)).fetchone()
+    if latest_recommendation and not latest_recommendation["viewed_at"]:
+        conn.execute(
+            "UPDATE recommendations SET viewed_at=CURRENT_TIMESTAMP WHERE recommendation_id=? AND viewed_at IS NULL",
+            (latest_recommendation["recommendation_id"],),
+        )
+        conn.execute("""
+            INSERT INTO activity_logs (learner_id, activity_type, activity_description)
+            VALUES (?, 'AI Recommendation Viewed', ?)
+        """, (learner_id, f"Viewed recommendation for outcome {outcome_id}"))
 
     reflection = latest_reflection(conn, learner_id, outcome_id)
     evidence = evidence_checklist(
@@ -780,8 +865,10 @@ def outcome(outcome_id):
         INSERT INTO activity_logs (learner_id, activity_type, activity_description)
         VALUES (?, 'Resource Viewed', ?)
     """, (learner_id, f"Viewed {resource_count} adaptive resource(s) for {outcome['outcome_name']}"))
+    g.outcome_stage = "activity_logging"
     conn.commit()
     conn.close()
+    g.outcome_stage = "template_render"
     return render_template(
         "learning/outcome.html",
         outcome=outcome,
@@ -817,6 +904,7 @@ def outcome(outcome_id):
         evidence=evidence,
         stage=stage,
         practice_threshold=PRACTICE_CONCEPT_THRESHOLD,
+        configuration_warnings=configuration_warnings,
     )
 
 
@@ -1208,6 +1296,32 @@ def submit_assessment(assessment_id):
     conn.execute("UPDATE assessment_attempts SET score = ?, weak_concepts = ? WHERE attempt_id = ?", (score, weak_text, attempt_id))
 
     update_concept_mastery(conn, learner_id, assessment["outcome_id"], assessment["assessment_type"], concept_stats)
+
+    prior_recommendation = conn.execute("""
+        SELECT recommendation_id
+        FROM recommendations
+        WHERE learner_id=? AND outcome_id=? AND created_at <= ?
+        ORDER BY created_at DESC, recommendation_id DESC
+        LIMIT 1
+    """, (learner_id, assessment["outcome_id"], completed_at)).fetchone()
+    if prior_recommendation:
+        evidence_label = f"{assessment['assessment_type']} attempt {attempt_id} after recommendation"
+        conn.execute("""
+            UPDATE recommendations
+            SET first_response_at=COALESCE(first_response_at, ?)
+            WHERE recommendation_id=?
+        """, (completed_at, prior_recommendation["recommendation_id"]))
+        if assessment["assessment_type"] in {"practice", "posttest"}:
+            conn.execute("""
+                UPDATE recommendations
+                SET followed_at=COALESCE(followed_at, ?),
+                    response_evidence=COALESCE(response_evidence, ?)
+                WHERE recommendation_id=?
+            """, (completed_at, evidence_label, prior_recommendation["recommendation_id"]))
+            conn.execute("""
+                INSERT INTO activity_logs (learner_id, activity_type, activity_description)
+                VALUES (?, 'AI Recommendation Followed', ?)
+            """, (learner_id, evidence_label))
 
     existing = conn.execute("""
         SELECT * FROM mastery_records WHERE learner_id = ? AND outcome_id = ?

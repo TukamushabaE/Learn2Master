@@ -9,7 +9,12 @@
     <div>
         <p class="eyebrow">Teacher-in-the-Loop Decision Support</p>
         <h1>Improved Teacher Account</h1>
-<div class="evidence-grid" style="margin-top: 20px;"><a href="{{ url_for('teacher.pending_students') }}" class="btn btn-warning">Pending Students</a> <a href="{{ url_for('teacher.assign_subjects') }}" class="btn btn-primary">Assign Subjects</a> <a href="{{ url_for('teacher.teacher_kb_upload') }}" class="btn btn-success">Upload Study Materials</a> <a href="{{ url_for('teacher.create_student') }}" class="btn btn-info">Create Student</a></div>
+        <div class="teacher-quick-actions">
+            <a href="{{ url_for('teacher.pending_students') }}" class="teacher-action"><strong>Pending Students</strong><small>Review and approve school registrations.</small></a>
+            <a href="{{ url_for('teacher.assign_subjects') }}" class="teacher-action"><strong>Assign Subjects</strong><small>Connect active learners to CBC subjects.</small></a>
+            <a href="{{ url_for('teacher.teacher_kb_upload') }}" class="teacher-action"><strong>Upload Study Materials</strong><small>Build the AI knowledge base from documents.</small></a>
+            <a href="{{ url_for('teacher.create_student') }}" class="teacher-action"><strong>Create Student</strong><small>Create an active learner account securely.</small></a>
+        </div>
         <p>Monitor learners, inspect weak concepts, approve or override AI recommendations, and record interventions.</p>
     </div>
     <div class="hero-badge"><span>Common Weak Concept</span><strong>{{ overview.common_weak }}</strong></div>

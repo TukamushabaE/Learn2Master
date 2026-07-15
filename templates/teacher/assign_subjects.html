@@ -1,38 +1,54 @@
-{% extends "base.html" %}
+{% extends "layouts/base.html" %}
+{% block title %}Assign Subjects{% endblock %}
 {% block content %}
-<div class="container mt-4">
-    <h2>Assign Subjects to Students</h2>
+<div class="teacher-page">
+  <section class="hero-panel">
+    <div>
+      <p class="eyebrow">Teacher Account Management</p>
+      <h1>Assign Subjects</h1>
+      <p>Select one or more active learners and the CBC subjects they should access.</p>
+    </div>
+    <div class="hero-badge"><span>Workflow</span><strong>Assign</strong></div>
+  </section>
+
+  <section class="teacher-panel">
     <form method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="row">
-            <div class="col-md-6">
-                <h4>Select Students</h4>
-                <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;">
-                    {% for student in students %}
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="student_ids" value="{{ student.user_id }}" id="s{{ student.user_id }}">
-                        <label class="form-check-label" for="s{{ student.user_id }}">
-                            {{ student.full_name }} ({{ student.user_id }})
-                        </label>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            <div class="col-md-6">
-                <h4>Select Subjects</h4>
-                <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;">
-                    {% for subject in subjects %}
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="subject_ids" value="{{ subject.subject_id }}" id="sub{{ subject.subject_id }}">
-                        <label class="form-check-label" for="sub{{ subject.subject_id }}">
-                            {{ subject.subject_name }}
-                        </label>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="teacher-select-grid">
+        <div>
+          <h2>1. Select Learners</h2>
+          <p class="teacher-help">Only active learners from your school are listed.</p>
+          <div class="teacher-check-list">
+            {% for student in students %}
+            <label class="teacher-check-item" for="s{{ student.user_id }}">
+              <input type="checkbox" name="student_ids" value="{{ student.user_id }}" id="s{{ student.user_id }}">
+              <span>{{ student.full_name }} <small>(ID {{ student.user_id }})</small></span>
+            </label>
+            {% else %}
+            <p>No active learners are available.</p>
+            {% endfor %}
+          </div>
         </div>
-        <button type="submit" class="btn btn-primary mt-3">Assign Subjects</button>
+        <div>
+          <h2>2. Select Subjects</h2>
+          <p class="teacher-help">Choose every subject that applies to the selected learners.</p>
+          <div class="teacher-check-list">
+            {% for subject in subjects %}
+            <label class="teacher-check-item" for="sub{{ subject.subject_id }}">
+              <input type="checkbox" name="subject_ids" value="{{ subject.subject_id }}" id="sub{{ subject.subject_id }}">
+              <span>{{ subject.subject_name }}</span>
+            </label>
+            {% else %}
+            <p>No subjects are configured.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="teacher-actions">
+        <button type="submit" class="teacher-button">Assign Subjects</button>
+        <a class="teacher-button secondary" href="{{ url_for('teacher.teacher_dashboard') }}">Back to Dashboard</a>
+      </div>
     </form>
+  </section>
 </div>
 {% endblock %}

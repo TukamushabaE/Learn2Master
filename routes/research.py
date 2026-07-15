@@ -1,13 +1,27 @@
 import csv
 import io
 import math
-from datetime import datetime
+import re
+from datetime import datetime, timezone
+from statistics import stdev
 
 from flask import Blueprint, Response, flash, redirect, render_template, request, session, url_for
 
 from database import DatabaseIntegrityError, get_db
 from routes.guards import role_required
 from security import csrf_protect
+from services.research_analytics import (
+    learning_gain_summary as centralized_learning_gain_summary,
+    paired_learning_gain_rows,
+)
+from services.research_integrity import integrity_report, readiness_report
+from services.research_reporting import (
+    feedback_responsiveness_rows,
+    feedback_responsiveness_summary,
+    reliability_rows as operational_reliability_rows,
+    reliability_summary as operational_reliability_summary,
+    traceability_rows,
+)
 
 research_bp = Blueprint("research", __name__)
 
@@ -118,21 +132,85 @@ def csv_response(filename, columns, rows, export_name=None):
     output = io.StringIO()
     output.write("\ufeff")
     writer = csv.writer(output)
+    export_timestamp = datetime.now(timezone.utc).isoformat()
     writer.writerow([label for _, label in columns])
     for row in rows:
-        writer.writerow([row.get(key, "") for key, _ in columns])
+        values = []
+        for key, _ in columns:
+            value = row.get(key, "")
+            # Prevent spreadsheet applications interpreting exported research text
+            # as a formula. The apostrophe remains visible in the raw CSV audit.
+            if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+                value = "'" + value
+            values.append(value)
+        writer.writerow(values)
     return Response(
         output.getvalue(),
         mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "X-Export-Timestamp": export_timestamp,
+            "X-Dataset-Version": "research-readiness-v1",
+        },
     )
 
 
-def participant_rows(conn):
-    return [row_dict(row) for row in conn.execute("""
+def research_filter_values():
+    filters = {
+        "study_phase": (request.args.get("study_phase") or "").strip(),
+        "date_from": (request.args.get("date_from") or "").strip(),
+        "date_to": (request.args.get("date_to") or "").strip(),
+    }
+    for key in ("school_id", "class_id", "subject_id", "topic_id", "outcome_id"):
+        raw = request.args.get(key)
+        filters[key] = int(raw) if raw and raw.isdigit() else ""
+    return filters
+
+
+def research_filter_options(conn):
+    return {
+        "study_phases": ("Pilot", "Baseline", "Intervention", "Follow-up", "Actual"),
+        "schools": conn.execute("SELECT school_id, school_name FROM schools ORDER BY school_name").fetchall(),
+        "classes": conn.execute("SELECT class_id, class_name FROM classes ORDER BY class_name").fetchall(),
+        "subjects": conn.execute("SELECT subject_id, subject_name FROM subjects ORDER BY subject_name").fetchall(),
+        "topics": conn.execute("SELECT topic_id, topic_title FROM topics ORDER BY topic_title").fetchall(),
+        "outcomes": conn.execute("SELECT outcome_id, outcome_code, outcome_name FROM learning_outcomes ORDER BY outcome_code").fetchall(),
+    }
+
+
+def _filter_clause(filters, mapping):
+    clauses = []
+    params = []
+    for key, column in mapping.items():
+        value = (filters or {}).get(key)
+        if value not in (None, ""):
+            clauses.append(f"{column} = ?")
+            params.append(value)
+    return clauses, params
+
+
+def participant_rows(conn, filters=None):
+    clauses, params = _filter_clause(filters, {
+        "study_phase": "rp.study_phase",
+        "school_id": "rp.school_id",
+        "class_id": "rp.class_id",
+        "subject_id": "rp.subject_id",
+    })
+    if (filters or {}).get("active_status"):
+        clauses.append("rp.active_status = ?")
+        params.append(filters["active_status"])
+    if (filters or {}).get("consent_status"):
+        clauses.append("rp.consent_status = ?")
+        params.append(filters["consent_status"])
+    if (filters or {}).get("role"):
+        clauses.append("roles.role_name = ?")
+        params.append(filters["role"])
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    return [row_dict(row) for row in conn.execute(f"""
         SELECT rp.id, rp.participant_code, rp.user_id, roles.role_name,
                rp.study_phase, rp.consent_status, rp.assent_status,
-               rp.parent_consent_status, rp.active_status, rp.created_at,
+               rp.parent_consent_status, rp.active_status, rp.enrolled_at,
+               rp.withdrawn_at, rp.created_at, rp.updated_at,
                schools.school_name, classes.class_name, subjects.subject_name
         FROM research_participants rp
         LEFT JOIN users ON users.user_id=rp.user_id
@@ -140,12 +218,13 @@ def participant_rows(conn):
         LEFT JOIN schools ON schools.school_id=rp.school_id
         LEFT JOIN classes ON classes.class_id=rp.class_id
         LEFT JOIN subjects ON subjects.subject_id=rp.subject_id
+        {where}
         ORDER BY rp.participant_code
-    """).fetchall()]
+    """, params).fetchall()]
 
 
-def participant_summary(conn):
-    rows = participant_rows(conn)
+def participant_summary(conn, filters=None):
+    rows = participant_rows(conn, filters=filters)
     eligible = [
         row for row in rows
         if row.get("active_status") == "Active"
@@ -202,16 +281,34 @@ def participant_form_options(conn):
     }
 
 
-def assessment_result_rows(conn, assessment_type=None):
+def assessment_result_rows(conn, assessment_type=None, filters=None):
     params = []
-    where = "WHERE assessments.assessment_type IN ('pretest','posttest')"
+    clauses = ["assessments.assessment_type IN ('pretest','posttest')"]
     if assessment_type:
-        where = "WHERE assessments.assessment_type = ?"
+        clauses = ["assessments.assessment_type = ?"]
         params.append(assessment_type)
+    filter_clauses, filter_params = _filter_clause(filters, {
+        "study_phase": "rp.study_phase",
+        "school_id": "rp.school_id",
+        "class_id": "rp.class_id",
+        "subject_id": "subjects.subject_id",
+        "topic_id": "topics.topic_id",
+        "outcome_id": "lo.outcome_id",
+    })
+    clauses.extend(filter_clauses)
+    params.extend(filter_params)
+    if (filters or {}).get("date_from"):
+        clauses.append("COALESCE(assessment_attempts.completed_at, assessment_attempts.attempted_at) >= ?")
+        params.append(filters["date_from"])
+    if (filters or {}).get("date_to"):
+        clauses.append("COALESCE(assessment_attempts.completed_at, assessment_attempts.attempted_at) < ?")
+        params.append(filters["date_to"] + " 23:59:59")
+    where = "WHERE " + " AND ".join(clauses)
 
     rows = conn.execute(f"""
-        SELECT rp.participant_code,
+        SELECT rp.participant_code, rp.study_phase,
                users.user_id AS learner_id,
+               subjects.subject_id, topics.topic_id, lo.outcome_id,
                subjects.subject_name AS subject,
                topics.topic_title AS topic,
                lo.outcome_name AS learning_outcome,
@@ -260,6 +357,7 @@ def assessment_result_rows(conn, assessment_type=None):
         total_marks = row["total_marks"] or answered_items
         results.append({
             "participant_code": row["participant_code"],
+            "study_phase": row["study_phase"],
             "learner_id": row["learner_id"],
             "subject": row["subject"],
             "topic": row["topic"] or "",
@@ -280,105 +378,12 @@ def assessment_result_rows(conn, assessment_type=None):
     return results
 
 
-def learning_gain_rows(conn):
-    rows = conn.execute(f"""
-        SELECT rp.participant_code,
-               users.user_id AS learner_id,
-               subjects.subject_name AS subject,
-               topics.topic_title AS topic,
-               lo.outcome_name AS learning_outcome,
-               mastery_records.pretest_score,
-               mastery_records.posttest_score,
-               mastery_records.mastery_status,
-               mastery_records.mastery_score,
-               mastery_records.updated_at,
-               (
-                    SELECT COUNT(*)
-                    FROM assessment_attempts aa
-                    JOIN assessments a ON a.assessment_id=aa.assessment_id
-                    JOIN lessons l ON l.lesson_id=a.lesson_id
-                    WHERE aa.learner_id=mastery_records.learner_id
-                      AND l.outcome_id=mastery_records.outcome_id
-               ) AS attempts,
-               (
-                    SELECT ROUND(CAST(AVG(confidence_score) AS NUMERIC),1)
-                    FROM ai_explanations ax
-                    WHERE ax.learner_id=mastery_records.learner_id
-                      AND ax.outcome_id=mastery_records.outcome_id
-               ) AS ai_confidence,
-               (
-                    SELECT COUNT(*)
-                    FROM learning_reflections lr
-                    WHERE lr.learner_id=mastery_records.learner_id
-                      AND lr.outcome_id=mastery_records.outcome_id
-               ) AS reflection_count,
-               (
-                    SELECT COUNT(*)
-                    FROM practical_evidence pe
-                    WHERE pe.learner_id=mastery_records.learner_id
-                      AND pe.outcome_id=mastery_records.outcome_id
-               ) AS practical_count,
-               (
-                    SELECT COUNT(*)
-                    FROM teacher_interventions ti
-                    WHERE ti.learner_id=mastery_records.learner_id
-                      AND ti.outcome_id=mastery_records.outcome_id
-               ) AS teacher_intervention_count
-        FROM mastery_records
-        JOIN users ON users.user_id=mastery_records.learner_id
-        JOIN research_participants rp ON rp.user_id=users.user_id
-             AND {ELIGIBLE_PARTICIPANT_SQL}
-        JOIN learning_outcomes lo ON lo.outcome_id=mastery_records.outcome_id
-        JOIN competencies ON competencies.competency_id=lo.competency_id
-        JOIN subjects ON subjects.subject_id=competencies.subject_id
-        LEFT JOIN topics ON topics.topic_id=lo.topic_id
-        WHERE mastery_records.pretest_score > 0 OR mastery_records.posttest_score > 0
-        ORDER BY participant_code, subjects.subject_name, lo.sequence_order
-    """).fetchall()
-
-    results = []
-    for row in rows:
-        pre = safe_round(row["pretest_score"])
-        post = safe_round(row["posttest_score"])
-        gain = round(post - pre, 1)
-        normalized_gain = round((post - pre) / (100 - pre), 3) if pre < 100 else None
-        improvement = round(((post - pre) / pre) * 100, 1) if pre > 0 else None
-        results.append({
-            "participant_code": row["participant_code"],
-            "learner_id": row["learner_id"],
-            "subject": row["subject"],
-            "topic": row["topic"] or "",
-            "learning_outcome": row["learning_outcome"],
-            "pre_test": pre,
-            "post_test": post,
-            "learning_gain": gain,
-            "normalized_gain": normalized_gain if normalized_gain is not None else "Not applicable",
-            "percentage_improvement": improvement if improvement is not None else "Not applicable",
-            "mastery_status": row["mastery_status"],
-            "mastery_score": safe_round(row["mastery_score"]),
-            "attempts": row["attempts"] or 0,
-            "ai_confidence": safe_round(row["ai_confidence"]),
-            "reflection_completed": "Yes" if row["reflection_count"] else "No",
-            "practical_completed": "Yes" if row["practical_count"] else "No",
-            "teacher_intervention": row["teacher_intervention_count"] or 0,
-            "updated_at": fmt_datetime(row["updated_at"]),
-        })
-    return results
+def learning_gain_rows(conn, filters=None):
+    return paired_learning_gain_rows(conn, filters=filters)
 
 
 def learning_gain_stats(rows):
-    gains = [row["learning_gain"] for row in rows]
-    pre = [row["pre_test"] for row in rows]
-    post = [row["post_test"] for row in rows]
-    return {
-        "average_pre_test": safe_round(sum(pre) / len(pre) if pre else 0),
-        "average_post_test": safe_round(sum(post) / len(post) if post else 0),
-        "average_gain": safe_round(sum(gains) / len(gains) if gains else 0),
-        "highest_gain": max(gains) if gains else 0,
-        "lowest_gain": min(gains) if gains else 0,
-        "standard_deviation": population_stddev(gains),
-        "variance": population_variance(gains),
-    }
+    return centralized_learning_gain_summary(rows)
 
 
 def time_to_mastery_hours(conn):
@@ -408,7 +413,22 @@ def feedback_response_hours(conn):
     return average_hours_between(rows, "created_at", "reviewed_at")
 
 
-def mastery_rows(conn):
+def mastery_rows(conn, filters=None):
+    clauses, params = _filter_clause(filters, {
+        "study_phase": "rp.study_phase",
+        "school_id": "rp.school_id",
+        "class_id": "rp.class_id",
+        "subject_id": "subjects.subject_id",
+        "topic_id": "topics.topic_id",
+        "outcome_id": "lo.outcome_id",
+    })
+    if (filters or {}).get("date_from"):
+        clauses.append("mastery_records.updated_at >= ?")
+        params.append(filters["date_from"])
+    if (filters or {}).get("date_to"):
+        clauses.append("mastery_records.updated_at < ?")
+        params.append(filters["date_to"] + " 23:59:59")
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
     rows = conn.execute(f"""
         SELECT rp.participant_code,
                subjects.subject_name AS subject,
@@ -444,8 +464,9 @@ def mastery_rows(conn):
         ) first_attempt
           ON first_attempt.learner_id=mastery_records.learner_id
          AND first_attempt.outcome_id=mastery_records.outcome_id
+        {where}
         ORDER BY participant_code, subjects.subject_name, lo.sequence_order
-    """).fetchall()
+    """, params).fetchall()
 
     results = []
     for row in rows:
@@ -579,35 +600,48 @@ def teacher_oversight_data(conn):
 def questionnaire_rows(conn):
     return [row_dict(row) for row in conn.execute("""
         SELECT q.id, q.questionnaire_title, q.respondent_role, q.active_status,
-               q.questionnaire_description, q.created_at,
+               q.questionnaire_description, q.study_phase, q.created_at,
                COUNT(DISTINCT qi.id) AS item_count,
                COUNT(DISTINCT qr.id) AS response_count
         FROM research_questionnaires q
         LEFT JOIN research_questionnaire_items qi ON qi.questionnaire_id=q.id
         LEFT JOIN research_questionnaire_responses qr ON qr.questionnaire_id=q.id
         GROUP BY q.id, q.questionnaire_title, q.respondent_role, q.active_status,
-                 q.questionnaire_description, q.created_at
+                 q.questionnaire_description, q.study_phase, q.created_at
         ORDER BY q.respondent_role, q.questionnaire_title
     """).fetchall()]
 
 
 def questionnaire_result_rows(conn):
-    return [row_dict(row) for row in conn.execute(f"""
-        SELECT q.questionnaire_title,
-               q.respondent_role,
-               qi.construct_name,
-               ROUND(CAST(AVG(a.score) AS NUMERIC), 2) AS average_score,
-               COUNT(DISTINCT r.id) AS responses,
-               COUNT(a.id) AS answers
+    raw_rows = conn.execute(f"""
+        SELECT q.questionnaire_title, q.respondent_role, qi.construct_name,
+               a.score, r.id AS response_id
         FROM research_questionnaire_answers a
         JOIN research_questionnaire_responses r ON r.id=a.response_id
         JOIN research_participants rp ON (rp.id=r.participant_id OR (r.participant_id IS NULL AND rp.user_id=r.respondent_user_id))
              AND {ELIGIBLE_PARTICIPANT_SQL}
         JOIN research_questionnaire_items qi ON qi.id=a.item_id
         JOIN research_questionnaires q ON q.id=qi.questionnaire_id
-        GROUP BY q.questionnaire_title, q.respondent_role, qi.construct_name
+        WHERE COALESCE(r.completion_status,'Submitted')='Submitted'
         ORDER BY q.respondent_role, q.questionnaire_title, qi.construct_name
-    """).fetchall()]
+    """).fetchall()
+    grouped = {}
+    for row in raw_rows:
+        key = (row["questionnaire_title"], row["respondent_role"], row["construct_name"])
+        group = grouped.setdefault(key, {"scores": [], "responses": set()})
+        group["scores"].append(int(row["score"]))
+        group["responses"].add(row["response_id"])
+    results = []
+    for key, group in grouped.items():
+        scores = group["scores"]
+        results.append({
+            "questionnaire_title": key[0], "respondent_role": key[1], "construct_name": key[2],
+            "average_score": round(sum(scores) / len(scores), 2),
+            "sample_standard_deviation": round(stdev(scores), 2) if len(scores) > 1 else 0,
+            "responses": len(group["responses"]), "answers": len(scores),
+            **{f"score_{score}_frequency": scores.count(score) for score in range(1, 6)},
+        })
+    return results
 
 
 def average_questionnaire_score(conn, role=None, construct=None):
@@ -657,7 +691,19 @@ def system_log_rows(conn, limit=120):
         ORDER BY activity_logs.created_at DESC
         LIMIT 120
     """).fetchall()]
-    rows = audit_rows + activity_rows
+    event_rows = [row_dict(row) for row in conn.execute("""
+        SELECT 'Research Event' AS source, event_type AS action,
+               entity_type, entity_id,
+               CASE WHEN event_status='failure'
+                    THEN COALESCE(error_category,'failure')
+                    ELSE event_status END AS details,
+               occurred_at AS created_at,
+               'System/Anonymized' AS participant_code
+        FROM research_events
+        ORDER BY occurred_at DESC
+        LIMIT 120
+    """).fetchall()]
+    rows = audit_rows + activity_rows + event_rows
     rows.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
     for row in rows[:limit]:
         row["created_at"] = fmt_datetime(row.get("created_at"))
@@ -699,6 +745,8 @@ def research_metrics(conn):
     oversight_summary, _ = teacher_oversight_data(conn)
     logs = system_log_rows(conn, limit=1)
     reliability = reliability_summary(conn)
+    feedback = feedback_responsiveness_summary(feedback_responsiveness_rows(conn))
+    operational = operational_reliability_summary(operational_reliability_rows(conn))
     questionnaire_response_count = one(conn, f"""
         SELECT COUNT(DISTINCT r.id)
         FROM research_questionnaire_responses r
@@ -756,6 +804,10 @@ def research_metrics(conn):
         "sync_success_rate": reliability["sync_success_rate"],
         "recorded_system_incidents": reliability["recorded_system_incidents"],
         "reliability_evidence_count": reliability["sync_events"],
+        "recommendation_follow_through_rate": feedback["follow_through_rate"],
+        "unresolved_recommendations": feedback["unresolved_recommendations"],
+        "recorded_event_success_rate": operational["recorded_success_rate"],
+        "median_response_time_ms": operational["median_response_time_ms"],
     }
     metrics["avg_pretest"] = metrics["average_pre_test"]
     metrics["avg_posttest"] = metrics["average_post_test"]
@@ -764,6 +816,69 @@ def research_metrics(conn):
     metrics["time_to_mastery_hours"] = metrics["average_time_to_mastery"]
     metrics["teacher_interventions"] = metrics["teacher_intervention_count"]
     return metrics
+
+
+def chapter_evidence_readiness(conn):
+    """Report whether each proposal-defined evidence stream has begun.
+
+    This is deliberately a presence check, not a claim that the sample is
+    complete or that the dissertation findings have been validated.
+    """
+    participants = participant_summary(conn)
+    gains = learning_gain_rows(conn)
+    mastery = mastery_rows(conn)
+    oversight, _ = teacher_oversight_data(conn)
+    questionnaire_responses = one(conn, f"""
+        SELECT COUNT(DISTINCT r.id)
+        FROM research_questionnaire_responses r
+        JOIN research_participants rp
+          ON (rp.id=r.participant_id OR (r.participant_id IS NULL AND rp.user_id=r.respondent_user_id))
+         AND {ELIGIBLE_PARTICIPANT_SQL}
+    """)
+    logs = system_log_rows(conn, limit=1)
+    items = [
+        {
+            "label": "Eligible participants",
+            "present": participants["eligible_participants"] > 0,
+            "evidence": f"{participants['eligible_participants']} consented and active participant(s)",
+            "route": "research.participants",
+        },
+        {
+            "label": "Paired pre/post evidence",
+            "present": bool(gains),
+            "evidence": f"{len(gains)} paired learning-outcome result(s)",
+            "route": "research.pre_post_results",
+        },
+        {
+            "label": "Mastery evidence",
+            "present": bool(mastery),
+            "evidence": f"{len(mastery)} mastery record(s)",
+            "route": "research.mastery_attainment",
+        },
+        {
+            "label": "Teacher oversight evidence",
+            "present": oversight["number_of_interventions"] > 0,
+            "evidence": f"{oversight['number_of_interventions']} intervention(s)",
+            "route": "research.teacher_oversight",
+        },
+        {
+            "label": "User acceptance evidence",
+            "present": questionnaire_responses > 0,
+            "evidence": f"{questionnaire_responses} eligible questionnaire response(s)",
+            "route": "research.questionnaire_results",
+        },
+        {
+            "label": "System-use evidence",
+            "present": bool(logs),
+            "evidence": "At least one eligible research event" if logs else NO_DATA,
+            "route": "research.system_logs",
+        },
+    ]
+    return {
+        "items": items,
+        "present_count": sum(1 for item in items if item["present"]),
+        "total_count": len(items),
+    }
 
 
 def weak_concept_rows(conn, limit=8):
@@ -803,7 +918,18 @@ def full_dataset_rows(conn):
     return gains
 
 
-def render_table(title, subtitle, columns, rows, summary=None, actions=None, chart=None):
+def render_table(
+    title,
+    subtitle,
+    columns,
+    rows,
+    summary=None,
+    actions=None,
+    chart=None,
+    filters=None,
+    filter_options=None,
+    empty_message=None,
+):
     return render_template(
         "research/table.html",
         title=title,
@@ -814,6 +940,9 @@ def render_table(title, subtitle, columns, rows, summary=None, actions=None, cha
         actions=actions or [],
         chart=chart,
         no_data=NO_DATA,
+        filters=filters or {},
+        filter_options=filter_options,
+        empty_message=empty_message or NO_DATA,
     )
 
 
@@ -840,12 +969,34 @@ def research_dashboard():
     return render_template("research/dashboard.html", metrics=metrics, weak_concepts=weak_concepts, chart_data=chart_data)
 
 
+@research_bp.route("/research/chapter-guide")
+@role_required(*RESEARCH_ROLES)
+def chapter_guide():
+    conn = get_db()
+    readiness = chapter_evidence_readiness(conn)
+    conn.close()
+    return render_template(
+        "research/chapter_guide.html",
+        readiness=readiness,
+        no_data=NO_DATA,
+    )
+
+
 @research_bp.route("/research/participants")
 @role_required(*RESEARCH_ROLES)
 def participants():
     conn = get_db()
-    rows = participant_rows(conn)
-    summary = participant_summary(conn)
+    filters = research_filter_values()
+    filters.update({
+        "role": (request.args.get("role") or "").strip(),
+        "consent_status": (request.args.get("consent_status") or "").strip(),
+        "active_status": (request.args.get("active_status") or "").strip(),
+    })
+    rows = participant_rows(conn, filters)
+    for row in rows:
+        row["_view_url"] = url_for("research.view_participant", participant_id=row["id"])
+    summary = participant_summary(conn, filters)
+    options = research_filter_options(conn)
     conn.close()
     return render_table(
         "Research Participants",
@@ -861,10 +1012,13 @@ def participants():
             ("assent_status", "Assent"),
             ("parent_consent_status", "Parent Consent"),
             ("active_status", "Status"),
+            ("_view_url", "Record"),
         ],
         rows,
         summary,
         [{"label": "Create Participant", "url": url_for("research.create_participant")}],
+        filters=filters,
+        filter_options=options,
     )
 
 
@@ -887,6 +1041,13 @@ def create_participant():
             """, (user_id,)).fetchone()
             user_role = user_row["role_name"] if user_row else None
         participant_code = (request.form.get("participant_code") or "").strip() or next_participant_code(conn, user_role)
+        if not re.fullmatch(r"[LTASP]\d{3,}", participant_code):
+            conn.close()
+            flash("Participant code must use L/T/A/S/P followed by at least three digits.", "danger")
+            return redirect(url_for("research.create_participant"))
+        parent_consent = request.form.get("parent_consent_status") or "Pending"
+        if user_role != "learner":
+            parent_consent = "Not Applicable"
         try:
             conn.execute("""
                 INSERT INTO research_participants
@@ -902,7 +1063,7 @@ def create_participant():
                 request.form.get("study_phase") or "Pilot",
                 request.form.get("consent_status") or "Pending",
                 request.form.get("assent_status") or "Pending",
-                request.form.get("parent_consent_status") or "Pending",
+                parent_consent,
                 request.form.get("active_status") or "Active",
             ))
             audit_research_event(conn, "CREATE_RESEARCH_PARTICIPANT", "research_participant", participant_code, "Created research participant code")
@@ -914,21 +1075,115 @@ def create_participant():
             conn.rollback()
             flash("Participant code or user/study phase already exists.", "danger")
     conn.close()
-    return render_template("research/participant_form.html", **options)
+    return render_template("research/participant_form.html", participant=None, **options)
+
+
+@research_bp.route("/research/participants/<int:participant_id>")
+@role_required(*RESEARCH_ROLES)
+def view_participant(participant_id):
+    conn = get_db()
+    participant = conn.execute("""
+        SELECT rp.*, u.full_name, roles.role_name, s.school_name, c.class_name,
+               sub.subject_name
+        FROM research_participants rp
+        LEFT JOIN users u ON u.user_id=rp.user_id
+        LEFT JOIN roles ON roles.role_id=u.role_id
+        LEFT JOIN schools s ON s.school_id=rp.school_id
+        LEFT JOIN classes c ON c.class_id=rp.class_id
+        LEFT JOIN subjects sub ON sub.subject_id=rp.subject_id
+        WHERE rp.id=?
+    """, (participant_id,)).fetchone()
+    if not participant:
+        conn.close()
+        return "Participant not found", 404
+    history = conn.execute("""
+        SELECT action, details, created_at FROM audit_logs
+        WHERE entity_type='research_participant' AND entity_id=?
+        ORDER BY created_at DESC
+    """, (str(participant_id),)).fetchall()
+    conn.close()
+    return render_template("research/participant_view.html", participant=participant, history=history)
+
+
+@research_bp.route("/research/participants/<int:participant_id>/edit", methods=["GET", "POST"])
+@role_required(*RESEARCH_ROLES)
+@csrf_protect
+def edit_participant(participant_id):
+    conn = get_db()
+    participant = conn.execute("SELECT * FROM research_participants WHERE id=?", (participant_id,)).fetchone()
+    if not participant:
+        conn.close()
+        return "Participant not found", 404
+    options = participant_form_options(conn)
+    if request.method == "POST":
+        code = (request.form.get("participant_code") or "").strip()
+        if not re.fullmatch(r"[LTASP]\d{3,}", code):
+            conn.close()
+            flash("Participant code must use L/T/A/S/P followed by at least three digits.", "danger")
+            return redirect(url_for("research.edit_participant", participant_id=participant_id))
+        user_id = int(request.form.get("user_id") or 0) or None
+        role_row = conn.execute("""
+            SELECT roles.role_name FROM users JOIN roles ON roles.role_id=users.role_id
+            WHERE users.user_id=?
+        """, (user_id,)).fetchone() if user_id else None
+        parent_consent = request.form.get("parent_consent_status") or "Pending"
+        if role_row and role_row["role_name"] != "learner":
+            parent_consent = "Not Applicable"
+        new_values = {
+            "consent_status": request.form.get("consent_status") or "Pending",
+            "assent_status": request.form.get("assent_status") or "Pending",
+            "parent_consent_status": parent_consent,
+            "active_status": request.form.get("active_status") or "Active",
+        }
+        changes = []
+        for key, value in new_values.items():
+            if participant[key] != value:
+                changes.append(f"{key}: {participant[key]} -> {value}")
+        try:
+            conn.execute("""
+                UPDATE research_participants
+                SET participant_code=?, user_id=?, school_id=?, class_id=?, subject_id=?,
+                    study_phase=?, consent_status=?, assent_status=?, parent_consent_status=?,
+                    active_status=?, withdrawn_at=CASE WHEN ?='Withdrawn' THEN CURRENT_TIMESTAMP ELSE NULL END,
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            """, (
+                code, user_id, int(request.form.get("school_id") or 0) or None,
+                int(request.form.get("class_id") or 0) or None,
+                int(request.form.get("subject_id") or 0) or None,
+                request.form.get("study_phase") or "Pilot", new_values["consent_status"],
+                new_values["assent_status"], new_values["parent_consent_status"],
+                new_values["active_status"], new_values["active_status"], participant_id,
+            ))
+            audit_research_event(conn, "UPDATE_RESEARCH_PARTICIPANT", "research_participant", participant_id,
+                                 "; ".join(changes) or "Administrative fields updated; consent unchanged")
+            conn.commit()
+            conn.close()
+            flash("Research participant updated with an audit record.", "success")
+            return redirect(url_for("research.view_participant", participant_id=participant_id))
+        except DatabaseIntegrityError:
+            conn.rollback()
+            flash("Participant code or linked user already exists for this phase.", "danger")
+    conn.close()
+    return render_template("research/participant_form.html", participant=participant, **options)
 
 
 @research_bp.route("/research/pre-post-results")
 @role_required(*RESEARCH_ROLES)
 def pre_post_results():
     conn = get_db()
-    rows = assessment_result_rows(conn)
+    filters = research_filter_values()
+    rows = assessment_result_rows(conn, filters=filters)
+    options = research_filter_options(conn)
     conn.close()
     return render_table(
         "Pre-test and Post-test Results",
         "Operational assessment attempts are reused; missing start time and time spent are shown as not recorded.",
         assessment_columns(),
         rows,
-        actions=[{"label": "Export Pre/Post CSV", "url": url_for("research.export_pre_post")}],
+        actions=[{"label": "Export Pre/Post CSV", "url": url_for("research.export_pre_post", **filters)}],
+        filters=filters, filter_options=options,
+        empty_message="No eligible pre-test or post-test attempts match these filters.",
     )
 
 
@@ -936,18 +1191,22 @@ def pre_post_results():
 @role_required(*RESEARCH_ROLES)
 def pre_test_results():
     conn = get_db()
-    rows = assessment_result_rows(conn, "pretest")
+    filters = research_filter_values()
+    rows = assessment_result_rows(conn, "pretest", filters)
+    options = research_filter_options(conn)
     conn.close()
-    return render_table("Pre-test Results", "Diagnostic pre-test results by participant and learning outcome.", assessment_columns(), rows)
+    return render_table("Pre-test Results", "Diagnostic pre-test results by participant and learning outcome.", assessment_columns(), rows, filters=filters, filter_options=options)
 
 
 @research_bp.route("/research/post-test-results")
 @role_required(*RESEARCH_ROLES)
 def post_test_results():
     conn = get_db()
-    rows = assessment_result_rows(conn, "posttest")
+    filters = research_filter_values()
+    rows = assessment_result_rows(conn, "posttest", filters)
+    options = research_filter_options(conn)
     conn.close()
-    return render_table("Post-test Results", "Post-test mastery evidence by participant and learning outcome.", assessment_columns(), rows)
+    return render_table("Post-test Results", "Post-test mastery evidence by participant and learning outcome.", assessment_columns(), rows, filters=filters, filter_options=options)
 
 
 def assessment_columns():
@@ -974,8 +1233,10 @@ def assessment_columns():
 @role_required(*RESEARCH_ROLES)
 def learning_gain():
     conn = get_db()
-    rows = learning_gain_rows(conn)
+    filters = research_filter_values()
+    rows = learning_gain_rows(conn, filters)
     summary = learning_gain_stats(rows)
+    options = research_filter_options(conn)
     conn.close()
     return render_table(
         "Learning Gain Analysis",
@@ -994,7 +1255,7 @@ def learning_gain():
         ],
         rows,
         summary,
-        [{"label": "Export Learning Gain", "url": url_for("research.export_learning_gain")}],
+        [{"label": "Export Learning Gain", "url": url_for("research.export_learning_gain", **filters)}],
         chart={
             "title": "Participant Pre-test vs Post-test",
             "rows": [
@@ -1006,6 +1267,8 @@ def learning_gain():
                 for row in rows
             ],
         },
+        filters=filters, filter_options=options,
+        empty_message="No valid paired pre-test/post-test cases match these filters. A post-test must occur after a pre-test for the same participant, outcome and study phase.",
     )
 
 
@@ -1013,8 +1276,10 @@ def learning_gain():
 @role_required(*RESEARCH_ROLES)
 def mastery_attainment():
     conn = get_db()
-    rows = mastery_rows(conn)
-    summary = mastery_summary(rows, participant_summary(conn)["eligible_learners"])
+    filters = research_filter_values()
+    rows = mastery_rows(conn, filters)
+    summary = mastery_summary(rows, participant_summary(conn, filters)["eligible_learners"])
+    options = research_filter_options(conn)
     conn.close()
     return render_table(
         "Mastery Attainment Report",
@@ -1033,7 +1298,8 @@ def mastery_attainment():
         ],
         rows,
         summary,
-        [{"label": "Export Mastery", "url": url_for("research.export_mastery")}],
+        [{"label": "Export Mastery", "url": url_for("research.export_mastery", **filters)}],
+        filters=filters, filter_options=options,
     )
 
 
@@ -1057,6 +1323,101 @@ def teacher_oversight():
         ],
         rows,
         summary,
+        [{"label": "Export Teacher Oversight", "url": url_for("research.export_teacher_oversight")}],
+    )
+
+
+@research_bp.route("/research/feedback-responsiveness")
+@role_required(*RESEARCH_ROLES)
+def feedback_responsiveness():
+    conn = get_db()
+    filters = research_filter_values()
+    rows = feedback_responsiveness_rows(conn, filters)
+    summary = feedback_responsiveness_summary(rows)
+    options = research_filter_options(conn)
+    conn.close()
+    return render_table(
+        "AI Feedback Responsiveness",
+        "A recommendation is followed only when the learner later submits practice or post-test evidence; merely opening a page is not counted.",
+        [("participant_code", "Participant"), ("study_phase", "Phase"),
+         ("subject", "Subject"), ("topic", "Topic"),
+         ("learning_outcome", "Learning Outcome"), ("recommendation_type", "Type"),
+         ("generated_at", "Generated"), ("viewed", "Viewed"),
+         ("followed", "Followed"), ("response_delay_hours", "Response Delay (h)"),
+         ("prior_score", "Prior Score"), ("next_score", "Next Score"),
+         ("performance_change", "Performance Change"), ("response_evidence", "Follow-through Evidence")],
+        rows, summary,
+        [{"label": "Export Feedback Responsiveness", "url": url_for("research.export_feedback_responsiveness", **filters)}],
+        filters=filters, filter_options=options,
+        empty_message="No eligible AI recommendation records match these filters.",
+    )
+
+
+@research_bp.route("/research/system-reliability")
+@role_required(*RESEARCH_ROLES)
+def system_reliability():
+    conn = get_db()
+    filters = research_filter_values()
+    rows = operational_reliability_rows(conn, filters)
+    summary = operational_reliability_summary(rows)
+    conn.close()
+    return render_table(
+        "Recorded System Reliability",
+        "Application-event evidence only. This page does not present an external uptime percentage.",
+        [("occurred_at", "Date"), ("event_type", "Event"), ("actor_role", "Role"),
+         ("entity_type", "Entity"), ("event_status", "Status"),
+         ("response_time_ms", "Response Time (ms)"), ("error_category", "Error Category"),
+         ("offline_status", "Offline/Queue Status")],
+        rows, summary,
+        [{"label": "Export Reliability", "url": url_for("research.export_system_reliability", **filters)}],
+        filters=filters,
+        filter_options={"study_phases": (), "schools": (), "classes": (), "subjects": (), "topics": (), "outcomes": ()},
+        empty_message="No application reliability events have been recorded yet.",
+    )
+
+
+@research_bp.route("/research/data-integrity")
+@role_required(*RESEARCH_ROLES)
+def data_integrity():
+    conn = get_db()
+    report = integrity_report(conn)
+    conn.close()
+    return render_table(
+        "Research Data Integrity",
+        "Read-only checks report inconsistencies. This tool never changes or deletes research data.",
+        [("category", "Category"), ("severity", "Status"), ("issue", "Check"),
+         ("count", "Affected"), ("recommended_action", "Recommended Action")],
+        report["findings"], report["summary"],
+    )
+
+
+@research_bp.route("/research/data-collection-readiness")
+@role_required(*RESEARCH_ROLES)
+def data_collection_readiness():
+    conn = get_db()
+    report = readiness_report(conn)
+    conn.close()
+    return render_table(
+        "Data Collection Readiness",
+        f"Overall status: {report['overall_status']}. A blocked item must be resolved before claiming readiness for live dissertation data collection.",
+        [("item", "Requirement"), ("status", "Status"), ("evidence", "Evidence / next action")],
+        report["items"], report["summary"],
+    )
+
+
+@research_bp.route("/research/proposal-traceability")
+@role_required(*RESEARCH_ROLES)
+def proposal_traceability():
+    rows = traceability_rows()
+    return render_table(
+        "Proposal Traceability Matrix",
+        "Each research question and DSRM stage is connected to an operational measure, database evidence, application route, and Chapter 4–5 reporting location.",
+        [("objective", "Objective"), ("research_question", "Research Question"),
+         ("dsrm_stage", "DSRM Stage"), ("operational_measure", "Operational Measure"),
+         ("database_evidence", "Database / Event Evidence"),
+         ("application_route", "Application Route"), ("chapter_four", "Chapter 4"),
+         ("chapter_five", "Chapter 5"), ("status", "Status")], rows,
+        {"mapped_objectives": len(rows), "implemented": sum(1 for row in rows if row["status"] == "Implemented")},
     )
 
 
@@ -1077,6 +1438,7 @@ def create_questionnaire():
         title = (request.form.get("questionnaire_title") or "").strip()
         role = request.form.get("respondent_role") or "learner"
         description = (request.form.get("questionnaire_description") or "").strip()
+        study_phase = request.form.get("study_phase") or "Pilot"
         item_lines = [line.strip() for line in (request.form.get("items_text") or "").splitlines() if line.strip()]
         if not title or not item_lines:
             flash("Questionnaire title and at least one item are required.", "danger")
@@ -1089,6 +1451,7 @@ def create_questionnaire():
                 VALUES (?, ?, ?, 'Active')
             """, (title, role, description))
             questionnaire_id = cur.lastrowid
+            conn.execute("UPDATE research_questionnaires SET study_phase=? WHERE id=?", (study_phase, questionnaire_id))
             for order, line in enumerate(item_lines, start=1):
                 if "|" in line:
                     construct, item_text = [part.strip() for part in line.split("|", 1)]
@@ -1108,7 +1471,62 @@ def create_questionnaire():
             conn.rollback()
             conn.close()
             flash("A questionnaire with that title already exists.", "danger")
-    return render_template("research/questionnaire_form.html")
+    return render_template("research/questionnaire_form.html", questionnaire=None, items_text="")
+
+
+@research_bp.route("/research/questionnaires/<int:questionnaire_id>/edit", methods=["GET", "POST"])
+@role_required(*RESEARCH_ROLES)
+@csrf_protect
+def edit_questionnaire(questionnaire_id):
+    conn = get_db()
+    questionnaire = conn.execute("SELECT * FROM research_questionnaires WHERE id=?", (questionnaire_id,)).fetchone()
+    if not questionnaire:
+        conn.close()
+        return "Questionnaire not found", 404
+    items = conn.execute("""
+        SELECT * FROM research_questionnaire_items WHERE questionnaire_id=?
+        ORDER BY display_order,id
+    """, (questionnaire_id,)).fetchall()
+    if request.method == "POST":
+        title = (request.form.get("questionnaire_title") or "").strip()
+        lines = [line.strip() for line in (request.form.get("items_text") or "").splitlines() if line.strip()]
+        if not title or not lines:
+            conn.close()
+            flash("Questionnaire title and at least one item are required.", "danger")
+            return redirect(url_for("research.edit_questionnaire", questionnaire_id=questionnaire_id))
+        if one(conn, "SELECT COUNT(*) FROM research_questionnaire_responses WHERE questionnaire_id=?", (questionnaire_id,)):
+            conn.close()
+            flash("An instrument with responses cannot be structurally edited; create a versioned questionnaire instead.", "warning")
+            return redirect(url_for("research.questionnaires"))
+        try:
+            conn.execute("""
+                UPDATE research_questionnaires SET questionnaire_title=?, respondent_role=?,
+                  questionnaire_description=?, study_phase=?, active_status=? WHERE id=?
+            """, (title, request.form.get("respondent_role") or "learner",
+                  (request.form.get("questionnaire_description") or "").strip(),
+                  request.form.get("study_phase") or "Pilot",
+                  request.form.get("active_status") or "Active", questionnaire_id))
+            conn.execute("DELETE FROM research_questionnaire_items WHERE questionnaire_id=?", (questionnaire_id,))
+            for order, line in enumerate(lines, start=1):
+                construct, item_text = ([part.strip() for part in line.split("|", 1)]
+                                        if "|" in line else ("general", line))
+                conn.execute("""
+                    INSERT INTO research_questionnaire_items
+                    (questionnaire_id,construct_name,item_text,display_order,required)
+                    VALUES (?,?,?,?,1)
+                """, (questionnaire_id, construct, item_text, order))
+            audit_research_event(conn, "UPDATE_QUESTIONNAIRE", "research_questionnaire", questionnaire_id,
+                                 "Updated instrument before responses were collected")
+            conn.commit()
+            conn.close()
+            flash("Questionnaire updated.", "success")
+            return redirect(url_for("research.questionnaires"))
+        except DatabaseIntegrityError:
+            conn.rollback()
+            flash("A questionnaire with that title already exists.", "danger")
+    item_text = "\n".join(f"{item['construct_name']} | {item['item_text']}" for item in items)
+    conn.close()
+    return render_template("research/questionnaire_form.html", questionnaire=questionnaire, items_text=item_text)
 
 
 @research_bp.route("/research/questionnaires/<int:questionnaire_id>/respond", methods=["GET", "POST"])
@@ -1141,12 +1559,15 @@ def respond_questionnaire(questionnaire_id):
             flash("A consented, active research participant record is required before submitting a questionnaire.", "warning")
             return redirect(url_for("research.questionnaires"))
         existing = conn.execute("""
-            SELECT id FROM research_questionnaire_responses
+            SELECT id, completion_status FROM research_questionnaire_responses
             WHERE questionnaire_id=? AND respondent_user_id=?
         """, (questionnaire_id, session.get("user_id"))).fetchone()
         if existing:
+            if existing["completion_status"] == "Submitted":
+                conn.close()
+                flash("A final response has already been submitted for this questionnaire.", "warning")
+                return redirect(url_for("research.questionnaires"))
             response_id = existing["id"]
-            conn.execute("UPDATE research_questionnaire_responses SET submitted_at=CURRENT_TIMESTAMP WHERE id=?", (response_id,))
         else:
             cur = conn.execute("""
                 INSERT INTO research_questionnaire_responses
@@ -1176,6 +1597,11 @@ def respond_questionnaire(questionnaire_id):
                     INSERT INTO research_questionnaire_answers (response_id, item_id, score, comment)
                     VALUES (?, ?, ?, ?)
                 """, (response_id, item["id"], score, request.form.get(f"comment_{item['id']}") or None))
+        conn.execute("""
+            UPDATE research_questionnaire_responses
+            SET submitted_at=CURRENT_TIMESTAMP, completion_status='Submitted'
+            WHERE id=?
+        """, (response_id,))
         audit_research_event(conn, "QUESTIONNAIRE_SUBMITTED", "research_questionnaire", questionnaire_id, questionnaire["questionnaire_title"])
         conn.commit()
         conn.close()
@@ -1204,8 +1630,12 @@ def questionnaire_results():
             ("respondent_role", "Role"),
             ("construct_name", "Construct"),
             ("average_score", "Average Score"),
+            ("sample_standard_deviation", "Sample SD"),
             ("responses", "Responses"),
             ("answers", "Answers"),
+            ("score_1_frequency", "1s"), ("score_2_frequency", "2s"),
+            ("score_3_frequency", "3s"), ("score_4_frequency", "4s"),
+            ("score_5_frequency", "5s"),
         ],
         rows,
         summary,
@@ -1256,22 +1686,35 @@ def research_reports():
 @role_required(*RESEARCH_ROLES)
 def chapter_four_report():
     conn = get_db()
+    filters = research_filter_values()
+    feedback_rows = feedback_responsiveness_rows(conn, filters)
+    reliability_rows = operational_reliability_rows(conn, filters)
+    integrity = integrity_report(conn)
     data = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "filters": filters,
         "metrics": research_metrics(conn),
-        "participants": participant_rows(conn),
-        "pretest": assessment_result_rows(conn, "pretest"),
-        "posttest": assessment_result_rows(conn, "posttest"),
-        "learning_gain": learning_gain_rows(conn),
-        "mastery": mastery_rows(conn),
+        "participants": participant_rows(conn, filters),
+        "pretest": assessment_result_rows(conn, "pretest", filters),
+        "posttest": assessment_result_rows(conn, "posttest", filters),
+        "learning_gain": learning_gain_rows(conn, filters),
+        "mastery": mastery_rows(conn, filters),
         "teacher_summary": teacher_oversight_data(conn)[0],
+        "feedback_rows": feedback_rows,
+        "feedback_summary": feedback_responsiveness_summary(feedback_rows),
+        "reliability_rows": reliability_rows,
+        "reliability_summary": operational_reliability_summary(reliability_rows),
+        "integrity": integrity,
         "questionnaire_results": questionnaire_result_rows(conn),
         "system_logs": system_log_rows(conn, limit=20),
+        "readiness": chapter_evidence_readiness(conn),
     }
     data["gain_summary"] = learning_gain_stats(data["learning_gain"])
     data["mastery_summary"] = mastery_summary(
         data["mastery"],
-        participant_summary(conn)["eligible_learners"],
+        participant_summary(conn, filters)["eligible_learners"],
     )
+    data["excluded_unpaired_cases"] = max(0, len(data["pretest"]) - data["gain_summary"]["valid_pairs"])
     conn.close()
     return render_template("research/chapter_four.html", no_data=NO_DATA, **data)
 
@@ -1285,41 +1728,52 @@ def chapter_five_insights():
     weak_concepts = weak_concept_rows(conn, limit=6)
     oversight_summary, _ = teacher_oversight_data(conn)
     questionnaire_results = questionnaire_result_rows(conn)
+    readiness = chapter_evidence_readiness(conn)
     has_data = bool(gains or questionnaire_results or metrics["attempts"])
     insights = []
+    def add(statement, metric, source, valid_cases, scope, evidence_type="observational"):
+        insights.append({"statement": statement, "metric": metric, "source": source,
+                         "valid_cases": valid_cases, "scope": scope, "evidence_type": evidence_type})
     if has_data:
         if metrics["average_learning_gain"] > 0:
-            insights.append(f"Learning improved by an average gain of {metrics['average_learning_gain']} percentage points.")
+            add(f"The valid paired records show an average positive change of {metrics['average_learning_gain']} percentage points; this observational result does not by itself establish causation.", metrics["average_learning_gain"], "Paired assessment attempts", len(gains), "Eligible paired learners/outcomes in the recorded study phase")
         else:
-            insights.append("Learning gain is not yet positive or there is insufficient paired pre/post evidence.")
-        insights.append(f"Mastery attainment currently stands at {metrics['mastery_attainment_rate']}%.")
+            add("The recorded paired evidence does not currently show a positive mean gain, or the valid-pair sample is empty.", metrics["average_learning_gain"], "Paired assessment attempts", len(gains), "Eligible paired cases")
+        add(f"Recorded mastery attainment is {metrics['mastery_attainment_rate']}% among represented outcome records.", metrics["mastery_attainment_rate"], "Mastery records", metrics["learners"], "Eligible research participants with mastery evidence")
         if weak_concepts:
             concepts = ", ".join(row["concept_tag"].replace("_", " ") for row in weak_concepts[:3])
-            insights.append(f"The most difficult concepts currently appear to be: {concepts}.")
-        insights.append(f"AI support is represented by {metrics['ai_recommendations']} recommendation records and average confidence of {metrics['avg_ai_confidence']}%.")
-        insights.append(f"Teacher oversight contributed {oversight_summary['number_of_interventions']} interventions, {oversight_summary['teacher_approvals']} approvals and {oversight_summary['teacher_overrides']} overrides.")
+            add(f"Frequently recorded weak-concept tags include {concepts}; qualitative review is required before treating tags as themes.", len(weak_concepts), "Attempt weak-concept tags", metrics["attempts"], "Recorded assessment attempts")
+        add(f"AI support is represented by {metrics['ai_recommendations']} recommendation records with mean stored confidence {metrics['avg_ai_confidence']}%.", metrics["ai_recommendations"], "Recommendations and AI explanations", metrics["ai_recommendations"], "Generated recommendation records", "system-generated evidence")
+        add(f"Teacher oversight includes {oversight_summary['number_of_interventions']} interventions, {oversight_summary['teacher_approvals']} approvals and {oversight_summary['teacher_overrides']} overrides.", oversight_summary["number_of_interventions"], "Teacher oversight tables", oversight_summary["learners_supported_by_teacher"], "Recorded teacher actions")
         if metrics["questionnaire_response_count"]:
-            insights.append(f"User acceptance evidence includes {metrics['questionnaire_response_count']} questionnaire response(s).")
+            add(f"User-acceptance evidence includes {metrics['questionnaire_response_count']} final questionnaire response(s).", metrics["questionnaire_response_count"], "Research questionnaires", metrics["questionnaire_response_count"], "Submitted learner and teacher instruments", "self-report evidence")
         else:
-            insights.append("Usability evidence is pending questionnaire responses.")
+            add("No final questionnaire responses are available, so user acceptance cannot yet be interpreted.", "No data yet.", "Research questionnaires", 0, "No completed instruments", "missing evidence")
         if metrics["sync_success_rate"] == NO_DATA:
-            insights.append("System reliability evidence is not yet available because no synchronization outcomes have been recorded.")
+            add("No synchronization outcomes have been recorded; external hosting uptime is also outside the application-event dataset.", NO_DATA, "Sync and research events", 0, "Recorded application events only", "operational evidence")
         else:
-            insights.append(
+            add(
                 f"Recorded low-connectivity synchronization succeeded for {metrics['sync_success_rate']}% of observed items, "
-                f"with {metrics['recorded_system_incidents']} recorded failure incident(s)."
+                f"with {metrics['recorded_system_incidents']} recorded failure incident(s).",
+                metrics["sync_success_rate"], "Sync events", metrics["system_usage_count"], "Recorded synchronization events", "operational evidence"
             )
-        insights.append("Current limitations include legacy assessment attempts without exact start times and the absence of external hosting uptime measurements in the local database.")
-        insights.append("Recommended improvements include expanding pilot participants, collecting questionnaire responses, and combining the research logs with production-host uptime monitoring.")
+        add("Limitations include legacy attempts without exact start times, possible small-sample instability, and no external provider uptime measurement in this database.", "Limitation", "Schema and completeness review", len(gains), "Current recorded evidence", "limitation")
+        add("Recommended next work is to complete the approved pilot, review manual qualitative themes, and triangulate application events with separately collected hosting evidence.", "Recommendation", "Readiness and integrity reports", len(gains), "Future study activity", "recommendation")
     conn.close()
-    return render_template("research/chapter_five.html", has_data=has_data, insights=insights)
+    return render_template(
+        "research/chapter_five.html",
+        has_data=has_data,
+        insights=insights,
+        readiness=readiness,
+    )
 
 
 @research_bp.route("/research/export/pre-post")
 @role_required(*RESEARCH_ROLES)
 def export_pre_post():
     conn = get_db()
-    rows = assessment_result_rows(conn)
+    filters = research_filter_values()
+    rows = assessment_result_rows(conn, filters=filters)
     conn.close()
     return csv_response("learn2master_pre_post_results.csv", assessment_columns(), rows, "pre_post")
 
@@ -1328,13 +1782,17 @@ def export_pre_post():
 @role_required(*RESEARCH_ROLES)
 def export_learning_gain():
     conn = get_db()
-    rows = learning_gain_rows(conn)
+    filters = research_filter_values()
+    rows = learning_gain_rows(conn, filters)
     conn.close()
     columns = [
         ("participant_code", "participant_code"),
+        ("study_phase", "study_phase"),
         ("subject", "subject"),
         ("topic", "topic"),
         ("learning_outcome", "learning_outcome"),
+        ("pre_attempt_id", "pretest_attempt_id"),
+        ("post_attempt_id", "posttest_attempt_id"),
         ("pre_test", "pre_test"),
         ("post_test", "post_test"),
         ("learning_gain", "learning_gain"),
@@ -1349,13 +1807,17 @@ def export_learning_gain():
 @role_required(*RESEARCH_ROLES)
 def export_mastery():
     conn = get_db()
-    rows = mastery_rows(conn)
+    filters = research_filter_values()
+    rows = mastery_rows(conn, filters)
     conn.close()
     columns = [
         ("participant_code", "participant_code"),
         ("subject", "subject"),
         ("topic", "topic"),
         ("learning_outcome", "learning_outcome"),
+        ("study_phase", "study_phase"),
+        ("pre_attempt_id", "pretest_attempt_id"),
+        ("post_attempt_id", "posttest_attempt_id"),
         ("mastery_status", "mastery_status"),
         ("mastery_level", "mastery_level"),
         ("mastery_score", "mastery_score"),
@@ -1363,6 +1825,47 @@ def export_mastery():
         ("time_to_mastery", "time_to_mastery"),
     ]
     return csv_response("learn2master_mastery.csv", columns, rows, "mastery")
+
+
+@research_bp.route("/research/export/feedback-responsiveness")
+@role_required(*RESEARCH_ROLES)
+def export_feedback_responsiveness():
+    conn = get_db()
+    rows = feedback_responsiveness_rows(conn, research_filter_values())
+    conn.close()
+    columns = [(key, key) for key in (
+        "participant_code", "study_phase", "subject", "topic", "learning_outcome",
+        "recommendation_id", "recommendation_type", "generated_at", "viewed_at",
+        "followed_at", "response_delay_hours", "prior_score", "next_score",
+        "performance_change", "response_evidence", "confidence_score",
+    )]
+    return csv_response("learn2master_feedback_responsiveness.csv", columns, rows, "feedback_responsiveness")
+
+
+@research_bp.route("/research/export/teacher-oversight")
+@role_required(*RESEARCH_ROLES)
+def export_teacher_oversight():
+    conn = get_db()
+    _, rows = teacher_oversight_data(conn)
+    conn.close()
+    columns = [(key, key) for key in (
+        "record_type", "participant_code", "learning_outcome", "action",
+        "comment", "details", "created_at",
+    )]
+    return csv_response("learn2master_teacher_oversight.csv", columns, rows, "teacher_oversight")
+
+
+@research_bp.route("/research/export/system-reliability")
+@role_required(*RESEARCH_ROLES)
+def export_system_reliability():
+    conn = get_db()
+    rows = operational_reliability_rows(conn, research_filter_values())
+    conn.close()
+    columns = [(key, key) for key in (
+        "event_id", "actor_role", "event_type", "entity_type", "entity_id",
+        "response_time_ms", "event_status", "error_category", "offline_status", "occurred_at",
+    )]
+    return csv_response("learn2master_system_reliability.csv", columns, rows, "system_reliability")
 
 
 @research_bp.route("/research/export/questionnaires")
@@ -1376,8 +1879,14 @@ def export_questionnaires():
         ("respondent_role", "respondent_role"),
         ("construct_name", "construct"),
         ("average_score", "average_score"),
+        ("sample_standard_deviation", "sample_standard_deviation"),
         ("responses", "responses"),
         ("answers", "answers"),
+        ("score_1_frequency", "score_1_frequency"),
+        ("score_2_frequency", "score_2_frequency"),
+        ("score_3_frequency", "score_3_frequency"),
+        ("score_4_frequency", "score_4_frequency"),
+        ("score_5_frequency", "score_5_frequency"),
     ]
     return csv_response("learn2master_questionnaires.csv", columns, rows, "questionnaires")
 

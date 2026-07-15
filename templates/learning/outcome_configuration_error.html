@@ -1,0 +1,18 @@
+{% extends "layouts/base.html" %}
+{% block title %}Learning Outcome Configuration{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div>
+    <p class="eyebrow">Curriculum validation</p>
+    <h1>{{ outcome.outcome_name }}</h1>
+    <p>This learning outcome exists, but its lesson, course, or subject relationship is incomplete.</p>
+  </div>
+</section>
+<section class="learn-card configuration-warning">
+  <h2>Administrator action required</h2>
+  <p>No learner data was changed. Ask an administrator to validate the curriculum trace from subject to course, lesson and learning outcome.</p>
+  <p><small>Request reference: {{ request_reference }}</small></p>
+  <a class="btn-primary" href="{{ url_for('student.student_dashboard') }}">Return to Dashboard</a>
+</section>
+{% endblock %}
