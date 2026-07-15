@@ -5,6 +5,8 @@ import hashlib
 import time
 import threading
 import re
+import subprocess
+import sys
 from pathlib import Path
 from functools import lru_cache
 
@@ -17,11 +19,6 @@ try:
     import numpy as np
 except ImportError:
     np = None
-
-try:
-    from PyPDF2 import PdfReader
-except ImportError:
-    PdfReader = None
 
 try:
     from huggingface_hub import InferenceClient
@@ -46,6 +43,10 @@ logger = logging.getLogger(__name__)
 MAX_FILE_BYTES = 5 * 1024 * 1024  # 5 MB
 MAX_JSON_ITEMS = 500
 MAX_KB_ENTRIES = 10000
+MAX_PDF_PAGES = 25
+MAX_EXTRACTED_TEXT_CHARS = 20000
+PDF_EXTRACTION_TIMEOUT_SECONDS = 8
+AI_REQUEST_TIMEOUT_SECONDS = 6
 
 # Global circuit breaker state
 _groq_failure_count = 0
@@ -113,7 +114,7 @@ class KnowledgeBase:
         # Initialize Hugging Face client
         hf_token = os.environ.get('HF_TOKEN')
         if hf_token and InferenceClient:
-            self.hf_client = InferenceClient(token=hf_token)
+            self.hf_client = InferenceClient(token=hf_token, timeout=AI_REQUEST_TIMEOUT_SECONDS)
 
         self.load_processed_files_metadata()
         self.load_and_process()
@@ -201,39 +202,98 @@ class KnowledgeBase:
             return " ".join(filter(None, [self._extract_text(i, depth + 1) for i in obj[:MAX_JSON_ITEMS]]))
         return ""
 
+    def _remember_failed_file(self, filename, file_hash):
+        with self._lock:
+            self._processed_files[filename] = f"failed:{file_hash}"
+            self.save_processed_files_metadata()
+
+    def _extract_pdf_text(self, filepath):
+        """Extract a bounded amount of PDF text outside the web worker process."""
+        command = [
+            "pdftotext",
+            "-f", "1",
+            "-l", str(MAX_PDF_PAGES),
+            "-layout",
+            str(filepath),
+            "-",
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=PDF_EXTRACTION_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except FileNotFoundError:
+            helper = Path(__file__).parent / "scripts" / "extract_pdf_text.py"
+            command = [
+                sys.executable,
+                str(helper),
+                str(filepath),
+                str(MAX_PDF_PAGES),
+                str(MAX_EXTRACTED_TEXT_CHARS),
+            ]
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=PDF_EXTRACTION_TIMEOUT_SECONDS,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                logger.error(f"PDF extraction timed out for {Path(filepath).name}")
+                return ""
+        except subprocess.TimeoutExpired:
+            logger.error(f"PDF extraction timed out for {Path(filepath).name}")
+            return ""
+
+        if result.returncode != 0:
+            detail = (result.stderr or "PDF extractor returned no details").strip()[:300]
+            logger.error(f"PDF extraction failed for {Path(filepath).name}: {detail}")
+            return ""
+        return result.stdout[:MAX_EXTRACTED_TEXT_CHARS].strip()
+
     def process_file(self, filepath, metadata=None, summarize=False):
         filename = os.path.basename(filepath)
         if filename.startswith('_'): return False, 0
 
         file_hash = self._get_file_hash(filepath)
-        if filename in self._processed_files and self._processed_files[filename] == file_hash:
+        processed_state = self._processed_files.get(filename)
+        if processed_state == file_hash:
             logger.info(f"Skipping {filename}, already processed.")
             return True, 0
+        if processed_state == f"failed:{file_hash}":
+            logger.warning(f"Skipping {filename}, extraction previously failed.")
+            return False, 0
 
         text = ""
+        suffix = Path(filename).suffix.lower()
         try:
-            if filename.endswith('.txt') or filename.endswith('.md'):
+            if suffix in {'.txt', '.md'}:
                 with open(filepath, 'r', encoding='utf-8') as f:
                     text = f.read()
                     text = self._strip_markdown(text)
-            elif filename.endswith('.json'):
+            elif suffix == '.json':
                 with open(filepath, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     text = self._extract_text(data)
-            elif filename.endswith('.pdf') and PdfReader:
-                reader = PdfReader(filepath)
-                for page in reader.pages:
-                    try:
-                        extracted = page.extract_text()
-                        if extracted: text += extracted + "\n"
-                    except Exception as pg_err:
-                        logger.warning(f"Error on PDF page in {filename}: {pg_err}")
+            elif suffix == '.pdf':
+                text = self._extract_pdf_text(filepath)
         except Exception as e:
             logger.error(f"Error extracting text from {filename}: {e}")
+            self._remember_failed_file(filename, file_hash)
             return False, 0
 
-        text = text.strip()
-        if not text: return False, 0
+        text = text.strip()[:MAX_EXTRACTED_TEXT_CHARS]
+        if not text:
+            self._remember_failed_file(filename, file_hash)
+            return False, 0
 
         # AI Summarization for large files or if requested
         processed_size = len(text)
@@ -452,7 +512,11 @@ class AIEngine:
             return text[:5000] # Fallback to truncation
         try:
             from groq import Groq
-            client = Groq(api_key=groq_api_key)
+            client = Groq(
+                api_key=groq_api_key,
+                timeout=AI_REQUEST_TIMEOUT_SECONDS,
+                max_retries=0,
+            )
             prompt = f"Summarize the following study material into a concise pedagogical summary of approximately 5KB (about 800-1000 words) that captures all key concepts and definitions for vector search: \n\n {text[:15000]}"
             chat_completion = client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
