@@ -21,7 +21,8 @@ class Config:
         "LEARN2MASTER_SESSION_COOKIE_SECURE",
         "1" if FORCE_HTTPS else "0",
     )
-    MAX_CONTENT_LENGTH = int(os.environ.get("LEARN2MASTER_MAX_UPLOAD_BYTES", 5 * 1024 * 1024))
+    # Allow multipart overhead above the 100 MB per-document application limit.
+    MAX_CONTENT_LENGTH = int(os.environ.get("LEARN2MASTER_MAX_UPLOAD_BYTES", 105 * 1024 * 1024))
     CSRF_ENABLED = os.environ.get("LEARN2MASTER_CSRF_ENABLED", "1").lower() not in {"0", "false", "no", "off"}
     UPLOAD_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".txt", ".doc", ".docx", ".py", ".zip"}
 

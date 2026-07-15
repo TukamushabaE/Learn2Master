@@ -40,13 +40,32 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Constants for safety
-MAX_FILE_BYTES = 5 * 1024 * 1024  # 5 MB
+MAX_FILE_BYTES = int(os.environ.get("LEARN2MASTER_MAX_DOCUMENT_BYTES", 100 * 1024 * 1024))
+TEACHER_KB_STORAGE_LIMIT_BYTES = int(
+    os.environ.get("LEARN2MASTER_TEACHER_KB_LIMIT_BYTES", 1024 * 1024 * 1024)
+)
 MAX_JSON_ITEMS = 500
 MAX_KB_ENTRIES = 10000
 MAX_PDF_PAGES = 25
 MAX_EXTRACTED_TEXT_CHARS = 20000
 PDF_EXTRACTION_TIMEOUT_SECONDS = 8
+DOCUMENT_EXTRACTION_TIMEOUT_SECONDS = 30
 AI_REQUEST_TIMEOUT_SECONDS = 6
+
+PLAIN_TEXT_EXTENSIONS = frozenset({
+    ".txt", ".md", ".markdown", ".rst", ".log", ".tex", ".yaml", ".yml",
+    ".csv", ".tsv", ".json", ".xml", ".html", ".htm", ".xhtml",
+    ".css", ".py", ".sql", ".ini", ".cfg",
+})
+RICH_DOCUMENT_EXTENSIONS = frozenset({
+    ".doc", ".docx", ".docm", ".dotx", ".dotm",
+    ".xls", ".xlsx", ".xlsm", ".xlsb", ".xltx", ".xltm",
+    ".ppt", ".pptx", ".pptm", ".ppsx", ".potx", ".potm",
+    ".odt", ".ods", ".odp", ".odg", ".rtf", ".epub", ".eml",
+})
+SUPPORTED_DOCUMENT_EXTENSIONS = frozenset(
+    {".pdf"} | PLAIN_TEXT_EXTENSIONS | RICH_DOCUMENT_EXTENSIONS
+)
 
 # Global circuit breaker state
 _groq_failure_count = 0
@@ -138,9 +157,13 @@ class KnowledgeBase:
     def _get_file_hash(self, filepath):
         hasher = hashlib.md5()
         with open(filepath, 'rb') as f:
-            buf = f.read()
-            hasher.update(buf)
+            for block in iter(lambda: f.read(1024 * 1024), b""):
+                hasher.update(block)
         return hasher.hexdigest()
+
+    def _read_bounded_text(self, filepath):
+        with open(filepath, "r", encoding="utf-8", errors="replace") as source:
+            return source.read(MAX_EXTRACTED_TEXT_CHARS)
 
     def _strip_markdown(self, text):
         text = re.sub(r'#{1,6}\s+', '', text)
@@ -259,6 +282,33 @@ class KnowledgeBase:
             return ""
         return result.stdout[:MAX_EXTRACTED_TEXT_CHARS].strip()
 
+    def _extract_document_text(self, filepath):
+        helper = Path(__file__).parent / "scripts" / "extract_document_text.py"
+        command = [
+            sys.executable,
+            str(helper),
+            str(filepath),
+            str(MAX_EXTRACTED_TEXT_CHARS),
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=DOCUMENT_EXTRACTION_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            logger.error(f"Document extraction timed out for {Path(filepath).name}")
+            return ""
+        if result.returncode != 0:
+            detail = (result.stderr or "Document extractor returned no details").strip()[:300]
+            logger.error(f"Document extraction failed for {Path(filepath).name}: {detail}")
+            return ""
+        return result.stdout[:MAX_EXTRACTED_TEXT_CHARS].strip()
+
     def process_file(self, filepath, metadata=None, summarize=False):
         filename = os.path.basename(filepath)
         if filename.startswith('_'): return False, 0
@@ -275,16 +325,14 @@ class KnowledgeBase:
         text = ""
         suffix = Path(filename).suffix.lower()
         try:
-            if suffix in {'.txt', '.md'}:
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    text = f.read()
+            if suffix in PLAIN_TEXT_EXTENSIONS:
+                text = self._read_bounded_text(filepath)
+                if suffix in {'.md', '.markdown'}:
                     text = self._strip_markdown(text)
-            elif suffix == '.json':
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    text = self._extract_text(data)
             elif suffix == '.pdf':
                 text = self._extract_pdf_text(filepath)
+            elif suffix in RICH_DOCUMENT_EXTENSIONS:
+                text = self._extract_document_text(filepath)
         except Exception as e:
             logger.error(f"Error extracting text from {filename}: {e}")
             self._remember_failed_file(filename, file_hash)

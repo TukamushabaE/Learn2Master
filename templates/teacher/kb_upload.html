@@ -3,16 +3,20 @@
 <div class="container mt-4">
     <h2>Upload Study Materials (AI Knowledge Base)</h2>
     <div class="alert alert-info">
-        <strong>Storage Usage:</strong> {{ (usage / 1024 / 1024) | round(2) }}MB / {{ (limit / 1024 / 1024) | round(0) }}MB
+        <strong>Storage Usage:</strong> {{ (usage / 1024 / 1024 / 1024) | round(3) }} GB / {{ (limit / 1024 / 1024 / 1024) | round(0) }} GB
+        <br><small>Maximum per document: {{ (per_file_limit / 1024 / 1024) | round(0) }} MB. Add multiple documents up to the 1 GB total quota.</small>
     </div>
     <form method="POST" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
-            <label>Select File (PDF or Text)</label>
-            <input type="file" name="file" class="form-control" required>
+            <label>Select Document</label>
+            <input type="file" name="file" class="form-control" accept="{{ allowed_extensions | join(',') }}" required>
+            <small>Supported: PDF, Word, Excel, PowerPoint, OpenDocument, RTF, EPUB, email, text, Markdown, CSV, JSON, XML, HTML, YAML, LaTeX, and related document formats.</small>
         </div>
         <button type="submit" class="btn btn-primary">Upload & Summarize with AI</button>
     </form>
+
+    <p class="text-muted mt-2"><small>Encrypted, password-protected, executable, archive, media, and proprietary formats without readable document text are rejected. On the current free Render service, uploaded originals use temporary filesystem storage and can be lost after a restart or redeploy.</small></p>
 
     <h3 class="mt-4">Your Uploads</h3>
     <table class="table">
