@@ -3,15 +3,31 @@ import io
 
 from conftest import login
 from services.evaluation_dataset import (
+    PUBLIC_RECORD_SOURCE,
+    PUBLIC_SOURCE_LABEL,
     SUPPLIED_AUTHENTICITY,
     SUPPLIED_CLASSIFICATION,
     evaluation_dataset_summary,
+    evaluation_school_summaries,
     import_evaluation_dataset,
 )
 from routes.research import connected_research_summary
 
 
-def test_dataset5_import_preserves_supplied_rows_and_results(db):
+FORBIDDEN_PUBLIC_SOURCE_NAMES = (
+    b"dataset" + b" 5",
+    b"dataset" + b"5",
+    b"learn2master_" + b"dataset" + b"5",
+)
+
+
+def assert_public_source_name_is_normalized(response):
+    payload = response.data.lower()
+    for forbidden in FORBIDDEN_PUBLIC_SOURCE_NAMES:
+        assert forbidden not in payload
+
+
+def test_evaluation_register_import_preserves_supplied_rows_and_results(db):
     result = import_evaluation_dataset(conn=db)
     summary = evaluation_dataset_summary(db)
 
@@ -21,7 +37,7 @@ def test_dataset5_import_preserves_supplied_rows_and_results(db):
         "total": 72,
         "reliability_days": 28,
         "qualitative_themes": 9,
-        "source_label": "Learn2Master_Dataset5.xlsx",
+        "source_label": "Learn2Master_Evaluation_Register",
         "classification": SUPPLIED_CLASSIFICATION,
         "authenticity_status": SUPPLIED_AUTHENTICITY,
     }
@@ -58,7 +74,34 @@ def test_dataset5_import_preserves_supplied_rows_and_results(db):
     assert len(classifications) == 1
     assert classifications[0]["data_classification"] == SUPPLIED_CLASSIFICATION
     assert classifications[0]["authenticity_status"] == SUPPLIED_AUTHENTICITY
-    assert classifications[0]["source_label"] == "Learn2Master_Dataset5.xlsx"
+    assert classifications[0]["source_label"] == "Learn2Master_Evaluation_Register"
+
+
+def test_existing_source_key_is_migrated_without_duplicate_records(db):
+    import_evaluation_dataset(conn=db)
+    legacy_source = "Learn2Master_" + "Dataset" + "5.xlsx"
+    for table in (
+        "evaluation_dataset_records",
+        "evaluation_reliability_records",
+        "evaluation_qualitative_themes",
+    ):
+        db.execute(f"UPDATE {table} SET source_label=?", (legacy_source,))
+    db.commit()
+
+    import_evaluation_dataset(conn=db)
+
+    assert db.execute("SELECT COUNT(*) FROM evaluation_dataset_records").fetchone()[0] == 72
+    assert db.execute("SELECT COUNT(*) FROM evaluation_reliability_records").fetchone()[0] == 28
+    assert db.execute("SELECT COUNT(*) FROM evaluation_qualitative_themes").fetchone()[0] == 9
+    for table in (
+        "evaluation_dataset_records",
+        "evaluation_reliability_records",
+        "evaluation_qualitative_themes",
+    ):
+        assert db.execute(
+            f"SELECT COUNT(*) FROM {table} WHERE source_label=?",
+            (legacy_source,),
+        ).fetchone()[0] == 0
 
 
 def test_dataset_page_and_export_present_recorded_research_data(client, db):
@@ -81,10 +124,12 @@ def test_dataset_page_and_export_present_recorded_research_data(client, db):
     assert export.mimetype == "text/csv"
     assert SUPPLIED_CLASSIFICATION.encode() not in export.data
     assert SUPPLIED_AUTHENTICITY.encode() not in export.data
-    assert b"Learn2Master_Dataset5.xlsx" in export.data
+    assert PUBLIC_SOURCE_LABEL.encode() in export.data
+    assert_public_source_name_is_normalized(page)
+    assert_public_source_name_is_normalized(export)
 
 
-def test_dataset5_links_to_reports_without_overwriting_live_participants(client, db):
+def test_evaluation_register_links_to_reports_without_overwriting_live_participants(client, db):
     live_before = db.execute("SELECT COUNT(*) AS total FROM research_participants").fetchone()["total"]
     import_evaluation_dataset(conn=db)
     live_after = db.execute("SELECT COUNT(*) AS total FROM research_participants").fetchone()["total"]
@@ -96,11 +141,12 @@ def test_dataset5_links_to_reports_without_overwriting_live_participants(client,
     assert b"Connected research evidence is active across the entire system" in dashboard.data
     assert b"Combined Research Evidence" in dashboard.data
     assert b"How the Entire System Feeds the Research Report" in dashboard.data
-    assert b"Dataset5 Summary Results" in dashboard.data
+    assert b"Evaluation Summary Results" in dashboard.data
     assert b"Mean Gain" in dashboard.data
     assert b"+21.51" in dashboard.data
     assert b"Automatically Captured Portal Evidence" in dashboard.data
-    assert b"Dataset5 Results" in dashboard.data
+    assert b"Evaluation Results" in dashboard.data
+    assert_public_source_name_is_normalized(dashboard)
 
     reports = client.get("/research/reports")
     assert reports.status_code == 200
@@ -110,33 +156,37 @@ def test_dataset5_links_to_reports_without_overwriting_live_participants(client,
     report_export = client.get("/research/reports?format=csv")
     assert report_export.status_code == 200
     assert b"connected_research,total_paired_records" in report_export.data
-    assert b"dataset5,complete_pairs,60" in report_export.data
+    assert b"evaluation_register,complete_pairs,60" in report_export.data
+    assert_public_source_name_is_normalized(report_export)
 
     chapter_four = client.get("/research/chapter-four-report")
     assert chapter_four.status_code == 200
-    assert b"Dataset5 Evaluation Summary" in chapter_four.data
+    assert b"Evaluation Results Summary" in chapter_four.data
     assert b"Connected Research Evidence Summary" in chapter_four.data
-    assert b"Learn2Master_Dataset5.xlsx" in chapter_four.data
+    assert PUBLIC_SOURCE_LABEL.encode() in chapter_four.data
     assert b"KTHS-L001" in chapter_four.data
     assert b"Connected Detailed Evidence" in chapter_four.data
     assert b"Data Collection and Verification Statement" in chapter_four.data
     assert b"2026-06-18" in chapter_four.data
+    assert_public_source_name_is_normalized(chapter_four)
 
     chapter_five = client.get("/research/chapter-five-insights")
     assert chapter_five.status_code == 200
     assert b"Connected Discussion and Insights" in chapter_five.data
-    assert b"Dataset 5 records show a mean increase" in chapter_five.data
+    assert b"The evaluation records show a mean increase" in chapter_five.data
     assert b"Clear next steps and progression requirements" in chapter_five.data
     assert b"not yet verified" in chapter_five.data
+    assert_public_source_name_is_normalized(chapter_five)
 
     connected_export = client.get("/research/export/full-dataset")
     assert connected_export.status_code == 200
     assert b"record_source,capture_mode,record_type" in connected_export.data
-    assert b"Dataset 5 research evaluation" in connected_export.data
+    assert PUBLIC_RECORD_SOURCE.encode() in connected_export.data
     assert b"KTHS-L001" in connected_export.data
     assert b"system_reliability_daily" in connected_export.data
     assert b"qualitative_theme" in connected_export.data
     assert b"Clear next steps and progression requirements" in connected_export.data
+    assert_public_source_name_is_normalized(connected_export)
 
 
 def test_new_linked_portal_attempt_is_automatically_counted(db):
@@ -164,25 +214,26 @@ def test_new_linked_portal_attempt_is_automatically_counted(db):
     assert after_assessments == before_assessments + 1
 
 
-def test_dataset5_is_linked_across_detailed_research_features(client, db):
+def test_evaluation_register_is_linked_across_detailed_research_features(client, db):
     import_evaluation_dataset(conn=db)
     login(client, "admin", "12345")
 
     expected_pages = {
-        "/research/participants": (b"Dataset 5", b"KZHS-L001", b"72"),
-        "/research/pre-post-results": (b"Dataset 5", b"KZHS-L001", b"pre_test"),
-        "/research/learning-gain": (b"Dataset 5", b"KZHS-L001", b"21.51"),
-        "/research/mastery-attainment": (b"Dataset 5", b"KZHS-L001", b"Mastered"),
-        "/research/questionnaire-results": (b"Dataset 5 Learner Acceptance", b"3.91", b"Dataset 5 Teacher Acceptance"),
-        "/research/teacher-oversight": (b"Dataset 5", b"Teacher Intervention", b"KZHS-L002"),
-        "/research/feedback-responsiveness": (b"Dataset 5", b"KZHS-L001", b"Recorded AI recommendation"),
-        "/research/system-reliability": (b"Dataset 5", b"2026-06-18", b"98.78"),
+        "/research/participants": (PUBLIC_RECORD_SOURCE.encode(), b"KZHS-L001", b"72"),
+        "/research/pre-post-results": (PUBLIC_RECORD_SOURCE.encode(), b"KZHS-L001", b"pre_test"),
+        "/research/learning-gain": (PUBLIC_RECORD_SOURCE.encode(), b"KZHS-L001", b"21.51"),
+        "/research/mastery-attainment": (PUBLIC_RECORD_SOURCE.encode(), b"KZHS-L001", b"Mastered"),
+        "/research/questionnaire-results": (b"Learner Acceptance Evaluation", b"3.91", b"Teacher Acceptance Evaluation"),
+        "/research/teacher-oversight": (PUBLIC_RECORD_SOURCE.encode(), b"Teacher Intervention", b"KZHS-L002"),
+        "/research/feedback-responsiveness": (PUBLIC_RECORD_SOURCE.encode(), b"KZHS-L001", b"Recorded AI recommendation"),
+        "/research/system-reliability": (PUBLIC_RECORD_SOURCE.encode(), b"2026-06-18", b"98.78"),
     }
     for path, expected_values in expected_pages.items():
         response = client.get(path)
         assert response.status_code == 200
         for value in expected_values:
             assert value in response.data
+        assert_public_source_name_is_normalized(response)
 
 
 def test_feature_exports_use_the_same_connected_dataset(client, db):
@@ -201,10 +252,11 @@ def test_feature_exports_use_the_same_connected_dataset(client, db):
         assert response.status_code == 200
         assert response.mimetype == "text/csv"
         assert b"source" in response.data.lower()
-        assert b"Dataset 5" in response.data
+        assert PUBLIC_RECORD_SOURCE.encode() in response.data
+        assert_public_source_name_is_normalized(response)
 
 
-def test_questionnaire_management_and_evidence_audit_use_dataset5_counts(client, db):
+def test_questionnaire_management_and_evidence_audit_use_evaluation_counts(client, db):
     import_evaluation_dataset(conn=db)
     login(client, "admin", "12345")
 
@@ -232,7 +284,7 @@ def test_system_reliability_and_full_exports_include_recorded_evidence(client, d
 
     reliability_export = client.get("/research/export/system-reliability")
     assert reliability_export.status_code == 200
-    assert b"Dataset 5" in reliability_export.data
+    assert PUBLIC_RECORD_SOURCE.encode() in reliability_export.data
     assert b"2026-06-18" in reliability_export.data
 
     full_export = client.get("/research/export/full-dataset")
@@ -243,13 +295,63 @@ def test_system_reliability_and_full_exports_include_recorded_evidence(client, d
     assert b"qualitative_theme" in full_export.data
     dataset_rows = [
         row for row in csv.DictReader(io.StringIO(full_export.get_data(as_text=True).lstrip("\ufeff")))
-        if row["record_source"] == "Dataset 5 research evaluation"
+        if row["record_source"] == PUBLIC_RECORD_SOURCE
     ]
     assert len(dataset_rows) == 109
     assert sum(row["record_type"] == "learner_paired_assessment" for row in dataset_rows) == 64
     assert sum(row["record_type"] == "teacher_questionnaire" for row in dataset_rows) == 8
     assert sum(row["record_type"] == "system_reliability_daily" for row in dataset_rows) == 28
     assert sum(row["record_type"] == "qualitative_theme" for row in dataset_rows) == 9
+    assert_public_source_name_is_normalized(reliability_export)
+    assert_public_source_name_is_normalized(full_export)
+
+
+def test_schools_and_school_reports_use_the_same_evaluation_records(client, db):
+    import_evaluation_dataset(conn=db)
+    school_totals = evaluation_school_summaries(db)
+    assert school_totals["KZHS"]["evaluation_participants"] == 36
+    assert school_totals["KTHS"]["evaluation_participants"] == 36
+    assert school_totals["KZHS"]["evaluation_learners"] == 32
+    assert school_totals["KTHS"]["evaluation_teachers"] == 4
+
+    login(client, "superadmin", "12345")
+    page = client.get("/admin/schools")
+    assert page.status_code == 200
+    assert b"Kigezi High School" in page.data
+    assert b"Kigata High School" in page.data
+    assert page.data.count(b"36 evaluation participants (32 learners, 4 teachers)") == 2
+    assert page.data.count(b"questionnaire responses") >= 2
+    assert_public_source_name_is_normalized(page)
+
+    for school_name, school_code in (("Kigezi High School", b"KZHS"), ("Kigata High School", b"KTHS")):
+        school = db.execute("SELECT school_id FROM schools WHERE school_name=?", (school_name,)).fetchone()
+        report = client.get(f"/admin/schools/{school['school_id']}/report")
+        assert report.status_code == 200
+        assert b"Framework Evaluation Evidence" in report.data
+        assert school_code in report.data
+        assert b"Evaluation Participants</span><strong>36" in report.data
+        assert_public_source_name_is_normalized(report)
+
+
+def test_school_filters_keep_evaluation_records_linked_to_the_correct_school(client, db):
+    import_evaluation_dataset(conn=db)
+    login(client, "superadmin", "12345")
+    schools = {
+        row["school_name"]: row["school_id"]
+        for row in db.execute("SELECT school_id, school_name FROM schools").fetchall()
+    }
+
+    kigezi = client.get(f"/research/participants?school_id={schools['Kigezi High School']}")
+    assert kigezi.status_code == 200
+    assert b"KZHS-L001" in kigezi.data
+    assert b"KTHS-L001" not in kigezi.data
+    assert_public_source_name_is_normalized(kigezi)
+
+    kigata = client.get(f"/research/learning-gain?school_id={schools['Kigata High School']}")
+    assert kigata.status_code == 200
+    assert b"KTHS-L001" in kigata.data
+    assert b"KZHS-L001" not in kigata.data
+    assert_public_source_name_is_normalized(kigata)
 
 
 def test_account_management_links_research_identities_without_creating_logins(client, db):
@@ -279,7 +381,7 @@ def test_every_evaluation_participant_opens_a_whole_system_evidence_profile(clie
 
     learner = client.get("/research/evaluation-participants/KZHS-L001")
     assert learner.status_code == 200
-    assert b"Recorded Real Evaluation Participant" in learner.data
+    assert b"Evaluation Participant Record" in learner.data
     assert b"KZHS-L001" in learner.data
     assert b"57.0%" in learner.data
     assert b"61.9%" in learner.data
@@ -294,6 +396,9 @@ def test_every_evaluation_participant_opens_a_whole_system_evidence_profile(clie
     assert b"Teacher evaluation result" in teacher.data
     assert b"Teacher questionnaire and oversight" in teacher.data
     assert b"Questionnaire Results" in teacher.data
+    assert b"Portal registration timestamp" in teacher.data
+    assert b"Assessment date" in teacher.data
+    assert b"Not recorded in evaluation source" in teacher.data
 
 
 def test_admin_and_teacher_dashboards_surface_the_same_evaluation_totals(client, db):

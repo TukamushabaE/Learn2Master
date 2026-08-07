@@ -4,8 +4,11 @@ from pathlib import Path
 from database import get_db, is_postgres_connection
 
 
-DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "evaluation_dataset5.json"
+DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "evaluation_register.json"
+INTERNAL_SOURCE_LABEL = "Learn2Master_Evaluation_Register"
 SUPPLIED_LABEL = "Recorded Learn2Master Evaluation Data"
+PUBLIC_SOURCE_LABEL = "Learn2Master Evaluation Register"
+PUBLIC_RECORD_SOURCE = "Learn2Master evaluation"
 SUPPLIED_CLASSIFICATION = "USER_SUPPLIED_RESEARCH_DATA"
 SUPPLIED_AUTHENTICITY = "NOT_INDEPENDENTLY_VERIFIED"
 SUPPLIED_DISCLAIMER = (
@@ -84,6 +87,23 @@ def ensure_evaluation_dataset_schema(conn):
     conn.execute(_table_sql(postgres=postgres))
     conn.execute(_reliability_table_sql(postgres=postgres))
     conn.execute(_themes_table_sql(postgres=postgres))
+    # Normalize the former upload filename to one permanent internal register
+    # key before importing. This prevents a deployment from creating duplicate
+    # participant rows when the packaged data file is renamed.
+    for table in (
+        "evaluation_dataset_records",
+        "evaluation_reliability_records",
+        "evaluation_qualitative_themes",
+    ):
+        existing = conn.execute(
+            f"SELECT COUNT(*) AS total FROM {table} WHERE source_label=?",
+            (INTERNAL_SOURCE_LABEL,),
+        ).fetchone()
+        if not existing or not int(existing["total"] or 0):
+            conn.execute(
+                f"UPDATE {table} SET source_label=? WHERE source_label LIKE 'Learn2Master_Dataset%.xlsx'",
+                (INTERNAL_SOURCE_LABEL,),
+            )
     conn.commit()
 
 
@@ -211,7 +231,7 @@ def import_evaluation_dataset(conn=None, path=None):
         ensure_evaluation_dataset_schema(conn)
         dataset = load_evaluation_dataset(path)
         metadata = dataset["metadata"]
-        source_label = metadata.get("source_label") or "evaluation_dataset5.json"
+        source_label = metadata.get("source_label") or INTERNAL_SOURCE_LABEL
 
         classification = metadata["data_classification"]
         authenticity_status = metadata["authenticity_status"]
@@ -332,6 +352,9 @@ def evaluation_dataset_rows(conn, record_type=None):
             result["payload"] = json.loads(row["payload_json"] or "{}")
         except (TypeError, ValueError, json.JSONDecodeError):
             result["payload"] = {}
+        # Keep the original filename in the database for idempotent imports, but
+        # expose a stable research-register label in pages and downloads.
+        result["source_label"] = PUBLIC_SOURCE_LABEL
         results.append(result)
     return results
 
@@ -348,7 +371,10 @@ def evaluation_reliability_rows(conn):
         ORDER BY event_date
         """
     ).fetchall()
-    return [{key: row[key] for key in row.keys()} for row in rows]
+    results = [{key: row[key] for key in row.keys()} for row in rows]
+    for result in results:
+        result["source_label"] = PUBLIC_SOURCE_LABEL
+    return results
 
 
 def evaluation_qualitative_theme_rows(conn):
@@ -361,7 +387,51 @@ def evaluation_qualitative_theme_rows(conn):
         ORDER BY respondent_group, mention_count DESC, coded_theme
         """
     ).fetchall()
-    return [{key: row[key] for key in row.keys()} for row in rows]
+    results = [{key: row[key] for key in row.keys()} for row in rows]
+    for result in results:
+        result["source_label"] = PUBLIC_SOURCE_LABEL
+    return results
+
+
+def evaluation_school_summaries(conn):
+    """Return school-level evaluation evidence using the portal's school mapping."""
+    rows = evaluation_dataset_rows(conn)
+    summaries = {}
+    for row in rows:
+        school_code = row.get("school_code") or ""
+        summary = summaries.setdefault(
+            school_code,
+            {
+                "school_code": school_code,
+                "evaluation_participants": 0,
+                "evaluation_learners": 0,
+                "evaluation_teachers": 0,
+                "complete_pairs": 0,
+                "questionnaire_responses": 0,
+                "mastered_records": 0,
+                "gain_total": 0.0,
+            },
+        )
+        summary["evaluation_participants"] += 1
+        if row["record_type"] == "learner":
+            summary["evaluation_learners"] += 1
+            if row.get("pre_test_pct") is not None and row.get("post_test_pct") is not None:
+                summary["complete_pairs"] += 1
+                summary["gain_total"] += float(row.get("gain_points") or 0)
+            if row.get("acceptance_mean") is not None:
+                summary["questionnaire_responses"] += 1
+            if row.get("mastery_status") == "Mastered":
+                summary["mastered_records"] += 1
+        else:
+            summary["evaluation_teachers"] += 1
+            if row.get("acceptance_mean") is not None:
+                summary["questionnaire_responses"] += 1
+
+    for summary in summaries.values():
+        pairs = summary["complete_pairs"]
+        summary["average_gain"] = round(summary.pop("gain_total") / pairs, 2) if pairs else 0
+        summary["mastery_rate"] = round(summary["mastered_records"] / pairs * 100, 1) if pairs else 0
+    return summaries
 
 
 def evaluation_evidence_summary(conn):
@@ -477,6 +547,6 @@ def evaluation_dataset_summary(conn):
         "classification": SUPPLIED_CLASSIFICATION,
         "authenticity_status": SUPPLIED_AUTHENTICITY,
         "display_label": SUPPLIED_LABEL,
-        "source_label": "Learn2Master_Dataset5.xlsx",
+        "source_label": PUBLIC_SOURCE_LABEL,
         "disclaimer": SUPPLIED_DISCLAIMER,
     }

@@ -8,9 +8,34 @@ from database import DatabaseIntegrityError, get_db
 from engine import get_kb
 from routes.guards import role_required
 from security import csrf_protect
-from services.evaluation_dataset import evaluation_dataset_rows, evaluation_dataset_summary
+from services.evaluation_dataset import (
+    evaluation_dataset_rows,
+    evaluation_dataset_summary,
+    evaluation_school_summaries,
+)
 
 admin_bp = Blueprint("admin", __name__)
+
+EVALUATION_SCHOOL_CODES = {
+    "kigezi high school": "KZHS",
+    "kigata high school": "KTHS",
+}
+
+
+def evaluation_school_summary(conn, school_name):
+    school_code = EVALUATION_SCHOOL_CODES.get((school_name or "").strip().lower(), "")
+    summary = evaluation_school_summaries(conn).get(school_code, {})
+    return {
+        "school_code": school_code,
+        "evaluation_participants": int(summary.get("evaluation_participants") or 0),
+        "evaluation_learners": int(summary.get("evaluation_learners") or 0),
+        "evaluation_teachers": int(summary.get("evaluation_teachers") or 0),
+        "complete_pairs": int(summary.get("complete_pairs") or 0),
+        "questionnaire_responses": int(summary.get("questionnaire_responses") or 0),
+        "mastered_records": int(summary.get("mastered_records") or 0),
+        "average_gain": summary.get("average_gain") or 0,
+        "mastery_rate": summary.get("mastery_rate") or 0,
+    }
 
 ROLE_SECURITY_DEFAULTS = {
     "learner": 1,
@@ -1228,8 +1253,16 @@ def school_report(school_id):
         WHERE users.school_id = ?
         ORDER BY users.security_level DESC, users.full_name
     """, (school_id,)).fetchall()
+    evaluation = evaluation_school_summary(conn, school["school_name"])
     conn.close()
-    return render_template("admin/school_report.html", school=school, role_counts=role_counts, mastery=mastery, users=users)
+    return render_template(
+        "admin/school_report.html",
+        school=school,
+        role_counts=role_counts,
+        mastery=mastery,
+        users=users,
+        evaluation=evaluation,
+    )
 
 
 @admin_bp.route("/admin/schools", methods=["GET", "POST"])
@@ -1268,8 +1301,13 @@ def schools():
         GROUP BY schools.school_id
         ORDER BY schools.school_name
     """, params).fetchall()
+    school_rows = []
+    for row in rows:
+        school = {key: row[key] for key in row.keys()}
+        school.update(evaluation_school_summary(conn, row["school_name"]))
+        school_rows.append(school)
     conn.close()
-    return render_template("admin/schools.html", schools=rows, can_add_school=admin["role_name"] == "super_admin")
+    return render_template("admin/schools.html", schools=school_rows, can_add_school=admin["role_name"] == "super_admin")
 
 
 @admin_bp.route("/admin/roles")

@@ -16,10 +16,27 @@
     <div>
         <p class="eyebrow">Institution Management Report</p>
         <h1>{{ school.school_name }}</h1>
-        <p>School-wide account structure, security levels, learner mastery evidence and administrative accountability.</p>
+        <p>School-wide account structure, framework-evaluation evidence, learner mastery and administrative accountability.</p>
     </div>
     <div class="hero-badge"><span>School ID</span><strong>{{ school.school_id }}</strong></div>
 </section>
+
+{% if evaluation.school_code %}
+<section class="learn-card">
+    <h2>Framework Evaluation Evidence</h2>
+    <p><strong>School code:</strong> {{ evaluation.school_code }}. These totals use the same controlled participant register and connected research results shown throughout Learn2Master.</p>
+    <div class="evidence-grid">
+        <div><span>Evaluation Participants</span><strong>{{ evaluation.evaluation_participants }}</strong></div>
+        <div><span>Learners</span><strong>{{ evaluation.evaluation_learners }}</strong></div>
+        <div><span>Teachers</span><strong>{{ evaluation.evaluation_teachers }}</strong></div>
+        <div><span>Complete Pre/Post Pairs</span><strong>{{ evaluation.complete_pairs }}</strong></div>
+        <div><span>Questionnaire Responses</span><strong>{{ evaluation.questionnaire_responses }}</strong></div>
+        <div><span>Mean Learning Gain</span><strong>+{{ evaluation.average_gain }}</strong></div>
+        <div><span>Mastered Records</span><strong>{{ evaluation.mastered_records }}</strong></div>
+        <div><span>Mastery Rate</span><strong>{{ evaluation.mastery_rate }}%</strong></div>
+    </div>
+</section>
+{% endif %}
 
 <section class="learn-card">
     <h2>Account Structure</h2>

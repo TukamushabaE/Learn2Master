@@ -9,7 +9,7 @@
 {% block content %}
 <div class="profile-actions"><a class="profile-button" href="{{ url_for('research.participants') }}">Controlled Register</a><a class="profile-button" href="{{ url_for('research.export_full_dataset') }}">Download Connected Dataset</a></div>
 <section class="hero-panel">
-  <div><p class="eyebrow">Recorded Real Evaluation Participant</p><h1>{{ participant.participant_code }}</h1><p>This protected participant reference identifies the same evaluation record across the register, analysis, reports and downloadable evidence.</p></div>
+  <div><p class="eyebrow">Evaluation Participant Record</p><h1>{{ participant.participant_code }}</h1><p>This protected participant reference identifies the same evaluation record across the register, analysis, reports and downloadable evidence.</p></div>
   <div class="hero-badge"><span>Role</span><strong>{{ participant.record_type|title }}</strong></div>
 </section>
 
@@ -23,6 +23,8 @@
     <div><span>Class</span><strong>{{ participant.class_level or 'Teacher record' }}</strong></div>
     <div><span>Study status</span><strong>{{ participant.study_status }}</strong></div>
     <div><span>Register source</span><strong>Learn2Master evaluation data</strong></div>
+    <div><span>Assessment date</span><strong>Not recorded in evaluation source</strong></div>
+    <div><span>Portal registration timestamp</span><strong>{{ participant.imported_at }}</strong></div>
   </div>
 </section>
 

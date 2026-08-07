@@ -5,6 +5,7 @@
 <section class="learn-card">
     <span class="subject-code">Institution Management</span>
     <h1>Schools</h1>
+    <p>Portal accounts and recorded framework-evaluation evidence are shown together for each participating school.</p>
     {% if can_add_school %}
     <form method="post" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -18,6 +19,11 @@
             <span>{{ s.school_name }}</span>
             <strong>{{ s.classes }} class(es)</strong>
             <small>{{ s.users }} user account(s)</small>
+            {% if s.school_code %}
+            <small><strong>{{ s.school_code }}</strong> · {{ s.evaluation_participants }} evaluation participants ({{ s.evaluation_learners }} learners, {{ s.evaluation_teachers }} teachers)</small>
+            <small>{{ s.complete_pairs }} complete pre/post pairs · {{ s.questionnaire_responses }} questionnaire responses</small>
+            <small>Mean learning gain +{{ s.average_gain }} points · {{ s.mastered_records }} mastered ({{ s.mastery_rate }}%)</small>
+            {% endif %}
             <a href="{{ url_for('admin.school_report', school_id=s.school_id) }}">Open printable school report</a>
         </div>
         {% endfor %}
