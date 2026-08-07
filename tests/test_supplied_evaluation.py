@@ -2,14 +2,18 @@ import csv
 import io
 
 from conftest import login
+from werkzeug.security import check_password_hash
 from services.evaluation_dataset import (
     PUBLIC_RECORD_SOURCE,
     PUBLIC_SOURCE_LABEL,
     SUPPLIED_AUTHENTICITY,
     SUPPLIED_CLASSIFICATION,
     evaluation_dataset_summary,
+    evaluation_account_map,
     evaluation_school_summaries,
     import_evaluation_dataset,
+    participant_temporary_password,
+    provision_evaluation_accounts,
 )
 from routes.research import connected_research_summary
 
@@ -354,10 +358,51 @@ def test_school_filters_keep_evaluation_records_linked_to_the_correct_school(cli
     assert_public_source_name_is_normalized(kigata)
 
 
-def test_account_management_links_research_identities_without_creating_logins(client, db):
+def test_account_management_provisions_and_links_real_current_logins(client, db, monkeypatch):
+    secret = "evaluation-account-test-secret-2026"
+    monkeypatch.setenv("LEARN2MASTER_PARTICIPANT_ACCOUNT_SECRET", secret)
     import_evaluation_dataset(conn=db)
     account_count = db.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"]
-    login(client, "admin", "12345")
+    provisioned = provision_evaluation_accounts(conn=db, secret=secret)
+
+    assert provisioned == {
+        "total": 72,
+        "created": 72,
+        "linked_existing": 0,
+        "already_linked": 0,
+    }
+    assert len(evaluation_account_map(db)) == 72
+    account = db.execute("""
+        SELECT users.*, roles.role_name, schools.school_name,
+               links.credential_state, links.provisioned_at
+        FROM users
+        JOIN roles ON roles.role_id=users.role_id
+        JOIN schools ON schools.school_id=users.school_id
+        JOIN evaluation_account_links links ON links.user_id=users.user_id
+        WHERE users.username='KZHS-L032'
+    """).fetchone()
+    assert account["full_name"] == "Participant KZHS-L032"
+    assert account["email"] is None
+    assert account["role_name"] == "learner"
+    assert account["school_name"] == "Kigezi High School"
+    assert account["account_status"] == "Active"
+    assert account["must_change_password"] == 1
+    assert account["last_login_at"] is None
+    assert account["created_at"]
+    assert account["provisioned_at"]
+    assert account["credential_state"] == "Temporary password active"
+    assert check_password_hash(
+        account["password_hash"],
+        participant_temporary_password("KZHS-L032", secret),
+    )
+    assert provision_evaluation_accounts(conn=db, secret=secret) == {
+        "total": 72,
+        "created": 0,
+        "linked_existing": 0,
+        "already_linked": 72,
+    }
+
+    login(client, "superadmin", "12345")
 
     page = client.get("/admin/users")
     assert page.status_code == 200
@@ -370,13 +415,35 @@ def test_account_management_links_research_identities_without_creating_logins(cl
     assert b"KTHS-L032" in page.data
     assert b"KZHS-T001" in page.data
     assert b"KTHS-T004" in page.data
+    assert b"Linked participant accounts</span><strong>72" in page.data
+    assert b"Evaluation + portal account" in page.data
+    assert b"password change required" in page.data
     assert b"Participant register, pre/post assessment, learning gain, mastery" in page.data
     assert b"coded" not in page.data.lower()
-    assert db.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"] == account_count
+    assert db.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"] == account_count + 72
+
+    credentials = client.get("/admin/evaluation-accounts/credentials.csv")
+    assert credentials.status_code == 200
+    assert "no-store" in credentials.headers["Cache-Control"]
+    assert "private" in credentials.headers["Cache-Control"]
+    assert b"KZHS-L032" in credentials.data
+    assert participant_temporary_password("KZHS-L032", secret).encode() in credentials.data
+
+    client.get("/logout")
+    participant_login = login(
+        client,
+        "KZHS-L032",
+        participant_temporary_password("KZHS-L032", secret),
+    )
+    assert participant_login.status_code == 302
+    assert participant_login.headers["Location"].endswith("/change-password")
 
 
-def test_every_evaluation_participant_opens_a_whole_system_evidence_profile(client, db):
+def test_every_evaluation_participant_opens_a_whole_system_evidence_profile(client, db, monkeypatch):
+    secret = "evaluation-account-test-secret-2026"
+    monkeypatch.setenv("LEARN2MASTER_PARTICIPANT_ACCOUNT_SECRET", secret)
     import_evaluation_dataset(conn=db)
+    provision_evaluation_accounts(conn=db, secret=secret)
     login(client, "admin", "12345")
 
     learner = client.get("/research/evaluation-participants/KZHS-L001")
@@ -389,6 +456,10 @@ def test_every_evaluation_participant_opens_a_whole_system_evidence_profile(clie
     assert b"Mastery Attainment" in learner.data
     assert b"AI Feedback Responsiveness" in learner.data
     assert b"Chapter Four" in learner.data
+    assert b"Authenticated Portal Account" in learner.data
+    assert b"KZHS-L001" in learner.data
+    assert b"Change required at first login" in learner.data
+    assert b"No login recorded yet" in learner.data
     assert b"coded" not in learner.data.lower()
 
     teacher = client.get("/research/evaluation-participants/KTHS-T004")
@@ -396,7 +467,7 @@ def test_every_evaluation_participant_opens_a_whole_system_evidence_profile(clie
     assert b"Teacher evaluation result" in teacher.data
     assert b"Teacher questionnaire and oversight" in teacher.data
     assert b"Questionnaire Results" in teacher.data
-    assert b"Portal registration timestamp" in teacher.data
+    assert b"Evaluation register import timestamp" in teacher.data
     assert b"Assessment date" in teacher.data
     assert b"Not recorded in evaluation source" in teacher.data
 

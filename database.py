@@ -69,6 +69,7 @@ PRIMARY_KEYS = {
     "research_questionnaire_responses": "id",
     "research_questionnaire_answers": "id",
     "evaluation_dataset_records": "evaluation_record_id",
+    "evaluation_account_links": "participant_code",
     "offline_sync_queue": "sync_id",
     "sync_queue": "queue_id",
     "offline_activity_logs": "offline_log_id",

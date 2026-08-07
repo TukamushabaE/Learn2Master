@@ -1,6 +1,8 @@
+import csv
+import io
 import os
 from datetime import datetime, timedelta
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, Response, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -9,9 +11,11 @@ from engine import get_kb
 from routes.guards import role_required
 from security import csrf_protect
 from services.evaluation_dataset import (
+    evaluation_account_map,
     evaluation_dataset_rows,
     evaluation_dataset_summary,
     evaluation_school_summaries,
+    participant_temporary_password,
 )
 
 admin_bp = Blueprint("admin", __name__)
@@ -778,9 +782,12 @@ def users():
     schools = managed_schools(conn, admin)
     research_identity_summary = evaluation_dataset_summary(conn)
     evaluation_rows = evaluation_dataset_rows(conn)
+    evaluation_accounts = evaluation_account_map(conn)
 
     controlled_register = []
+    linked_user_ids = set()
     for row in evaluation_rows:
+        account = evaluation_accounts.get(row["participant_code"])
         if role_filter and row["record_type"] != role_filter:
             continue
         search_fields = " ".join(str(row.get(key) or "") for key in (
@@ -788,7 +795,7 @@ def users():
         )).lower()
         if search and search.lower() not in search_fields:
             continue
-        if status_filter:
+        if status_filter and (not account or account["account_status"] != status_filter):
             continue
         learner_payload = (row.get("payload") or {}).get("learner_study") or {}
         connected_features = (
@@ -799,22 +806,35 @@ def users():
         )
         controlled_register.append({
             "identity": row["participant_code"],
-            "reference": row["participant_code"],
+            "reference": account["username"] if account else row["participant_code"],
             "role_name": row["record_type"],
-            "school": row.get("school_code") or "",
+            "school": account["school_name"] if account else (row.get("school_code") or ""),
             "class_subject": " / ".join(
                 value for value in (row.get("class_level"), row.get("subject")) if value
             ),
-            "status": learner_payload.get("eligibility_status") or row.get("study_status") or "Recorded",
-            "register_source": "Recorded evaluation data",
-            "access_type": "Protected participant identity",
+            "status": account["account_status"] if account else "Account not provisioned",
+            "register_source": "Evaluation + portal account" if account else "Recorded evaluation data",
+            "access_type": (
+                f"Authenticated · {'password change required' if account['must_change_password'] else 'password changed'}"
+                if account else "Protected participant identity"
+            ),
             "connected_features": connected_features,
+            "account_created_at": account["created_at"] if account else "",
+            "last_login_at": account["last_login_at"] if account else "",
             "profile_url": url_for(
                 "research.evaluation_participant_view",
                 participant_code=row["participant_code"],
             ),
+            "account_profile_url": (
+                url_for("admin.user_report", user_id=account["user_id"])
+                if account else None
+            ),
         })
+        if account:
+            linked_user_ids.add(account["user_id"])
     for user in rows:
+        if user["user_id"] in linked_user_ids:
+            continue
         controlled_register.append({
             "identity": user["full_name"],
             "reference": user["username"],
@@ -825,7 +845,10 @@ def users():
             "register_source": "Portal account",
             "access_type": f"Security level {user['security_level']}",
             "connected_features": "Authentication, role dashboard, operational records and audit trail",
+            "account_created_at": user["created_at"],
+            "last_login_at": user["last_login_at"],
             "profile_url": url_for("admin.user_report", user_id=user["user_id"]),
+            "account_profile_url": None,
         })
     controlled_register.sort(key=lambda row: (row["register_source"], row["role_name"], row["reference"]))
 
@@ -839,6 +862,7 @@ def users():
     teacher_responses = sum(row.get("acceptance_mean") is not None for row in teacher_rows)
     feature_coverage = [
         {"feature": "Controlled participant register", "records": len(evaluation_rows), "status": "Connected"},
+        {"feature": "Authenticated participant accounts", "records": len(evaluation_accounts), "status": "Linked"},
         {"feature": "Pre/post assessment and learning gain", "records": complete_pairs, "status": "Connected"},
         {"feature": "Mastery results", "records": complete_pairs, "status": "Connected"},
         {"feature": "Learner questionnaires", "records": learner_responses, "status": "Connected"},
@@ -860,8 +884,61 @@ def users():
         research_identity_summary=research_identity_summary,
         controlled_register=controlled_register,
         evaluation_register_count=len(evaluation_rows),
+        linked_evaluation_account_count=len(evaluation_accounts),
         portal_account_count=len(rows),
         feature_coverage=feature_coverage,
+    )
+
+
+@admin_bp.route("/admin/evaluation-accounts/credentials.csv")
+@role_required("super_admin")
+def evaluation_account_credentials():
+    conn = get_db()
+    accounts = evaluation_account_map(conn)
+    temporary_accounts = [
+        account for account in accounts.values()
+        if account["credential_state"] == "Temporary password active"
+        and int(account["must_change_password"] or 0) == 1
+    ]
+    temporary_accounts.sort(key=lambda account: account["participant_code"])
+
+    output = io.StringIO()
+    output.write("\ufeff")
+    writer = csv.writer(output)
+    writer.writerow([
+        "Participant Code", "Username", "Temporary Password", "Role", "School",
+        "Account Status", "Password Requirement", "Account Created At",
+    ])
+    for account in temporary_accounts:
+        writer.writerow([
+            account["participant_code"],
+            account["username"],
+            participant_temporary_password(account["participant_code"]),
+            account["role_name"],
+            account["school_name"] or "",
+            account["account_status"],
+            "Must change at first login",
+            account["created_at"],
+        ])
+
+    audit(
+        conn,
+        "EXPORT_TEMPORARY_EVALUATION_CREDENTIALS",
+        "evaluation_account_links",
+        "all",
+        f"Exported {len(temporary_accounts)} current temporary participant credentials",
+    )
+    conn.commit()
+    conn.close()
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=Learn2Master_participant_login_credentials.csv",
+            "Cache-Control": "no-store, private",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -1078,6 +1155,12 @@ def reset_password(user_id):
             locked_until = NULL, account_status = 'Active'
         WHERE user_id = ?
     """, (generate_password_hash(new_password), user_id))
+    conn.execute("""
+        UPDATE evaluation_account_links
+        SET credential_state='Administrator password reset',
+            last_verified_at=CURRENT_TIMESTAMP
+        WHERE user_id=?
+    """, (user_id,))
     audit(conn, "RESET_PASSWORD", "user", user_id, "Password reset and account unlocked")
     conn.commit()
     conn.close()

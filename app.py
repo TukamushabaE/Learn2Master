@@ -135,6 +135,16 @@ with app.app_context():
                 result["reliability_days"],
                 result["qualitative_themes"],
             )
+            if result.get("accounts"):
+                account_result = result["accounts"]
+                app.logger.info(
+                    "Evaluation participant accounts ready: %s total, %s created, "
+                    "%s existing linked and %s already linked.",
+                    account_result["total"],
+                    account_result["created"],
+                    account_result["linked_existing"],
+                    account_result["already_linked"],
+                )
         except Exception:
             app.logger.exception("Recorded evaluation data import failed; the core application will continue.")
 

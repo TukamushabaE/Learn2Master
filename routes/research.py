@@ -13,6 +13,7 @@ from security import csrf_protect
 from services.evaluation_dataset import (
     PUBLIC_RECORD_SOURCE,
     SUPPLIED_DISCLAIMER,
+    evaluation_account_map,
     evaluation_evidence_summary,
     evaluation_dataset_rows,
     evaluation_dataset_summary,
@@ -1877,6 +1878,7 @@ def participants():
 @role_required(*RESEARCH_ROLES)
 def evaluation_participant_view(participant_code):
     conn = get_db()
+    account = evaluation_account_map(conn).get(participant_code.upper())
     participant = next(
         (
             row for row in evaluation_dataset_rows(conn)
@@ -1926,6 +1928,7 @@ def evaluation_participant_view(participant_code):
     return render_template(
         "research/evaluation_participant_view.html",
         participant=participant,
+        account=account,
         learner=learner,
         questionnaire_items=questionnaire_items,
         linked_features=[
