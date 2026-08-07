@@ -129,6 +129,10 @@ def main():
     seed_parser.set_defaults(seed_demo=True)
 
     subcommands.add_parser("migrate", help="Apply tracked additive schema migrations without deleting data.")
+    subcommands.add_parser(
+        "import-evaluation-dataset",
+        help="Import the labelled user-supplied evaluation workbook rows into an isolated table.",
+    )
 
     users_parser = subcommands.add_parser("create-initial-users", help="Create the first super admin, school admin, and teacher.")
     users_parser.add_argument("--update-passwords", action="store_true", help="Rotate passwords for existing bootstrap users from env vars.")
@@ -150,6 +154,16 @@ def main():
 
     if args.command == "seed-demo-data":
         import seed_data  # noqa: F401 - module execution performs idempotent seed.
+        return
+
+    if args.command == "import-evaluation-dataset":
+        from services.evaluation_dataset import import_evaluation_dataset
+
+        result = import_evaluation_dataset()
+        print(
+            f"Imported {result['learners']} supplied learner rows and {result['teachers']} supplied teacher rows "
+            f"from {result['source_label']} as {result['classification']} / {result['authenticity_status']}."
+        )
         return
 
     if args.command == "create-initial-users":

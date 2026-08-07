@@ -10,6 +10,11 @@ from flask import Blueprint, Response, flash, redirect, render_template, request
 from database import DatabaseIntegrityError, get_db
 from routes.guards import role_required
 from security import csrf_protect
+from services.evaluation_dataset import (
+    SUPPLIED_DISCLAIMER,
+    evaluation_dataset_rows,
+    evaluation_dataset_summary,
+)
 from services.research_analytics import (
     learning_gain_summary as centralized_learning_gain_summary,
     paired_learning_gain_rows,
@@ -952,6 +957,7 @@ def render_table(
 def research_dashboard():
     conn = get_db()
     metrics = research_metrics(conn)
+    supplied_metrics = evaluation_dataset_summary(conn)
     weak_concepts = weak_concept_rows(conn)
     chart_data = {
         "pre_post": [
@@ -966,7 +972,63 @@ def research_dashboard():
         "teacher": [{"label": "Interventions", "value": metrics["teacher_intervention_count"]}],
     }
     conn.close()
-    return render_template("research/dashboard.html", metrics=metrics, weak_concepts=weak_concepts, chart_data=chart_data)
+    return render_template(
+        "research/dashboard.html",
+        metrics=metrics,
+        supplied_metrics=supplied_metrics,
+        weak_concepts=weak_concepts,
+        chart_data=chart_data,
+    )
+
+
+@research_bp.route("/research/demo-evaluation")
+@research_bp.route("/research/supplied-evaluation")
+@role_required(*RESEARCH_ROLES)
+def supplied_evaluation():
+    conn = get_db()
+    summary = evaluation_dataset_summary(conn)
+    learners = evaluation_dataset_rows(conn, "learner")
+    teachers = evaluation_dataset_rows(conn, "teacher")
+    conn.close()
+    return render_template(
+        "research/supplied_evaluation.html",
+        summary=summary,
+        learners=learners,
+        teachers=teachers,
+        disclaimer=SUPPLIED_DISCLAIMER,
+    )
+
+
+@research_bp.route("/research/demo-evaluation/export.csv")
+@research_bp.route("/research/supplied-evaluation/export.csv")
+@role_required(*RESEARCH_ROLES)
+def export_supplied_evaluation():
+    conn = get_db()
+    rows = evaluation_dataset_rows(conn)
+    conn.close()
+    columns = [
+        ("data_classification", "data_classification"),
+        ("authenticity_status", "authenticity_status"),
+        ("source_label", "source_label"),
+        ("record_type", "record_type"),
+        ("participant_code", "participant_code"),
+        ("school_code", "school_code"),
+        ("subject", "subject"),
+        ("class_level", "class_level"),
+        ("study_status", "study_status"),
+        ("pre_test_pct", "pre_test_pct"),
+        ("post_test_pct", "post_test_pct"),
+        ("gain_points", "gain_points"),
+        ("acceptance_mean", "acceptance_mean"),
+        ("mastery_status", "mastery_status"),
+        ("imported_at", "imported_at"),
+    ]
+    return csv_response(
+        "learn2master_USER_SUPPLIED_RESEARCH_DATA.csv",
+        columns,
+        rows,
+        "user_supplied_evaluation",
+    )
 
 
 @research_bp.route("/research/chapter-guide")

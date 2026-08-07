@@ -1,0 +1,104 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Supplied Evaluation Dataset{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>
+.demo-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:14px}.demo-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.provenance-warning{border:2px solid #b54708;background:#fff4e5;color:#7a2e0e;border-radius:16px;padding:18px;margin:0 0 18px}.provenance-warning strong{display:block;font-size:1.08rem;margin-bottom:6px}.demo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0}.demo-card{border:1px solid #e4ebf4;border-radius:14px;background:#fff;padding:15px}.demo-card span{display:block;color:#687789;font-size:.78rem;font-weight:800;text-transform:uppercase}.demo-card strong{display:block;color:#10233f;font-size:1.45rem;margin-top:6px}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:16px}.score-panel{border:1px solid #e4ebf4;border-radius:14px;padding:16px;background:#fff}.score-track{height:14px;background:#e8eef6;border-radius:999px;overflow:hidden;margin:10px 0}.score-fill{height:100%;background:#6e8fb7}.score-fill.post{background:#0f8f83}.dataset-table-wrap{overflow:auto}.dataset-table{width:100%;border-collapse:collapse;min-width:1050px}.dataset-table th,.dataset-table td{border-bottom:1px solid #e7edf5;padding:9px;text-align:left;vertical-align:top}.dataset-table th{font-size:.74rem;text-transform:uppercase;color:#496174;background:#f8fbff;position:sticky;top:0}.classification{font-weight:900;color:#b54708}.section-note{color:#687789;margin-top:-4px}@media(max-width:720px){.comparison{grid-template-columns:1fr}}@media print{.sidebar,.topbar,.footer,.demo-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none}.dataset-table{min-width:0;font-size:9px}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="demo-actions">
+  <a class="demo-button" href="{{ url_for('research.research_dashboard') }}">Operational Research Dashboard</a>
+  <a class="demo-button" href="{{ url_for('research.export_supplied_evaluation') }}">Export Labelled Dataset CSV</a>
+  <button class="demo-button" onclick="window.print()">Print</button>
+</div>
+
+<div class="provenance-warning" role="alert">
+  <strong>USER-SUPPLIED DE-IDENTIFIED DATA â€” NOT INDEPENDENTLY VERIFIED</strong>
+  {{ disclaimer }} Every screen and exported row retains the classifications <b>{{ summary.classification }}</b> and <b>{{ summary.authenticity_status }}</b>.
+</div>
+
+<section class="hero-panel">
+  <div>
+    <p class="eyebrow">Imported Research Dataset</p>
+    <h1>Learn2Master Supplied Evaluation Records</h1>
+    <p>This isolated view presents the coded learner and teacher rows imported from Learn2Master_Dataset5.xlsx. It is excluded from live operational research metrics.</p>
+  </div>
+  <div class="hero-badge"><span>Evidence status</span><strong>SUPPLIED</strong></div>
+</section>
+
+<div class="demo-grid">
+  <div class="demo-card"><span>Learner Rows</span><strong>{{ summary.learner_records }}</strong></div>
+  <div class="demo-card"><span>Complete Pairs</span><strong>{{ summary.complete_pairs }}</strong></div>
+  <div class="demo-card"><span>Teacher Rows</span><strong>{{ summary.teacher_records }}</strong></div>
+  <div class="demo-card"><span>Mean Pre-test</span><strong>{{ summary.average_pre_test }}%</strong></div>
+  <div class="demo-card"><span>Mean Post-test</span><strong>{{ summary.average_post_test }}%</strong></div>
+  <div class="demo-card"><span>Mean Gain</span><strong>+{{ summary.average_gain }}</strong></div>
+  <div class="demo-card"><span>Pairs Improved</span><strong>{{ summary.improved_pairs }}/{{ summary.complete_pairs }}</strong></div>
+  <div class="demo-card"><span>Improved Rate</span><strong>{{ summary.improved_rate }}%</strong></div>
+  <div class="demo-card"><span>Mastered Rows</span><strong>{{ summary.mastered_records }}</strong></div>
+  <div class="demo-card"><span>Learner Acceptance</span><strong>{{ summary.learner_acceptance }}/5</strong></div>
+  <div class="demo-card"><span>Teacher Acceptance</span><strong>{{ summary.teacher_acceptance }}/5</strong></div>
+</div>
+
+<section class="learn-card">
+  <h2>Supplied Pre/Post Comparison</h2>
+  <p class="section-note">Descriptive paired result from the supplied workbook; without a control group it does not establish that the framework caused the change.</p>
+  <div class="comparison" role="img" aria-label="User-supplied mean pre-test and post-test comparison">
+    <div class="score-panel">
+      <strong>Mean Pre-test â€” {{ summary.average_pre_test }}%</strong>
+      <div class="score-track"><div class="score-fill" style="width:{{ summary.average_pre_test }}%"></div></div>
+    </div>
+    <div class="score-panel">
+      <strong>Mean Post-test â€” {{ summary.average_post_test }}%</strong>
+      <div class="score-track"><div class="score-fill post" style="width:{{ summary.average_post_test }}%"></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="learn-card">
+  <h2>Learner Study Records</h2>
+  <p class="section-note">De-identified coded records imported from the workbook. The workbook's Evidence Log contains no verified dated participant entries.</p>
+  <div class="dataset-table-wrap">
+    <table class="dataset-table">
+      <thead><tr><th>Classification</th><th>Participant Code</th><th>School Code</th><th>Subject</th><th>Class</th><th>Study Status</th><th>Pre-test</th><th>Post-test</th><th>Gain</th><th>Mastery</th><th>Acceptance</th><th>Source</th></tr></thead>
+      <tbody>
+      {% for row in learners %}
+        <tr>
+          <td class="classification">{{ row.data_classification }}<br><small>{{ row.authenticity_status }}</small></td>
+          <td>{{ row.participant_code }}</td><td>{{ row.school_code }}</td><td>{{ row.subject }}</td><td>{{ row.class_level }}</td><td>{{ row.study_status }}</td>
+          <td>{{ row.pre_test_pct if row.pre_test_pct is not none else 'â€”' }}</td><td>{{ row.post_test_pct if row.post_test_pct is not none else 'â€”' }}</td><td>{{ row.gain_points if row.gain_points is not none else 'â€”' }}</td>
+          <td>{{ row.mastery_status or 'â€”' }}</td><td>{{ row.acceptance_mean if row.acceptance_mean is not none else 'â€”' }}</td><td>{{ row.source_label }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="12">No supplied learner records have been imported.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="learn-card">
+  <h2>Teacher Survey Records</h2>
+  <div class="dataset-table-wrap">
+    <table class="dataset-table">
+      <thead><tr><th>Classification</th><th>Teacher Code</th><th>School Code</th><th>Subject</th><th>Acceptance Mean</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+      {% for row in teachers %}
+        <tr><td class="classification">{{ row.data_classification }}<br><small>{{ row.authenticity_status }}</small></td><td>{{ row.participant_code }}</td><td>{{ row.school_code }}</td><td>{{ row.subject }}</td><td>{{ row.acceptance_mean }}/5</td><td>{{ row.study_status }}</td><td>{{ row.source_label }}</td></tr>
+      {% else %}
+        <tr><td colspan="7">No supplied teacher rows have been imported.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="provenance-warning">
+  <strong>Research reporting rule</strong>
+  The workbook supports a favourable pre/post association for this sample, not definitive causal effectiveness. Do not claim a six-month participant evaluation unless verified dated source records establish at least 182 days of coverage.
+</div>
+{% endblock %}

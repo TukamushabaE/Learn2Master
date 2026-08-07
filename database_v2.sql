@@ -692,6 +692,27 @@ CREATE TABLE IF NOT EXISTS research_questionnaire_answers (
     UNIQUE (response_id, item_id)
 );
 
+CREATE TABLE IF NOT EXISTS evaluation_dataset_records (
+    evaluation_record_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    record_type TEXT NOT NULL CHECK (record_type IN ('learner', 'teacher')),
+    participant_code TEXT NOT NULL,
+    school_code TEXT,
+    subject TEXT,
+    class_level TEXT,
+    study_status TEXT,
+    pre_test_pct REAL,
+    post_test_pct REAL,
+    gain_points REAL,
+    acceptance_mean REAL,
+    mastery_status TEXT,
+    payload_json TEXT NOT NULL,
+    data_classification TEXT NOT NULL DEFAULT 'USER_SUPPLIED_RESEARCH_DATA',
+    authenticity_status TEXT NOT NULL DEFAULT 'NOT_INDEPENDENTLY_VERIFIED',
+    source_label TEXT NOT NULL,
+    imported_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (record_type, participant_code, source_label)
+);
+
 CREATE TABLE IF NOT EXISTS offline_sync_queue (
     sync_id INTEGER PRIMARY KEY AUTOINCREMENT,
     learner_id INTEGER,

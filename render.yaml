@@ -41,6 +41,8 @@ services:
         value: "0"
       - key: LEARN2MASTER_AUTO_SEED_DEMO
         value: "0"
+      - key: LEARN2MASTER_AUTO_IMPORT_EVALUATION_DATA
+        value: "1"
       - key: LEARN2MASTER_SEED_LEARNER_PASSWORD
         sync: false
       - key: LEARN2MASTER_SEED_TEACHER_PASSWORD

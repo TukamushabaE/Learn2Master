@@ -120,6 +120,22 @@ with app.app_context():
             init_db.run_sqlite(db_path=sqlite_path_from_url(db_url))
         app.logger.info("Database initialization complete.")
 
+    auto_import_evaluation = os.environ.get("LEARN2MASTER_AUTO_IMPORT_EVALUATION_DATA", "0") == "1"
+    legacy_auto_seed = os.environ.get("LEARN2MASTER_AUTO_SEED_DEMO", "0") == "1"
+    if auto_import_evaluation or legacy_auto_seed:
+        try:
+            from services.evaluation_dataset import import_evaluation_dataset
+
+            result = import_evaluation_dataset()
+            app.logger.info(
+                "User-supplied evaluation data ready: %s learner rows, %s teacher rows (%s).",
+                result["learners"],
+                result["teachers"],
+                result["authenticity_status"],
+            )
+        except Exception:
+            app.logger.exception("Supplied evaluation data import failed; the core application will continue.")
+
 login_manager = LoginManager()
 login_manager.login_view = "auth.login_view"
 login_manager.init_app(app)
