@@ -2,7 +2,7 @@
 {% block title %}Research Reports{% endblock %}
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
-<style>.report-row{display:grid;grid-template-columns:1.2fr 1fr;gap:12px;padding:10px 0;border-bottom:1px solid #edf1f6}.print-actions{display:flex;gap:10px;justify-content:flex-end;margin-bottom:14px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}@media print{.sidebar,.topbar,.footer,.print-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}}</style>
+<style>.report-row{display:grid;grid-template-columns:1.2fr 1fr;gap:12px;padding:10px 0;border-bottom:1px solid #edf1f6}.print-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:14px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.capture-table{width:100%;border-collapse:collapse}.capture-table th,.capture-table td{padding:9px;border-bottom:1px solid #e5edf5;text-align:left}.capture-table th{color:#496174;font-size:.78rem;text-transform:uppercase}.capture-status{font-weight:800;color:#08756b}.connected-report{border:2px solid #4d91c6;background:#f5faff}@media print{.sidebar,.topbar,.footer,.print-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}}</style>
 {% endblock %}
 {% block content %}
 <div class="print-actions">
@@ -11,15 +11,31 @@
   <a class="button" href="{{ url_for('research.export_learning_gain') }}">Learning Gain</a>
   <a class="button" href="{{ url_for('research.export_mastery') }}">Mastery</a>
   <a class="button" href="{{ url_for('research.export_questionnaires') }}">Questionnaires</a>
-  <a class="button" href="{{ url_for('research.export_full_dataset') }}">Full Dataset</a>
+  <a class="button" href="{{ url_for('research.export_full_dataset') }}">Connected Dataset</a>
   <button class="button" onclick="window.print()">Print</button>
 </div>
 <section class="hero-panel">
-  <div><p class="eyebrow">Dissertation Evidence Export</p><h1>Research Reports</h1><p>Computed indicators for mastery-based learning evaluation, teacher support, AI confidence, evidence completion and low-resource readiness.</p></div>
-  <div class="hero-badge"><span>Mastery Rate</span><strong>{{ metrics.mastery_rate }}%</strong></div>
+  <div><p class="eyebrow">Dissertation Evidence Export</p><h1>Connected Research Reports</h1><p>Dataset 5 and newly captured portal evidence are linked here for assessment, mastery, acceptance, teacher support, AI and reliability reporting.</p></div>
+  <div class="hero-badge"><span>Paired Records</span><strong>{{ connected_summary.total_paired_records }}</strong></div>
+</section>
+<section class="learn-card connected-report">
+  <h2>Combined Evaluation Summary</h2>
+  <div class="report-row"><strong>Dataset 5 Paired Records</strong><span>{{ connected_summary.dataset5_pairs }}</span></div>
+  <div class="report-row"><strong>Automatically Captured Portal Pairs</strong><span>{{ connected_summary.portal_pairs }}</span></div>
+  <div class="report-row"><strong>Total Paired Records</strong><span>{{ connected_summary.total_paired_records }}</span></div>
+  <div class="report-row"><strong>Combined Mean Pre-test</strong><span>{{ connected_summary.average_pre_test }}%</span></div>
+  <div class="report-row"><strong>Combined Mean Post-test</strong><span>{{ connected_summary.average_post_test }}%</span></div>
+  <div class="report-row"><strong>Combined Mean Gain</strong><span>+{{ connected_summary.average_gain }} points</span></div>
+  <div class="report-row"><strong>Combined Improvement Rate</strong><span>{{ connected_summary.improved_rate }}%</span></div>
+  <div class="report-row"><strong>Combined Mastery Rate</strong><span>{{ connected_summary.mastery_rate }}%</span></div>
 </section>
 <section class="learn-card">
-  <h2>Evaluation Metrics</h2>
+  <h2>System-to-Report Data Links</h2>
+  <p>These links are queried directly whenever the report or connected dataset is opened, so new consent-linked records are included automatically.</p>
+  <div style="overflow:auto"><table class="capture-table"><thead><tr><th>Stream</th><th>System source</th><th>Records</th><th>Status</th></tr></thead><tbody>{% for link in capture_links %}<tr><td>{{ link.stream }}</td><td>{{ link.system_source }}</td><td>{{ link.count }}</td><td class="capture-status">{{ link.status }}</td></tr>{% endfor %}</tbody></table></div>
+</section>
+<section class="learn-card">
+  <h2>Automatically Captured Portal Metrics</h2>
   {% for key, value in metrics.items() %}
   <div class="report-row"><strong>{{ key.replace('_',' ')|title }}</strong><span>{{ value }}</span></div>
   {% endfor %}

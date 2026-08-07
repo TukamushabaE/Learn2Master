@@ -5,6 +5,7 @@ from services.evaluation_dataset import (
     evaluation_dataset_summary,
     import_evaluation_dataset,
 )
+from routes.research import connected_research_summary
 
 
 def test_dataset5_import_preserves_supplied_rows_and_results(db):
@@ -64,7 +65,7 @@ def test_dataset_page_and_export_present_recorded_research_data(client, db):
     assert b"Learn2Master_Dataset5.xlsx" in export.data
 
 
-def test_supplied_rows_remain_separate_from_live_participants(client, db):
+def test_dataset5_links_to_reports_without_overwriting_live_participants(client, db):
     live_before = db.execute("SELECT COUNT(*) AS total FROM research_participants").fetchone()["total"]
     import_evaluation_dataset(conn=db)
     live_after = db.execute("SELECT COUNT(*) AS total FROM research_participants").fetchone()["total"]
@@ -73,16 +74,65 @@ def test_supplied_rows_remain_separate_from_live_participants(client, db):
     login(client, "admin", "12345")
     dashboard = client.get("/research/dashboard")
     assert dashboard.status_code == 200
-    assert b"64 learner rows, 60 matched pairs and 8 teacher survey rows" in dashboard.data
+    assert b"Connected research evidence is active across the entire system" in dashboard.data
+    assert b"Combined Research Evidence" in dashboard.data
+    assert b"How the Entire System Feeds the Research Report" in dashboard.data
     assert b"Dataset5 Summary Results" in dashboard.data
     assert b"Mean Gain" in dashboard.data
     assert b"+21.51" in dashboard.data
-    assert b"Live Account-Generated Records" in dashboard.data
+    assert b"Automatically Captured Portal Evidence" in dashboard.data
     assert b"Dataset5 Results" in dashboard.data
+
+    reports = client.get("/research/reports")
+    assert reports.status_code == 200
+    assert b"Connected Research Reports" in reports.data
+    assert b"System-to-Report Data Links" in reports.data
+
+    report_export = client.get("/research/reports?format=csv")
+    assert report_export.status_code == 200
+    assert b"connected_research,total_paired_records" in report_export.data
+    assert b"dataset5,complete_pairs,60" in report_export.data
 
     chapter_four = client.get("/research/chapter-four-report")
     assert chapter_four.status_code == 200
     assert b"Dataset5 Evaluation Summary" in chapter_four.data
+    assert b"Connected Research Evidence Summary" in chapter_four.data
     assert b"Learn2Master_Dataset5.xlsx" in chapter_four.data
     assert b"KTHS-L001" in chapter_four.data
-    assert b"Separate Live Account-Generated Evidence" in chapter_four.data
+    assert b"Automatically Updated Portal Evidence" in chapter_four.data
+
+    chapter_five = client.get("/research/chapter-five-insights")
+    assert chapter_five.status_code == 200
+    assert b"Connected Discussion and Insights" in chapter_five.data
+    assert b"Dataset 5 records show a mean increase" in chapter_five.data
+
+    connected_export = client.get("/research/export/full-dataset")
+    assert connected_export.status_code == 200
+    assert b"record_source,capture_mode,record_type" in connected_export.data
+    assert b"Dataset 5 research evaluation" in connected_export.data
+    assert b"KTHS-L001" in connected_export.data
+
+
+def test_new_linked_portal_attempt_is_automatically_counted(db):
+    import_evaluation_dataset(conn=db)
+    before = connected_research_summary(db)
+    before_assessments = next(
+        row["count"] for row in before["capture_links"] if row["stream"] == "Assessments"
+    )
+    learner = db.execute("SELECT user_id FROM users WHERE username='elijah'").fetchone()
+    assessment = db.execute("SELECT assessment_id FROM assessments ORDER BY assessment_id LIMIT 1").fetchone()
+    db.execute(
+        """
+        INSERT INTO assessment_attempts
+        (assessment_id, learner_id, score, attempted_at, completed_at, time_spent_seconds)
+        VALUES (?, ?, 71, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 45)
+        """,
+        (assessment["assessment_id"], learner["user_id"]),
+    )
+    db.commit()
+
+    after = connected_research_summary(db)
+    after_assessments = next(
+        row["count"] for row in after["capture_links"] if row["stream"] == "Assessments"
+    )
+    assert after_assessments == before_assessments + 1
