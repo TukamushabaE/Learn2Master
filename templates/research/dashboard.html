@@ -5,7 +5,7 @@
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
 <style>
-.research-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.research-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.research-button.demo{background:#fff4e5;color:#8a3b0a;border-color:#b54708}.cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin:0 0 24px}.stat-card{border:1px solid #e4ebf4;border-radius:18px;background:#fff;padding:18px;box-shadow:0 10px 28px rgba(15,35,65,.07)}.stat-card h3{font-size:.82rem;color:#687789;margin:0 0 10px}.stat-number{font-size:1.65rem;font-weight:900;color:#10233f;margin:0}.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.chart-card{border:1px solid #e4ebf4;border-radius:14px;background:#fff;padding:14px}.bar-row{display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:center;margin:10px 0}.bar-track{height:10px;background:#e8eef6;border-radius:999px;overflow:hidden}.bar-fill{height:100%;background:#143d73}.mini-note{color:#687789}.demo-notice{border:2px solid #b54708;background:#fff4e5;color:#7a2e0e;border-radius:16px;padding:16px;margin:0 0 20px}.demo-notice strong{display:block;margin-bottom:5px}
+.research-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.research-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.research-button.demo{background:#fff4e5;color:#8a3b0a;border-color:#b54708}.cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin:0 0 24px}.stat-card{border:1px solid #e4ebf4;border-radius:18px;background:#fff;padding:18px;box-shadow:0 10px 28px rgba(15,35,65,.07)}.stat-card h3{font-size:.82rem;color:#687789;margin:0 0 10px}.stat-number{font-size:1.65rem;font-weight:900;color:#10233f;margin:0}.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.chart-card{border:1px solid #e4ebf4;border-radius:14px;background:#fff;padding:14px}.bar-row{display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:center;margin:10px 0}.bar-track{height:10px;background:#e8eef6;border-radius:999px;overflow:hidden}.bar-fill{height:100%;background:#143d73}.bar-fill.dataset5{background:#0f8f83}.mini-note{color:#687789}.demo-notice{border:2px solid #b54708;background:#fff4e5;color:#7a2e0e;border-radius:16px;padding:16px;margin:0 0 20px}.demo-notice strong{display:block;margin-bottom:5px}.dataset5-heading{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;margin:24px 0 12px}.dataset5-heading h2{margin:0;color:#10233f}.source-badge{display:inline-block;background:#dff7f3;color:#08756b;border-radius:999px;padding:7px 11px;font-weight:900}.operational-divider{border-top:3px solid #dce5ef;margin-top:30px;padding-top:24px}.operational-divider h2{margin:0 0 6px}.dataset5-card{border-color:#98d9d2;background:#f6fffd}
 </style>
 {% endblock %}
 
@@ -29,20 +29,49 @@
 </div>
 <section class="hero-panel">
   <div>
-    <p class="eyebrow">Chapter Four Evidence</p>
-    <h1>Research Evaluation Dashboard</h1>
-    <p>Collects dissertation indicators for participants, pre/post-test results, learning gain, mastery, teacher oversight, user acceptance and system reliability.</p>
+    <p class="eyebrow">Dataset5 • Chapter Four Evidence</p>
+    <h1>Learn2Master Evaluation Results</h1>
+    <p>The primary figures below now come from Learn2Master_Dataset5.xlsx: coded learner study records, paired assessments and learner/teacher acceptance surveys.</p>
   </div>
-  <div class="hero-badge"><span>Participants</span><strong>{{ metrics.total_participants }}</strong></div>
+  <div class="hero-badge"><span>Matched Learners</span><strong>{{ supplied_metrics.complete_pairs }}</strong></div>
 </section>
 
 {% if supplied_metrics.learner_records or supplied_metrics.teacher_records %}
 <div class="demo-notice">
-  <strong>Separate user-supplied evaluation dataset available: {{ supplied_metrics.learner_records }} learner rows and {{ supplied_metrics.teacher_records }} teacher rows.</strong>
-  It is excluded from live operational metrics and is labelled USER_SUPPLIED_RESEARCH_DATA / NOT_INDEPENDENTLY_VERIFIED. <a href="{{ url_for('research.supplied_evaluation') }}">Open the supplied dataset view.</a>
+  <strong>Now displaying Dataset5: {{ supplied_metrics.learner_records }} learner rows, {{ supplied_metrics.complete_pairs }} matched pairs and {{ supplied_metrics.teacher_records }} teacher survey rows.</strong>
+  Source: {{ supplied_metrics.source_label }}. Classification: USER_SUPPLIED_RESEARCH_DATA / NOT_INDEPENDENTLY_VERIFIED. <a href="{{ url_for('research.supplied_evaluation') }}">Open all Dataset5 rows.</a>
 </div>
 {% endif %}
 
+<div class="dataset5-heading"><div><h2>Dataset5 Summary Results</h2><p class="mini-note">These are the figures supplied for the evaluation analysis.</p></div><span class="source-badge">DATASET5</span></div>
+<div class="cards-grid">
+  <div class="stat-card dataset5-card"><h3>Learner Records</h3><p class="stat-number">{{ supplied_metrics.learner_records }}</p></div>
+  <div class="stat-card dataset5-card"><h3>Complete Matched Pairs</h3><p class="stat-number">{{ supplied_metrics.complete_pairs }}</p></div>
+  <div class="stat-card dataset5-card"><h3>Teacher Survey Records</h3><p class="stat-number">{{ supplied_metrics.teacher_records }}</p></div>
+  <div class="stat-card dataset5-card"><h3>Mean Pre-test</h3><p class="stat-number">{{ supplied_metrics.average_pre_test }}%</p></div>
+  <div class="stat-card dataset5-card"><h3>Mean Post-test</h3><p class="stat-number">{{ supplied_metrics.average_post_test }}%</p></div>
+  <div class="stat-card dataset5-card"><h3>Mean Gain</h3><p class="stat-number">+{{ supplied_metrics.average_gain }}</p></div>
+  <div class="stat-card dataset5-card"><h3>Learners Improved</h3><p class="stat-number">{{ supplied_metrics.improved_pairs }}/{{ supplied_metrics.complete_pairs }}</p></div>
+  <div class="stat-card dataset5-card"><h3>Improvement Rate</h3><p class="stat-number">{{ supplied_metrics.improved_rate }}%</p></div>
+  <div class="stat-card dataset5-card"><h3>Strict Mastery</h3><p class="stat-number">{{ supplied_metrics.mastered_records }}/{{ supplied_metrics.complete_pairs }}</p></div>
+  <div class="stat-card dataset5-card"><h3>Mastery Rate</h3><p class="stat-number">{{ supplied_metrics.mastery_rate }}%</p></div>
+  <div class="stat-card dataset5-card"><h3>Learner Acceptance</h3><p class="stat-number">{{ supplied_metrics.learner_acceptance }}/5</p></div>
+  <div class="stat-card dataset5-card"><h3>Teacher Acceptance</h3><p class="stat-number">{{ supplied_metrics.teacher_acceptance }}/5</p></div>
+</div>
+
+<section class="learn-card">
+  <h2>Dataset5 Pre-test and Post-test Comparison</h2>
+  <div class="chart-grid">
+    <div class="chart-card"><div class="bar-row"><span>Mean Pre-test</span><div class="bar-track"><div class="bar-fill dataset5" style="width:{{ supplied_metrics.average_pre_test }}%"></div></div><strong>{{ supplied_metrics.average_pre_test }}%</strong></div></div>
+    <div class="chart-card"><div class="bar-row"><span>Mean Post-test</span><div class="bar-track"><div class="bar-fill dataset5" style="width:{{ supplied_metrics.average_post_test }}%"></div></div><strong>{{ supplied_metrics.average_post_test }}%</strong></div></div>
+  </div>
+  <p class="mini-note">Descriptive paired association for 60 complete cases; it does not by itself establish causal effectiveness or a verified six-month duration.</p>
+</section>
+
+<div class="operational-divider">
+  <h2>Live Account-Generated Records</h2>
+  <p class="mini-note">This separate section contains the older portal activity generated by existing learner and teacher accounts. It is not Dataset5.</p>
+</div>
 <div class="cards-grid">
   <div class="stat-card"><h3>Eligible Participants</h3><p class="stat-number">{{ metrics.eligible_participants }}</p></div>
   <div class="stat-card"><h3>Consented Learners</h3><p class="stat-number">{{ metrics.learners }}</p></div>

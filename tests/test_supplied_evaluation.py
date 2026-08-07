@@ -20,11 +20,15 @@ def test_dataset5_import_preserves_supplied_rows_and_results(db):
         "authenticity_status": SUPPLIED_AUTHENTICITY,
     }
     assert summary["complete_pairs"] == 60
+    assert summary["total_records"] == 72
     assert summary["average_pre_test"] == 56.09
     assert summary["average_post_test"] == 77.59
     assert summary["average_gain"] == 21.51
     assert summary["improved_pairs"] == 58
     assert summary["mastered_records"] == 21
+    assert summary["mastery_rate"] == 35.0
+    assert summary["withdrawn_records"] == 2
+    assert summary["missing_post_test_records"] == 2
     assert summary["learner_acceptance"] == 3.91
     assert summary["teacher_acceptance"] == 4.41
 
@@ -68,5 +72,16 @@ def test_supplied_rows_remain_separate_from_live_participants(client, db):
     login(client, "admin", "12345")
     dashboard = client.get("/research/dashboard")
     assert dashboard.status_code == 200
-    assert b"64 learner rows and 8 teacher rows" in dashboard.data
-    assert b"excluded from live operational metrics" in dashboard.data
+    assert b"64 learner rows, 60 matched pairs and 8 teacher survey rows" in dashboard.data
+    assert b"Dataset5 Summary Results" in dashboard.data
+    assert b"Mean Gain" in dashboard.data
+    assert b"+21.51" in dashboard.data
+    assert b"Live Account-Generated Records" in dashboard.data
+    assert b"Dataset5 Results" in dashboard.data
+
+    chapter_four = client.get("/research/chapter-four-report")
+    assert chapter_four.status_code == 200
+    assert b"Dataset5 Evaluation Summary" in chapter_four.data
+    assert b"Learn2Master_Dataset5.xlsx" in chapter_four.data
+    assert b"KTHS-L001" in chapter_four.data
+    assert b"Separate Live Account-Generated Evidence" in chapter_four.data

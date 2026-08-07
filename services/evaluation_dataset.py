@@ -233,6 +233,8 @@ def evaluation_dataset_summary(conn):
                AVG(CASE WHEN pre_test_pct IS NOT NULL AND post_test_pct IS NOT NULL THEN gain_points END) AS average_gain,
                SUM(CASE WHEN gain_points > 0 THEN 1 ELSE 0 END) AS improved_pairs,
                SUM(CASE WHEN mastery_status='Mastered' THEN 1 ELSE 0 END) AS mastered_records,
+               SUM(CASE WHEN study_status='Withdrawn' THEN 1 ELSE 0 END) AS withdrawn_records,
+               SUM(CASE WHEN study_status='Missing post-test' THEN 1 ELSE 0 END) AS missing_post_test_records,
                AVG(acceptance_mean) AS learner_acceptance
         FROM evaluation_dataset_records
         WHERE record_type='learner'
@@ -251,20 +253,28 @@ def evaluation_dataset_summary(conn):
 
     complete_pairs = int(value(learner, "complete_pairs"))
     improved_pairs = int(value(learner, "improved_pairs"))
+    mastered_records = int(value(learner, "mastered_records"))
+    learner_records = int(value(learner, "learner_records"))
+    teacher_records = int(value(teacher, "teacher_records"))
     return {
-        "learner_records": int(value(learner, "learner_records")),
-        "teacher_records": int(value(teacher, "teacher_records")),
+        "learner_records": learner_records,
+        "teacher_records": teacher_records,
+        "total_records": learner_records + teacher_records,
         "complete_pairs": complete_pairs,
         "average_pre_test": round(float(value(learner, "average_pre_test")), 2),
         "average_post_test": round(float(value(learner, "average_post_test")), 2),
         "average_gain": round(float(value(learner, "average_gain")), 2),
         "improved_pairs": improved_pairs,
         "improved_rate": round((improved_pairs / complete_pairs) * 100, 1) if complete_pairs else 0,
-        "mastered_records": int(value(learner, "mastered_records")),
+        "mastered_records": mastered_records,
+        "mastery_rate": round((mastered_records / complete_pairs) * 100, 1) if complete_pairs else 0,
+        "withdrawn_records": int(value(learner, "withdrawn_records")),
+        "missing_post_test_records": int(value(learner, "missing_post_test_records")),
         "learner_acceptance": round(float(value(learner, "learner_acceptance")), 2),
         "teacher_acceptance": round(float(value(teacher, "teacher_acceptance")), 2),
         "classification": SUPPLIED_CLASSIFICATION,
         "authenticity_status": SUPPLIED_AUTHENTICITY,
         "display_label": SUPPLIED_LABEL,
+        "source_label": "Learn2Master_Dataset5.xlsx",
         "disclaimer": SUPPLIED_DISCLAIMER,
     }
