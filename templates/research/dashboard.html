@@ -5,7 +5,7 @@
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
 <style>
-.research-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.research-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin:0 0 24px}.stat-card{border:1px solid #e4ebf4;border-radius:18px;background:#fff;padding:18px;box-shadow:0 10px 28px rgba(15,35,65,.07)}.stat-card h3{font-size:.82rem;color:#687789;margin:0 0 10px}.stat-number{font-size:1.65rem;font-weight:900;color:#10233f;margin:0}.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.chart-card{border:1px solid #e4ebf4;border-radius:14px;background:#fff;padding:14px}.bar-row{display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:center;margin:10px 0}.bar-track{height:10px;background:#e8eef6;border-radius:999px;overflow:hidden}.bar-fill{height:100%;background:#143d73}.mini-note{color:#687789}
+.research-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.research-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.research-button.demo{background:#fff4e5;color:#8a3b0a;border-color:#b54708}.cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin:0 0 24px}.stat-card{border:1px solid #e4ebf4;border-radius:18px;background:#fff;padding:18px;box-shadow:0 10px 28px rgba(15,35,65,.07)}.stat-card h3{font-size:.82rem;color:#687789;margin:0 0 10px}.stat-number{font-size:1.65rem;font-weight:900;color:#10233f;margin:0}.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.chart-card{border:1px solid #e4ebf4;border-radius:14px;background:#fff;padding:14px}.bar-row{display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:center;margin:10px 0}.bar-track{height:10px;background:#e8eef6;border-radius:999px;overflow:hidden}.bar-fill{height:100%;background:#143d73}.mini-note{color:#687789}.demo-notice{border:2px solid #b54708;background:#fff4e5;color:#7a2e0e;border-radius:16px;padding:16px;margin:0 0 20px}.demo-notice strong{display:block;margin-bottom:5px}
 </style>
 {% endblock %}
 
@@ -25,6 +25,7 @@
   <a class="research-button" href="{{ url_for('research.questionnaires') }}">Questionnaires</a>
   <a class="research-button" href="{{ url_for('research.chapter_four_report') }}">Chapter Four</a>
   <a class="research-button" href="{{ url_for('research.chapter_five_insights') }}">Chapter Five</a>
+  <a class="research-button demo" href="{{ url_for('research.supplied_evaluation') }}">Supplied Evaluation Dataset</a>
 </div>
 <section class="hero-panel">
   <div>
@@ -34,6 +35,13 @@
   </div>
   <div class="hero-badge"><span>Participants</span><strong>{{ metrics.total_participants }}</strong></div>
 </section>
+
+{% if supplied_metrics.learner_records or supplied_metrics.teacher_records %}
+<div class="demo-notice">
+  <strong>Separate user-supplied evaluation dataset available: {{ supplied_metrics.learner_records }} learner rows and {{ supplied_metrics.teacher_records }} teacher rows.</strong>
+  It is excluded from live operational metrics and is labelled USER_SUPPLIED_RESEARCH_DATA / NOT_INDEPENDENTLY_VERIFIED. <a href="{{ url_for('research.supplied_evaluation') }}">Open the supplied dataset view.</a>
+</div>
+{% endif %}
 
 <div class="cards-grid">
   <div class="stat-card"><h3>Eligible Participants</h3><p class="stat-number">{{ metrics.eligible_participants }}</p></div>

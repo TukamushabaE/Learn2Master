@@ -51,6 +51,7 @@ That command reads the first teacher, school administrator, and super administra
 - Research dashboard with printable and CSV reports
 - Chapter 4 and 5 evidence-readiness and writing guide
 - Private Supabase Storage for teacher source documents with database-persisted AI summaries
+- Isolated Dataset5 evaluation view with 64 coded learner rows, 8 teacher survey rows, provenance labels and CSV export
 - Offline foundation with sync queue, cached resources and service worker route
 - Admin question-bank create/edit with concept, competency, Bloom level, difficulty and resource metadata
 - Teacher pending-review queue, intervention history, learner detail review and teacher question creation
@@ -84,8 +85,13 @@ That command reads the first teacher, school administrator, and super administra
 - `/ai/explanations`
 - `/research/dashboard`
 - `/research/chapter-guide`
+- `/research/supplied-evaluation`
 - `/research/reports`
 - `/research/export/csv`
+
+## Supplied Evaluation Dataset
+
+Run `python manage.py import-evaluation-dataset` to import the embedded rows from `Learn2Master_Dataset5.xlsx`. The records are kept outside the live participant and assessment tables and are labelled `USER_SUPPLIED_RESEARCH_DATA / NOT_INDEPENDENTLY_VERIFIED` on-screen and in exports. This reflects the workbook's Evaluation Audit: it supports a favourable paired pre/post association for the supplied sample, while the empty verified Evidence Log does not support a six-month participant-evaluation claim.
 
 ## Verification
 
