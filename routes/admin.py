@@ -8,7 +8,7 @@ from database import DatabaseIntegrityError, get_db
 from engine import get_kb
 from routes.guards import role_required
 from security import csrf_protect
-from services.evaluation_dataset import evaluation_dataset_summary
+from services.evaluation_dataset import evaluation_dataset_rows, evaluation_dataset_summary
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -702,8 +702,14 @@ def admin_dashboard():
         ORDER BY users.created_at DESC
         LIMIT 8
     """, params).fetchall()
+    evaluation_summary = evaluation_dataset_summary(conn)
     conn.close()
-    return render_template("admin/dashboard.html", summary=summary, recent_users=recent_users)
+    return render_template(
+        "admin/dashboard.html",
+        summary=summary,
+        recent_users=recent_users,
+        evaluation_summary=evaluation_summary,
+    )
 
 
 @admin_bp.route("/admin/users")
@@ -746,6 +752,76 @@ def users():
     roles = available_roles(conn)
     schools = managed_schools(conn, admin)
     research_identity_summary = evaluation_dataset_summary(conn)
+    evaluation_rows = evaluation_dataset_rows(conn)
+
+    controlled_register = []
+    for row in evaluation_rows:
+        if role_filter and row["record_type"] != role_filter:
+            continue
+        search_fields = " ".join(str(row.get(key) or "") for key in (
+            "participant_code", "school_code", "subject", "class_level", "study_status"
+        )).lower()
+        if search and search.lower() not in search_fields:
+            continue
+        if status_filter:
+            continue
+        learner_payload = (row.get("payload") or {}).get("learner_study") or {}
+        connected_features = (
+            "Participant register, pre/post assessment, learning gain, mastery, "
+            "questionnaire, teacher support, AI response, Chapters 4 and 5"
+            if row["record_type"] == "learner"
+            else "Participant register, teacher questionnaire, teacher oversight, Chapters 4 and 5"
+        )
+        controlled_register.append({
+            "identity": row["participant_code"],
+            "reference": row["participant_code"],
+            "role_name": row["record_type"],
+            "school": row.get("school_code") or "",
+            "class_subject": " / ".join(
+                value for value in (row.get("class_level"), row.get("subject")) if value
+            ),
+            "status": learner_payload.get("eligibility_status") or row.get("study_status") or "Recorded",
+            "register_source": "Recorded evaluation data",
+            "access_type": "Protected participant identity",
+            "connected_features": connected_features,
+            "profile_url": url_for(
+                "research.evaluation_participant_view",
+                participant_code=row["participant_code"],
+            ),
+        })
+    for user in rows:
+        controlled_register.append({
+            "identity": user["full_name"],
+            "reference": user["username"],
+            "role_name": user["role_name"],
+            "school": user["school_name"] or "",
+            "class_subject": user["title"] or "",
+            "status": user["account_status"],
+            "register_source": "Portal account",
+            "access_type": f"Security level {user['security_level']}",
+            "connected_features": "Authentication, role dashboard, operational records and audit trail",
+            "profile_url": url_for("admin.user_report", user_id=user["user_id"]),
+        })
+    controlled_register.sort(key=lambda row: (row["register_source"], row["role_name"], row["reference"]))
+
+    learner_rows = [row for row in evaluation_rows if row["record_type"] == "learner"]
+    teacher_rows = [row for row in evaluation_rows if row["record_type"] == "teacher"]
+    complete_pairs = sum(
+        row.get("pre_test_pct") is not None and row.get("post_test_pct") is not None
+        for row in learner_rows
+    )
+    learner_responses = sum(row.get("acceptance_mean") is not None for row in learner_rows)
+    teacher_responses = sum(row.get("acceptance_mean") is not None for row in teacher_rows)
+    feature_coverage = [
+        {"feature": "Controlled participant register", "records": len(evaluation_rows), "status": "Connected"},
+        {"feature": "Pre/post assessment and learning gain", "records": complete_pairs, "status": "Connected"},
+        {"feature": "Mastery results", "records": complete_pairs, "status": "Connected"},
+        {"feature": "Learner questionnaires", "records": learner_responses, "status": "Connected"},
+        {"feature": "Teacher questionnaires", "records": teacher_responses, "status": "Connected"},
+        {"feature": "System reliability", "records": research_identity_summary["reliability_days"], "status": "Connected"},
+        {"feature": "Qualitative themes", "records": research_identity_summary["qualitative_themes"], "status": "Connected"},
+        {"feature": "Chapter Four, Chapter Five and exports", "records": len(evaluation_rows), "status": "Connected"},
+    ]
     conn.close()
     return render_template(
         "admin/users.html",
@@ -757,6 +833,10 @@ def users():
         status_filter=status_filter,
         search=search,
         research_identity_summary=research_identity_summary,
+        controlled_register=controlled_register,
+        evaluation_register_count=len(evaluation_rows),
+        portal_account_count=len(rows),
+        feature_coverage=feature_coverage,
     )
 
 

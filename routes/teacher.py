@@ -7,6 +7,7 @@ from routes.guards import role_required
 from database import get_db
 from security import csrf_protect
 from services.analytics_engine import teacher_overview, recent_ai_recommendations
+from services.evaluation_dataset import evaluation_dataset_summary
 from engine import (
     MAX_FILE_BYTES,
     SUPPORTED_DOCUMENT_EXTENSIONS,
@@ -140,8 +141,16 @@ def teacher_dashboard():
         ORDER BY avg_score ASC
         LIMIT 6
     """).fetchall()
+    evaluation_summary = evaluation_dataset_summary(conn)
     conn.close()
-    return render_template("teacher/dashboard.html", overview=overview, recommendations=recommendations, interventions=interventions, weak=weak)
+    return render_template(
+        "teacher/dashboard.html",
+        overview=overview,
+        recommendations=recommendations,
+        interventions=interventions,
+        weak=weak,
+        evaluation_summary=evaluation_summary,
+    )
 
 
 @teacher_bp.route("/teacher/learners")

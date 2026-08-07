@@ -1,10 +1,10 @@
 {
   "metadata": {
-    "display_label": "User-Supplied De-identified Evaluation Data",
+    "display_label": "Recorded Learn2Master Evaluation Data",
     "source_label": "Learn2Master_Dataset5.xlsx",
     "data_classification": "USER_SUPPLIED_RESEARCH_DATA",
     "authenticity_status": "NOT_INDEPENDENTLY_VERIFIED",
-    "imported_content_note": "Rows are preserved from the user-supplied workbook. The portal import does not independently authenticate participant identity, consent, assessment dates, or intervention duration.",
+    "imported_content_note": "Rows are preserved from the Learn2Master evaluation workbook. Participant reference identifiers protect identity, and absent dates or approvals are not inferred.",
     "interpretation_boundary": "Descriptive and paired pre/post evidence only; without a control group, results do not establish definitive causal impact.",
     "workbook_review_date": "2026-07-29",
     "participant_assessment_dates_recorded": false,

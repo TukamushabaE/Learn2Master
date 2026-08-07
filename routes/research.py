@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timezone
 from statistics import stdev
 
-from flask import Blueprint, Response, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, Response, abort, flash, redirect, render_template, request, session, url_for
 
 from database import DatabaseIntegrityError, get_db
 from routes.guards import role_required
@@ -955,7 +955,7 @@ def live_questionnaire_response_rows(conn):
 
 
 def dataset5_matches_filters(filters=None):
-    """Dataset 5 has coded fields, not portal foreign keys or assessment dates."""
+    """Dataset 5 has participant reference fields, not portal foreign keys or assessment dates."""
     filters = filters or {}
     if filters.get("study_phase") not in (None, "", "Evaluation"):
         return False
@@ -993,6 +993,10 @@ def dataset5_participant_rows(conn, filters=None):
             "assent_status": "Not stored in Dataset 5",
             "parent_consent_status": "Not stored in Dataset 5",
             "active_status": study_status,
+            "_view_url": url_for(
+                "research.evaluation_participant_view",
+                participant_code=row["participant_code"],
+            ),
         })
     return results
 
@@ -1371,12 +1375,12 @@ def evaluation_collection_audit_rows(conn):
     summary = evaluation_dataset_summary(conn)
     evidence = evaluation_evidence_summary(conn)
     return [
-        {"evidence_stream": "Participant register", "collection_method": "Purposive maximum-variation sampling in two CBC secondary schools", "records": summary["learner_records"] + summary["teacher_records"], "period_or_sample": "64 coded learners; 8 coded teachers", "verification_status": "Recorded in Dataset 5"},
+        {"evidence_stream": "Participant register", "collection_method": "Purposive maximum-variation sampling in two CBC secondary schools", "records": summary["learner_records"] + summary["teacher_records"], "period_or_sample": "64 recorded learners; 8 recorded teachers", "verification_status": "Recorded in Dataset 5"},
         {"evidence_stream": "Learning outcomes", "collection_method": "Single-group matched pre-test/post-test evaluation", "records": summary["complete_pairs"], "period_or_sample": "60 complete pairs; 2 withdrawals; 2 missing post-tests", "verification_status": "Supported as a pre/post association"},
         {"evidence_stream": "Learner acceptance", "collection_method": "Ten-item 5-point Likert questionnaire; LQ9 reverse-scored", "records": summary["learner_questionnaire_responses"], "period_or_sample": f"Mean {summary['learner_acceptance']}/5", "verification_status": "Recorded for this sample"},
         {"evidence_stream": "Teacher acceptance", "collection_method": "Eight-item 5-point Likert questionnaire", "records": summary["teacher_questionnaire_responses"], "period_or_sample": f"Mean {summary['teacher_acceptance']}/5", "verification_status": "Recorded for this sample"},
         {"evidence_stream": "System reliability", "collection_method": "Daily aggregate operational and offline-synchronization log", "records": summary["reliability_days"], "period_or_sample": f"{summary['reliability_log_start']} to {summary['reliability_log_end']}", "verification_status": "Supported for the recorded 28-day window"},
-        {"evidence_stream": "Qualitative evidence", "collection_method": "Coded thematic summary of learner and teacher responses", "records": summary["qualitative_themes"], "period_or_sample": f"{summary['qualitative_mentions']} coded mentions", "verification_status": "Theme counts recorded; retain source excerpts separately"},
+        {"evidence_stream": "Qualitative evidence", "collection_method": "Thematic summary of learner and teacher responses", "records": summary["qualitative_themes"], "period_or_sample": f"{summary['qualitative_mentions']} recorded mentions", "verification_status": "Theme counts recorded; retain source excerpts separately"},
         {"evidence_stream": "Participant assessment dates", "collection_method": "Exact dated assessment source records", "records": 0, "period_or_sample": "Dates are not present in Dataset 5 learner rows", "verification_status": "Not yet verified"},
         {"evidence_stream": "Six-month duration", "collection_method": "Verified dated evidence spanning at least 182 calendar days", "records": evidence["verified_evidence_log_rows"], "period_or_sample": f"Verified coverage: {evidence['verified_evaluation_coverage_days']} days", "verification_status": evidence["coverage_status"]},
     ]
@@ -1473,13 +1477,13 @@ def connected_research_rows(conn):
     for row in evaluation_qualitative_theme_rows(conn):
         rows.append({
             "record_source": "Dataset 5 research evaluation",
-            "capture_mode": "Recorded coded summary",
+            "capture_mode": "Recorded thematic summary",
             "record_type": "qualitative_theme",
             "participant_code": row.get("respondent_group") or "",
             "study_phase": "Evaluation",
             "school_code": "", "subject": "", "class_level": "",
             "learning_outcome": "Qualitative evaluation",
-            "study_status": "Coded theme",
+            "study_status": "Qualitative theme",
             "pre_test": "", "post_test": "", "learning_gain": "", "normalized_gain": "",
             "mastery_status": "", "acceptance_score": "", "attempts": "",
             "time_to_mastery": "", "teacher_intervention": "", "ai_confidence": "",
@@ -1595,7 +1599,7 @@ def research_capture_links(conn, live_metrics=None):
         {"stream": "Teacher oversight", "system_source": "Dataset 5 intervention counts plus portal reviews", "count": dataset_interventions + len(oversight_rows), "status": "Connected", "route": "research.teacher_oversight"},
         {"stream": "AI support", "system_source": "Dataset 5 recommendation follow-through plus portal explanations", "count": dataset_recommendations + live_metrics["ai_recommendations"], "status": "Connected", "route": "research.feedback_responsiveness"},
         {"stream": "Reliability", "system_source": "Dataset 5 daily aggregates plus portal application events", "count": dataset_summary["reliability_days"] + live_metrics["reliability_evidence_count"], "status": "Connected", "route": "research.system_reliability"},
-        {"stream": "Qualitative themes", "system_source": "Coded learner and teacher thematic summary", "count": dataset_summary["qualitative_themes"], "status": "Connected", "route": "research.evidence_verification"},
+        {"stream": "Qualitative themes", "system_source": "Recorded learner and teacher thematic summary", "count": dataset_summary["qualitative_themes"], "status": "Connected", "route": "research.evidence_verification"},
     ]
     return links, unlinked_attempts
 
@@ -1785,8 +1789,8 @@ def participants():
     options = research_filter_options(conn)
     conn.close()
     return render_table(
-        "Research Participants",
-        "One coded register links Dataset 5 research identities with new consent-linked portal participants. Dataset 5 identities remain research records, not login accounts.",
+        "Controlled Participant Register",
+        "One controlled register contains all Dataset 5 evaluation participants and new consent-linked portal participants. Every evaluation participant opens to an evidence profile showing how the record is used across the system.",
         [
             ("record_source", "Source"),
             ("participant_code", "Participant Code"),
@@ -1806,6 +1810,68 @@ def participants():
         [{"label": "Create Participant", "url": url_for("research.create_participant")}],
         filters=filters,
         filter_options=options,
+    )
+
+
+@research_bp.route("/research/evaluation-participants/<participant_code>")
+@role_required(*RESEARCH_ROLES)
+def evaluation_participant_view(participant_code):
+    conn = get_db()
+    participant = next(
+        (
+            row for row in evaluation_dataset_rows(conn)
+            if row["participant_code"].lower() == participant_code.lower()
+        ),
+        None,
+    )
+    if not participant:
+        conn.close()
+        abort(404)
+
+    payload = participant.get("payload") or {}
+    learner = payload.get("learner_study") or {}
+    learner_survey = payload.get("learner_survey") or {}
+    teacher_survey = payload.get("teacher_survey") or {}
+    questionnaire = learner_survey or teacher_survey
+    questionnaire_items = [
+        {
+            "item": key.replace("_", " "),
+            "score": value,
+        }
+        for key, value in questionnaire.items()
+        if (key.startswith("LQ") or key.startswith("TQ"))
+        and key not in {"LQ9_reverse_scored"}
+    ]
+    if participant["record_type"] == "learner":
+        linked_features = [
+            ("Controlled Participant Register", "research.participants"),
+            ("Pre/Post Assessment Results", "research.pre_post_results"),
+            ("Learning Gain", "research.learning_gain"),
+            ("Mastery Attainment", "research.mastery_attainment"),
+            ("Questionnaire Results", "research.questionnaire_results"),
+            ("Teacher Oversight", "research.teacher_oversight"),
+            ("AI Feedback Responsiveness", "research.feedback_responsiveness"),
+            ("Chapter Four", "research.chapter_four_report"),
+            ("Chapter Five", "research.chapter_five_insights"),
+        ]
+    else:
+        linked_features = [
+            ("Controlled Participant Register", "research.participants"),
+            ("Questionnaire Results", "research.questionnaire_results"),
+            ("Teacher Oversight", "research.teacher_oversight"),
+            ("Chapter Four", "research.chapter_four_report"),
+            ("Chapter Five", "research.chapter_five_insights"),
+        ]
+    conn.close()
+    return render_template(
+        "research/evaluation_participant_view.html",
+        participant=participant,
+        learner=learner,
+        questionnaire_items=questionnaire_items,
+        linked_features=[
+            {"label": label, "url": url_for(endpoint)}
+            for label, endpoint in linked_features
+        ],
     )
 
 
@@ -2662,11 +2728,11 @@ def chapter_five_insights():
             )
         if qualitative_themes:
             add(
-                f"The coded qualitative summary contains {len(qualitative_themes)} themes and {sum(row['mention_count'] for row in qualitative_themes)} coded mentions across learner and teacher groups.",
+                f"The recorded qualitative summary contains {len(qualitative_themes)} themes and {sum(row['mention_count'] for row in qualitative_themes)} recorded mentions across learner and teacher groups.",
                 len(qualitative_themes),
                 "Dataset 5 qualitative themes",
                 sum(row["mention_count"] for row in qualitative_themes),
-                "Coded thematic summary; source excerpts retained separately",
+                "Thematic summary; source excerpts retained separately",
                 "qualitative evidence",
             )
         if not evidence_summary["six_month_duration_supported"]:

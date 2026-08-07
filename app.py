@@ -136,7 +136,7 @@ with app.app_context():
                 result["qualitative_themes"],
             )
         except Exception:
-            app.logger.exception("Supplied evaluation data import failed; the core application will continue.")
+            app.logger.exception("Recorded evaluation data import failed; the core application will continue.")
 
 login_manager = LoginManager()
 login_manager.login_view = "auth.login_view"

@@ -5,31 +5,63 @@
 <style>
 .admin-toolbar,.account-row,.report-row{display:grid;gap:12px}.admin-toolbar{grid-template-columns:2fr 1fr 1fr auto;align-items:end}.admin-input,.admin-select{width:100%;padding:11px 12px;border:1px solid #d8dee8;border-radius:8px;background:#fff}.account-row{grid-template-columns:2fr 1fr 1fr 1fr auto;align-items:center;padding:14px 0;border-bottom:1px solid #edf0f5}.status-badge{display:inline-flex;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#eef6ff;color:#155da8}.status-Suspended,.status-Locked{background:#fff1f1;color:#a61b1b}.status-Pending{background:#fff8db;color:#836100}.admin-actions{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}.small-button{border:1px solid #cfd7e3;border-radius:8px;background:#fff;padding:7px 10px;font-weight:700;text-decoration:none;color:#1f2937;cursor:pointer}.danger-button{border-color:#f1b7b7;color:#a61b1b}.primary-button{background:#143d73;color:#fff;border-color:#143d73}.security-pill{font-weight:800;color:#143d73}@media(max-width:900px){.admin-toolbar,.account-row{grid-template-columns:1fr}.admin-actions{justify-content:flex-start}}
 .identity-link-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0}.identity-link-grid div{padding:12px;border:1px solid #dfe8f2;border-radius:10px;background:#f8fbff}.identity-link-grid span{display:block;color:#63768a;font-size:.78rem}.identity-link-grid strong{font-size:1.45rem;color:#143d73}
+.controlled-table-wrap{overflow:auto}.controlled-table{width:100%;min-width:1100px;border-collapse:collapse}.controlled-table th,.controlled-table td{padding:10px;border-bottom:1px solid #e5ecf4;text-align:left;vertical-align:top}.controlled-table th{background:#f6f9fd;color:#496174;font-size:.75rem;text-transform:uppercase}.source-evaluation{color:#08756b;font-weight:800}.source-account{color:#143d73;font-weight:800}.coverage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}.coverage-grid div{border:1px solid #b7ddd8;background:#f4fffd;border-radius:10px;padding:12px}.coverage-grid strong,.coverage-grid span{display:block}.coverage-grid small{color:#08756b;font-weight:800}
 </style>
 {% endblock %}
 {% block content %}
 <section class="hero-panel">
     <div>
-        <p class="eyebrow">Identity and Access Governance</p>
-        <h1>Account Management</h1>
-        <p>Manage learners, teachers, school administrators and super administrators with status, security level, reporting and audit traceability.</p>
+        <p class="eyebrow">Identity, Access and Research Governance</p>
+        <h1>Controlled Identity Register</h1>
+        <p>One authorized register brings together every recorded evaluation participant and every portal account, with source, role, status and system linkage clearly identified.</p>
     </div>
-    <div class="hero-badge"><span>Visible Accounts</span><strong>{{ users|length }}</strong></div>
+    <div class="hero-badge"><span>Controlled Identities</span><strong>{{ controlled_register|length }}</strong></div>
 </section>
 
 <section class="learn-card">
-    <span class="subject-code">Linked Research Identities</span>
-    <h2>Dataset 5 participant register</h2>
-    <p>The coded research identities are linked to the research reports without being turned into login accounts. This keeps authentication secure while the same participant codes appear in assessment, learning-gain, mastery and questionnaire evidence.</p>
+    <span class="subject-code">Recorded Real Evaluation Data</span>
+    <h2>Learn2Master evaluation participant register</h2>
+    <p>All recorded evaluation participants are included in this controlled register. The same participant reference identifiers are used in assessment, learning gain, mastery, questionnaire, teacher-support, AI-response and dissertation evidence. Login credentials remain governed separately so adding a research participant cannot create an unauthorized account.</p>
     <div class="identity-link-grid">
-        <div><span>Total coded records</span><strong>{{ research_identity_summary.total_records }}</strong></div>
-        <div><span>Coded learners</span><strong>{{ research_identity_summary.learner_records }}</strong></div>
-        <div><span>Coded teachers</span><strong>{{ research_identity_summary.teacher_records }}</strong></div>
+        <div><span>Evaluation participants</span><strong>{{ evaluation_register_count }}</strong></div>
+        <div><span>Recorded learners</span><strong>{{ research_identity_summary.learner_records }}</strong></div>
+        <div><span>Recorded teachers</span><strong>{{ research_identity_summary.teacher_records }}</strong></div>
+        <div><span>Portal accounts</span><strong>{{ portal_account_count }}</strong></div>
         <div><span>Complete pre/post pairs</span><strong>{{ research_identity_summary.complete_pairs }}</strong></div>
     </div>
     <div class="admin-actions" style="justify-content:flex-start">
-        <a class="small-button primary-button" href="{{ url_for('research.participants') }}">Open Linked Participant Register</a>
+        <a class="small-button primary-button" href="{{ url_for('research.participants') }}">Open Controlled Participant Register</a>
         <a class="small-button" href="{{ url_for('research.supplied_evaluation') }}">Open Dataset 5 Results</a>
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">System-wide Data Linkage</span>
+    <h2>Where the evaluation records are used</h2>
+    <div class="coverage-grid">
+        {% for item in feature_coverage %}
+        <div><span>{{ item.feature }}</span><strong>{{ item.records }} record(s)</strong><small>{{ item.status }}</small></div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Controlled Register</span>
+    <h2>Evaluation participants and portal accounts</h2>
+    <p>Every row identifies its source. “Recorded evaluation data” is part of the research evidence; “Portal account” identifies a person with authenticated system access.</p>
+    <div class="controlled-table-wrap">
+        <table class="controlled-table">
+            <thead><tr><th>Identity</th><th>Reference</th><th>Role</th><th>School</th><th>Class / Subject</th><th>Status</th><th>Register Source</th><th>Access Control</th><th>Connected Features</th><th>Profile</th></tr></thead>
+            <tbody>
+            {% for item in controlled_register %}
+                <tr>
+                    <td><strong>{{ item.identity }}</strong></td><td>{{ item.reference }}</td><td>{{ role_label(item.role_name) }}</td><td>{{ item.school }}</td><td>{{ item.class_subject or '—' }}</td><td>{{ item.status }}</td>
+                    <td class="{{ 'source-evaluation' if item.register_source == 'Recorded evaluation data' else 'source-account' }}">{{ item.register_source }}</td><td>{{ item.access_type }}</td><td>{{ item.connected_features }}</td>
+                    <td><a class="small-button" href="{{ item.profile_url }}">Open profile</a></td>
+                </tr>
+            {% else %}<tr><td colspan="10">No identities match the selected filters.</td></tr>{% endfor %}
+            </tbody>
+        </table>
     </div>
 </section>
 
@@ -62,8 +94,8 @@
 </section>
 
 <section class="learn-card">
-    <span class="subject-code">Controlled Register</span>
-    <h2>Users, Roles and Security Levels</h2>
+    <span class="subject-code">Account Security Controls</span>
+    <h2>Portal accounts, roles and security levels</h2>
     {% for u in users %}
     <div class="account-row">
         <div>

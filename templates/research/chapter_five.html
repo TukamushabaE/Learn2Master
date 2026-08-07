@@ -33,8 +33,8 @@
     <li><strong>{{ insight.statement }}</strong><br><small>Metric: {{ insight.metric }} · Source: {{ insight.source }} · Valid cases: {{ insight.valid_cases }} · Scope: {{ insight.scope }} · Evidence type: {{ insight.evidence_type }}</small></li>
     {% endfor %}
   </ul>
-  <h2>Coded qualitative interpretation</h2>
-  <p>Dataset 5 contains the following coded theme counts. Retain the approved coding notes and de-identified source excerpts separately so a supervisor can audit the themes.</p>
+  <h2>Qualitative interpretation</h2>
+  <p>Dataset 5 contains the following recorded theme counts. Retain the approved thematic-analysis notes and protected source excerpts separately so a supervisor can audit the themes.</p>
   <ul class="insight-list">
     {% for theme in qualitative_themes %}
     <li><strong>{{ theme.respondent_group }}: {{ theme.coded_theme }}</strong><br><small>Mentions: {{ theme.mention_count }} · Interpretation: {{ theme.interpretation }}</small></li>

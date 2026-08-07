@@ -259,8 +259,57 @@ def test_account_management_links_research_identities_without_creating_logins(cl
 
     page = client.get("/admin/users")
     assert page.status_code == 200
-    assert b"Linked Research Identities" in page.data
-    assert b"Dataset 5 participant register" in page.data
-    assert b"Total coded records" in page.data
+    assert b"Controlled Identity Register" in page.data
+    assert b"Learn2Master evaluation participant register" in page.data
+    assert b"Evaluation participants" in page.data
     assert b">72<" in page.data
+    assert page.data.count(b"/research/evaluation-participants/") == 72
+    assert b"KZHS-L001" in page.data
+    assert b"KTHS-L032" in page.data
+    assert b"KZHS-T001" in page.data
+    assert b"KTHS-T004" in page.data
+    assert b"Participant register, pre/post assessment, learning gain, mastery" in page.data
+    assert b"coded" not in page.data.lower()
     assert db.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"] == account_count
+
+
+def test_every_evaluation_participant_opens_a_whole_system_evidence_profile(client, db):
+    import_evaluation_dataset(conn=db)
+    login(client, "admin", "12345")
+
+    learner = client.get("/research/evaluation-participants/KZHS-L001")
+    assert learner.status_code == 200
+    assert b"Recorded Real Evaluation Participant" in learner.data
+    assert b"KZHS-L001" in learner.data
+    assert b"57.0%" in learner.data
+    assert b"61.9%" in learner.data
+    assert b"Learning Gain" in learner.data
+    assert b"Mastery Attainment" in learner.data
+    assert b"AI Feedback Responsiveness" in learner.data
+    assert b"Chapter Four" in learner.data
+    assert b"coded" not in learner.data.lower()
+
+    teacher = client.get("/research/evaluation-participants/KTHS-T004")
+    assert teacher.status_code == 200
+    assert b"Teacher evaluation result" in teacher.data
+    assert b"Teacher questionnaire and oversight" in teacher.data
+    assert b"Questionnaire Results" in teacher.data
+
+
+def test_admin_and_teacher_dashboards_surface_the_same_evaluation_totals(client, db):
+    import_evaluation_dataset(conn=db)
+    login(client, "admin", "12345")
+    admin_page = client.get("/admin")
+    assert admin_page.status_code == 200
+    assert b"Recorded Evaluation Evidence" in admin_page.data
+    assert b"Evaluation Participants</span><strong>72" in admin_page.data
+    assert b"Questionnaire Responses</span><strong>68" in admin_page.data
+
+    client.get("/logout")
+    login(client, "teacher", "12345")
+    teacher_page = client.get("/teacher/dashboard")
+    assert teacher_page.status_code == 200
+    assert b"Connected Learn2Master evaluation data" in teacher_page.data
+    assert b"Evaluation Participants</span><strong>72" in teacher_page.data
+    assert b"Questionnaire Responses</span><strong>68" in teacher_page.data
+    assert b"Controlled Participant Register" in teacher_page.data
