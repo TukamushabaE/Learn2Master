@@ -101,8 +101,8 @@ def ensure_evaluation_dataset_schema(conn):
         ).fetchone()
         if not existing or not int(existing[0] or 0):
             conn.execute(
-                f"UPDATE {table} SET source_label=? WHERE source_label LIKE 'Learn2Master_Dataset%.xlsx'",
-                (INTERNAL_SOURCE_LABEL,),
+                f"UPDATE {table} SET source_label=? WHERE source_label LIKE ?",
+                (INTERNAL_SOURCE_LABEL, "Learn2Master_Dataset%.xlsx"),
             )
     conn.commit()
 

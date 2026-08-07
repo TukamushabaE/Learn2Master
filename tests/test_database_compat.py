@@ -1,7 +1,8 @@
 import sqlite3
 
 import init_db
-from database import translate_sql_for_postgres
+from database import PostgresConnectionWrapper, translate_sql_for_postgres
+from services.evaluation_dataset import ensure_evaluation_dataset_schema
 
 
 def test_postgres_query_translation_handles_sqlite_patterns():
@@ -39,6 +40,56 @@ def test_postgres_schema_statements_are_idempotent_and_safe():
     subject_index = next(i for i, stmt in enumerate(statements) if "CREATE TABLE IF NOT EXISTS subjects" in stmt)
     assignment_index = next(i for i, stmt in enumerate(statements) if "CREATE TABLE IF NOT EXISTS teacher_subject_assignments" in stmt)
     assert assignment_index > subject_index
+
+
+def test_evaluation_source_normalization_parameterizes_postgres_wildcard():
+    class RecordingCursor:
+        description = [("total", None, None, None, None, None, None)]
+        rowcount = 0
+
+        def __init__(self, raw_connection):
+            self.raw_connection = raw_connection
+
+        def execute(self, sql, parameters):
+            self.raw_connection.executions.append((sql, parameters))
+            return self
+
+        def fetchone(self):
+            return (0,)
+
+        def close(self):
+            return None
+
+    class RecordingConnection:
+        def __init__(self):
+            self.executions = []
+            self.committed = False
+
+        def cursor(self):
+            return RecordingCursor(self)
+
+        def commit(self):
+            self.committed = True
+
+    raw_connection = RecordingConnection()
+    connection = PostgresConnectionWrapper(raw_connection)
+
+    ensure_evaluation_dataset_schema(connection)
+
+    updates = [
+        (sql, parameters)
+        for sql, parameters in raw_connection.executions
+        if sql.startswith("UPDATE ")
+    ]
+    assert len(updates) == 3
+    assert raw_connection.committed is True
+    for sql, parameters in updates:
+        assert "LIKE %s" in sql
+        assert "Dataset%.xlsx" not in sql
+        assert parameters == (
+            "Learn2Master_Evaluation_Register",
+            "Learn2Master_Dataset%.xlsx",
+        )
 
 
 def test_sqlite_initialization_is_repeatable_without_deleting_data(tmp_path):
