@@ -713,6 +713,18 @@ CREATE TABLE IF NOT EXISTS evaluation_dataset_records (
     UNIQUE (record_type, participant_code, source_label)
 );
 
+CREATE TABLE IF NOT EXISTS evaluation_account_links (
+    participant_code TEXT PRIMARY KEY,
+    evaluation_record_id INTEGER NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL UNIQUE,
+    credential_state TEXT NOT NULL DEFAULT 'Temporary password active',
+    provisioned_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    first_password_changed_at TEXT,
+    last_verified_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (evaluation_record_id) REFERENCES evaluation_dataset_records(evaluation_record_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
 CREATE TABLE IF NOT EXISTS offline_sync_queue (
     sync_id INTEGER PRIMARY KEY AUTOINCREMENT,
     learner_id INTEGER,

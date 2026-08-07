@@ -13,7 +13,7 @@
     <div>
         <p class="eyebrow">Identity, Access and Research Governance</p>
         <h1>Controlled Identity Register</h1>
-        <p>One authorized register brings together every recorded evaluation participant and every portal account, with source, role, status and system linkage clearly identified.</p>
+        <p>One authorized register links every evaluation participant reference to a current authenticated portal account, while retaining real account-creation and login timestamps.</p>
     </div>
     <div class="hero-badge"><span>Controlled Identities</span><strong>{{ controlled_register|length }}</strong></div>
 </section>
@@ -21,17 +21,19 @@
 <section class="learn-card">
     <span class="subject-code">Recorded Real Evaluation Data</span>
     <h2>Learn2Master evaluation participant register</h2>
-    <p>All recorded evaluation participants are included in this controlled register. The same participant reference identifiers are used in assessment, learning gain, mastery, questionnaire, teacher-support, AI-response and dissertation evidence. Login credentials remain governed separately so adding a research participant cannot create an unauthorized account.</p>
+    <p>All evaluation participant references are included and linked to current code-identified accounts. Each initial password is unique, must be changed at first login and is never stored as readable text in the database. Account creation does not backdate historical portal activity.</p>
     <div class="identity-link-grid">
         <div><span>Evaluation participants</span><strong>{{ evaluation_register_count }}</strong></div>
         <div><span>Recorded learners</span><strong>{{ research_identity_summary.learner_records }}</strong></div>
         <div><span>Recorded teachers</span><strong>{{ research_identity_summary.teacher_records }}</strong></div>
+        <div><span>Linked participant accounts</span><strong>{{ linked_evaluation_account_count }}</strong></div>
         <div><span>Portal accounts</span><strong>{{ portal_account_count }}</strong></div>
         <div><span>Complete pre/post pairs</span><strong>{{ research_identity_summary.complete_pairs }}</strong></div>
     </div>
     <div class="admin-actions" style="justify-content:flex-start">
         <a class="small-button primary-button" href="{{ url_for('research.participants') }}">Open Controlled Participant Register</a>
         <a class="small-button" href="{{ url_for('research.supplied_evaluation') }}">Open Evaluation Results</a>
+        {% if session.get('role') == 'super_admin' %}<a class="small-button" href="{{ url_for('admin.evaluation_account_credentials') }}">Download temporary login credentials</a>{% endif %}
     </div>
 </section>
 
@@ -48,18 +50,18 @@
 <section class="learn-card">
     <span class="subject-code">Controlled Register</span>
     <h2>Evaluation participants and portal accounts</h2>
-    <p>Every row identifies its source. “Recorded evaluation data” is part of the research evidence; “Portal account” identifies a person with authenticated system access.</p>
+    <p>“Evaluation + portal account” identifies a participant reference with authenticated access. Password status, creation time and last login come from the live account record.</p>
     <div class="controlled-table-wrap">
         <table class="controlled-table">
-            <thead><tr><th>Identity</th><th>Reference</th><th>Role</th><th>School</th><th>Class / Subject</th><th>Status</th><th>Register Source</th><th>Access Control</th><th>Connected Features</th><th>Profile</th></tr></thead>
+            <thead><tr><th>Identity</th><th>Username</th><th>Role</th><th>School</th><th>Class / Subject</th><th>Status</th><th>Register Source</th><th>Access Control</th><th>Account Created</th><th>Last Login</th><th>Connected Features</th><th>Profiles</th></tr></thead>
             <tbody>
             {% for item in controlled_register %}
                 <tr>
                     <td><strong>{{ item.identity }}</strong></td><td>{{ item.reference }}</td><td>{{ role_label(item.role_name) }}</td><td>{{ item.school }}</td><td>{{ item.class_subject or '—' }}</td><td>{{ item.status }}</td>
-                    <td class="{{ 'source-evaluation' if item.register_source == 'Recorded evaluation data' else 'source-account' }}">{{ item.register_source }}</td><td>{{ item.access_type }}</td><td>{{ item.connected_features }}</td>
-                    <td><a class="small-button" href="{{ item.profile_url }}">Open profile</a></td>
+                    <td class="{{ 'source-evaluation' if item.register_source == 'Recorded evaluation data' else 'source-account' }}">{{ item.register_source }}</td><td>{{ item.access_type }}</td><td>{{ item.account_created_at or '—' }}</td><td>{{ item.last_login_at or 'No login yet' }}</td><td>{{ item.connected_features }}</td>
+                    <td><a class="small-button" href="{{ item.profile_url }}">Open profile</a>{% if item.account_profile_url %} <a class="small-button" href="{{ item.account_profile_url }}">Account</a>{% endif %}</td>
                 </tr>
-            {% else %}<tr><td colspan="10">No identities match the selected filters.</td></tr>{% endfor %}
+            {% else %}<tr><td colspan="12">No identities match the selected filters.</td></tr>{% endfor %}
             </tbody>
         </table>
     </div>

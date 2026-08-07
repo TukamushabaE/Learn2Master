@@ -230,6 +230,13 @@ def change_password():
                 locked_until = NULL, account_status = 'Active'
             WHERE user_id = ?
         """, (generate_password_hash(new_password), session["user_id"]))
+        conn.execute("""
+            UPDATE evaluation_account_links
+            SET credential_state='Password changed',
+                first_password_changed_at=COALESCE(first_password_changed_at, CURRENT_TIMESTAMP),
+                last_verified_at=CURRENT_TIMESTAMP
+            WHERE user_id=?
+        """, (session["user_id"],))
         record_auth_audit(conn, session["user_id"], "CHANGE_PASSWORD", "User changed temporary or existing password")
         conn.commit()
         conn.close()

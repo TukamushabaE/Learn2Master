@@ -24,8 +24,26 @@
     <div><span>Study status</span><strong>{{ participant.study_status }}</strong></div>
     <div><span>Register source</span><strong>Learn2Master evaluation data</strong></div>
     <div><span>Assessment date</span><strong>Not recorded in evaluation source</strong></div>
-    <div><span>Portal registration timestamp</span><strong>{{ participant.imported_at }}</strong></div>
+    <div><span>Evaluation register import timestamp</span><strong>{{ participant.imported_at }}</strong></div>
   </div>
+</section>
+
+<section class="learn-card">
+  <span class="subject-code">Authenticated Portal Account</span>
+  <h2>Current account linkage</h2>
+  {% if account %}
+  <div class="profile-grid">
+    <div><span>Username</span><strong>{{ account.username }}</strong></div>
+    <div><span>Account status</span><strong>{{ account.account_status }}</strong></div>
+    <div><span>Password status</span><strong>{{ 'Change required at first login' if account.must_change_password else 'Changed by user' }}</strong></div>
+    <div><span>Security level</span><strong>{{ account.security_level }}</strong></div>
+    <div><span>Account created</span><strong>{{ account.created_at }}</strong></div>
+    <div><span>Last login</span><strong>{{ account.last_login_at or 'No login recorded yet' }}</strong></div>
+  </div>
+  {% if session.get('role') in ['super_admin', 'school_admin'] %}<p><a class="profile-button" href="{{ url_for('admin.user_report', user_id=account.user_id) }}">Open authenticated account report</a></p>{% endif %}
+  {% else %}
+  <p>No authenticated portal account is currently linked to this participant reference.</p>
+  {% endif %}
 </section>
 
 {% if participant.record_type == 'learner' %}

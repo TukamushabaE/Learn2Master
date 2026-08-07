@@ -1,7 +1,12 @@
+import base64
+import hashlib
+import hmac
 import json
+import os
 from pathlib import Path
 
 from database import get_db, is_postgres_connection
+from werkzeug.security import generate_password_hash
 
 
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "evaluation_register.json"
@@ -16,6 +21,13 @@ SUPPLIED_DISCLAIMER = (
     "The portal preserves the source values and keeps participant identities protected; "
     "dates or approvals that are absent from the source are not inferred."
 )
+
+SCHOOL_NAME_BY_CODE = {
+    "KZHS": "Kigezi High School",
+    "KTHS": "Kigata High School",
+}
+PARTICIPANT_ACCOUNT_FLAG = "LEARN2MASTER_PROVISION_EVALUATION_ACCOUNTS"
+PARTICIPANT_ACCOUNT_SECRET = "LEARN2MASTER_PARTICIPANT_ACCOUNT_SECRET"
 
 
 def _table_sql(postgres=False):
@@ -82,11 +94,28 @@ def _themes_table_sql(postgres=False):
     """
 
 
+def _account_links_table_sql():
+    return """
+        CREATE TABLE IF NOT EXISTS evaluation_account_links (
+            participant_code TEXT PRIMARY KEY,
+            evaluation_record_id INTEGER NOT NULL UNIQUE,
+            user_id INTEGER NOT NULL UNIQUE,
+            credential_state TEXT NOT NULL DEFAULT 'Temporary password active',
+            provisioned_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            first_password_changed_at TEXT,
+            last_verified_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (evaluation_record_id) REFERENCES evaluation_dataset_records(evaluation_record_id),
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+    """
+
+
 def ensure_evaluation_dataset_schema(conn):
     postgres = is_postgres_connection(conn)
     conn.execute(_table_sql(postgres=postgres))
     conn.execute(_reliability_table_sql(postgres=postgres))
     conn.execute(_themes_table_sql(postgres=postgres))
+    conn.execute(_account_links_table_sql())
     # Normalize the former upload filename to one permanent internal register
     # key before importing. This prevents a deployment from creating duplicate
     # participant rows when the packaged data file is renamed.
@@ -105,6 +134,173 @@ def ensure_evaluation_dataset_schema(conn):
                 (INTERNAL_SOURCE_LABEL, "Learn2Master_Dataset%.xlsx"),
             )
     conn.commit()
+
+
+def participant_temporary_password(participant_code, secret=None):
+    """Derive a unique temporary password without storing plaintext credentials."""
+    secret = secret or os.environ.get(PARTICIPANT_ACCOUNT_SECRET)
+    if not secret or len(secret) < 24:
+        raise RuntimeError(
+            f"{PARTICIPANT_ACCOUNT_SECRET} must be configured with at least 24 characters."
+        )
+    code = (participant_code or "").strip().upper()
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        f"learn2master-participant-account-v1:{code}".encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    token = base64.b32encode(digest).decode("ascii").rstrip("=")[:16]
+    return f"L2m!{token}9"
+
+
+def provision_evaluation_accounts(conn=None, secret=None):
+    """Create current code-identified accounts and link them to evaluation records."""
+    owns_connection = conn is None
+    conn = conn or get_db()
+    try:
+        ensure_evaluation_dataset_schema(conn)
+        for school_name in SCHOOL_NAME_BY_CODE.values():
+            conn.execute(
+                "INSERT INTO schools (school_name) VALUES (?) ON CONFLICT (school_name) DO NOTHING",
+                (school_name,),
+            )
+
+        role_ids = {
+            row["role_name"]: row["role_id"]
+            for row in conn.execute(
+                "SELECT role_id, role_name FROM roles WHERE role_name IN ('learner', 'teacher')"
+            ).fetchall()
+        }
+        school_ids = {
+            row["school_name"]: row["school_id"]
+            for row in conn.execute(
+                "SELECT school_id, school_name FROM schools WHERE school_name IN (?, ?)",
+                tuple(SCHOOL_NAME_BY_CODE.values()),
+            ).fetchall()
+        }
+        records = conn.execute(
+            """
+            SELECT evaluation_record_id, record_type, participant_code, school_code,
+                   subject, class_level
+            FROM evaluation_dataset_records
+            WHERE source_label=?
+            ORDER BY record_type, participant_code
+            """,
+            (INTERNAL_SOURCE_LABEL,),
+        ).fetchall()
+
+        created = 0
+        linked_existing = 0
+        already_linked = 0
+        for record in records:
+            code = record["participant_code"].strip().upper()
+            link = conn.execute(
+                "SELECT user_id FROM evaluation_account_links WHERE participant_code=?",
+                (code,),
+            ).fetchone()
+            if link:
+                conn.execute(
+                    "UPDATE evaluation_account_links SET last_verified_at=CURRENT_TIMESTAMP WHERE participant_code=?",
+                    (code,),
+                )
+                already_linked += 1
+                continue
+
+            user = conn.execute(
+                "SELECT user_id FROM users WHERE username=?",
+                (code,),
+            ).fetchone()
+            credential_state = "Existing account linked"
+            if user:
+                user_id = user["user_id"]
+                linked_existing += 1
+            else:
+                role_name = record["record_type"]
+                role_id = role_ids.get(role_name)
+                if not role_id:
+                    raise RuntimeError(f"Required role is missing: {role_name}")
+                school_name = SCHOOL_NAME_BY_CODE.get(record["school_code"])
+                school_id = school_ids.get(school_name)
+                title_parts = [record["class_level"], record["subject"]]
+                title = " / ".join(part for part in title_parts if part) or "Evaluation participant"
+                cursor = conn.execute(
+                    """
+                    INSERT INTO users
+                    (full_name, username, email, title, password_hash, role_id, school_id,
+                     account_status, security_level, must_change_password, approved_at, created_at)
+                    VALUES (?, ?, NULL, ?, ?, ?, ?, 'Active', ?, 1,
+                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """,
+                    (
+                        f"Participant {code}",
+                        code,
+                        title,
+                        generate_password_hash(participant_temporary_password(code, secret)),
+                        role_id,
+                        school_id,
+                        1 if role_name == "learner" else 3,
+                    ),
+                )
+                user_id = cursor.lastrowid
+                credential_state = "Temporary password active"
+                created += 1
+                conn.execute(
+                    """
+                    INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
+                    VALUES (NULL, 'PROVISION_EVALUATION_ACCOUNT', 'user', ?, ?)
+                    """,
+                    (
+                        str(user_id),
+                        f"Created current code-identified {role_name} account for participant {code}; password change required",
+                    ),
+                )
+
+            conn.execute(
+                """
+                INSERT INTO evaluation_account_links
+                (participant_code, evaluation_record_id, user_id, credential_state,
+                 provisioned_at, last_verified_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                (code, record["evaluation_record_id"], user_id, credential_state),
+            )
+
+        conn.commit()
+        return {
+            "total": len(records),
+            "created": created,
+            "linked_existing": linked_existing,
+            "already_linked": already_linked,
+        }
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        if owns_connection:
+            conn.close()
+
+
+def evaluation_account_map(conn):
+    ensure_evaluation_dataset_schema(conn)
+    rows = conn.execute(
+        """
+        SELECT links.participant_code, links.user_id, links.credential_state,
+               links.provisioned_at, links.first_password_changed_at,
+               users.username, users.full_name, users.account_status,
+               users.security_level, users.must_change_password,
+               users.last_login_at, users.created_at,
+               roles.role_name, schools.school_name
+        FROM evaluation_account_links links
+        JOIN users ON users.user_id=links.user_id
+        JOIN roles ON roles.role_id=users.role_id
+        LEFT JOIN schools ON schools.school_id=users.school_id
+        ORDER BY links.participant_code
+        """
+    ).fetchall()
+    return {
+        row["participant_code"]: {key: row[key] for key in row.keys()}
+        for row in rows
+    }
 
 
 def _as_float(value):
@@ -311,7 +507,11 @@ def import_evaluation_dataset(conn=None, path=None):
             qualitative_theme_count += 1
 
         conn.commit()
-        return {
+        account_result = None
+        if os.environ.get(PARTICIPANT_ACCOUNT_FLAG, "0") == "1":
+            account_result = provision_evaluation_accounts(conn=conn)
+
+        result = {
             "learners": learner_count,
             "teachers": teacher_count,
             "total": learner_count + teacher_count,
@@ -321,6 +521,9 @@ def import_evaluation_dataset(conn=None, path=None):
             "classification": classification,
             "authenticity_status": authenticity_status,
         }
+        if account_result is not None:
+            result["accounts"] = account_result
+        return result
     finally:
         if owns_connection:
             conn.close()

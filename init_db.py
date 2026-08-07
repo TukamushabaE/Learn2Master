@@ -81,6 +81,10 @@ SCHEMA_MIGRATIONS = (
         "20260715_03_research_indexes",
         "Add indexes used by assessment pairing, mastery, questionnaires and reliability reports",
     ),
+    (
+        "20260808_04_evaluation_accounts",
+        "Link evaluation participant references to current authenticated portal accounts",
+    ),
 )
 
 
