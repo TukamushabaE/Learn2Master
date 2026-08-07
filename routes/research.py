@@ -12,8 +12,11 @@ from routes.guards import role_required
 from security import csrf_protect
 from services.evaluation_dataset import (
     SUPPLIED_DISCLAIMER,
+    evaluation_evidence_summary,
     evaluation_dataset_rows,
     evaluation_dataset_summary,
+    evaluation_qualitative_theme_rows,
+    evaluation_reliability_rows,
 )
 from services.research_analytics import (
     learning_gain_summary as centralized_learning_gain_summary,
@@ -1281,6 +1284,104 @@ def connected_feedback_rows(conn, filters=None):
     return dataset_rows + portal_rows
 
 
+def connected_reliability_rows(conn, filters=None):
+    dataset_rows = []
+    filters = filters or {}
+    for row in evaluation_reliability_rows(conn):
+        if filters.get("date_from") and row["event_date"] < filters["date_from"]:
+            continue
+        if filters.get("date_to") and row["event_date"] > filters["date_to"]:
+            continue
+        dataset_rows.append({
+                "record_source": "Dataset 5",
+                "evidence_level": "Daily aggregate",
+                "occurred_at": row["event_date"],
+                "total_events": row["total_events"],
+                "successful_events": row["successful_events"],
+                "error_events": row["error_events"],
+                "success_rate_pct": row["success_rate_pct"],
+                "average_latency_ms": row["average_latency_ms"],
+                "p95_latency_ms": row["p95_latency_ms"],
+                "offline_queued_events": row["offline_queued_events"],
+                "successful_sync_events": row["successful_sync_events"],
+                "incident_category": row.get("incident_category") or "None",
+        })
+    portal_rows = operational_reliability_rows(conn, filters)
+    results = list(dataset_rows)
+    for row in portal_rows:
+        success = str(row.get("event_status") or "").lower() == "success"
+        failure = str(row.get("event_status") or "").lower() == "failure"
+        offline = str(row.get("offline_status") or "").lower()
+        results.append({
+            "record_source": "Learn2Master portal",
+            "evidence_level": "Individual event",
+            "occurred_at": row.get("occurred_at") or "",
+            "total_events": 1,
+            "successful_events": int(success),
+            "error_events": int(failure),
+            "success_rate_pct": 100 if success else (0 if failure else "Not classified"),
+            "average_latency_ms": row.get("response_time_ms") if row.get("response_time_ms") is not None else "",
+            "p95_latency_ms": "",
+            "offline_queued_events": int(offline not in ("", "online")),
+            "successful_sync_events": int(success and offline not in ("", "online")),
+            "incident_category": row.get("error_category") or "None",
+        })
+    return results
+
+
+def connected_reliability_summary(conn, rows=None):
+    rows = rows if rows is not None else connected_reliability_rows(conn)
+    total_events = sum(int(row.get("total_events") or 0) for row in rows)
+    successful_events = sum(int(row.get("successful_events") or 0) for row in rows)
+    error_events = sum(int(row.get("error_events") or 0) for row in rows)
+    offline_queued = sum(int(row.get("offline_queued_events") or 0) for row in rows)
+    successful_sync = sum(int(row.get("successful_sync_events") or 0) for row in rows)
+    latency_weight = sum(
+        float(row.get("average_latency_ms") or 0) * int(row.get("total_events") or 0)
+        for row in rows if row.get("average_latency_ms") not in (None, "")
+    )
+    latency_events = sum(
+        int(row.get("total_events") or 0)
+        for row in rows if row.get("average_latency_ms") not in (None, "")
+    )
+    evidence = evaluation_evidence_summary(conn)
+    dataset_days = sum(1 for row in rows if row.get("record_source") == "Dataset 5")
+    portal_events = sum(1 for row in rows if row.get("record_source") == "Learn2Master portal")
+    return {
+        "recorded_events": total_events,
+        "successful_events": successful_events,
+        "application_errors": error_events,
+        "recorded_success_rate": round(successful_events / total_events * 100, 2) if total_events else NO_DATA,
+        "average_response_time_ms": round(latency_weight / latency_events, 1) if latency_events else NO_DATA,
+        "offline_sync_success_rate": round(successful_sync / offline_queued * 100, 2) if offline_queued else NO_DATA,
+        "dataset5_daily_records": dataset_days,
+        "portal_event_records": portal_events,
+        "recorded_period": (
+            f"{evidence['reliability_log_start']} to {evidence['reliability_log_end']}"
+            if evidence["reliability_log_start"] else NO_DATA
+        ),
+        "verified_coverage_days": evidence["verified_evaluation_coverage_days"],
+        "six_month_status": evidence["coverage_status"],
+        "median_response_time_ms": "Not calculated for daily aggregates",
+        "scope_note": "Dataset 5 supplies daily operational aggregates; new portal events are added individually and retain their source label.",
+    }
+
+
+def evaluation_collection_audit_rows(conn):
+    summary = evaluation_dataset_summary(conn)
+    evidence = evaluation_evidence_summary(conn)
+    return [
+        {"evidence_stream": "Participant register", "collection_method": "Purposive maximum-variation sampling in two CBC secondary schools", "records": summary["learner_records"] + summary["teacher_records"], "period_or_sample": "64 coded learners; 8 coded teachers", "verification_status": "Recorded in Dataset 5"},
+        {"evidence_stream": "Learning outcomes", "collection_method": "Single-group matched pre-test/post-test evaluation", "records": summary["complete_pairs"], "period_or_sample": "60 complete pairs; 2 withdrawals; 2 missing post-tests", "verification_status": "Supported as a pre/post association"},
+        {"evidence_stream": "Learner acceptance", "collection_method": "Ten-item 5-point Likert questionnaire; LQ9 reverse-scored", "records": summary["learner_questionnaire_responses"], "period_or_sample": f"Mean {summary['learner_acceptance']}/5", "verification_status": "Recorded for this sample"},
+        {"evidence_stream": "Teacher acceptance", "collection_method": "Eight-item 5-point Likert questionnaire", "records": summary["teacher_questionnaire_responses"], "period_or_sample": f"Mean {summary['teacher_acceptance']}/5", "verification_status": "Recorded for this sample"},
+        {"evidence_stream": "System reliability", "collection_method": "Daily aggregate operational and offline-synchronization log", "records": summary["reliability_days"], "period_or_sample": f"{summary['reliability_log_start']} to {summary['reliability_log_end']}", "verification_status": "Supported for the recorded 28-day window"},
+        {"evidence_stream": "Qualitative evidence", "collection_method": "Coded thematic summary of learner and teacher responses", "records": summary["qualitative_themes"], "period_or_sample": f"{summary['qualitative_mentions']} coded mentions", "verification_status": "Theme counts recorded; retain source excerpts separately"},
+        {"evidence_stream": "Participant assessment dates", "collection_method": "Exact dated assessment source records", "records": 0, "period_or_sample": "Dates are not present in Dataset 5 learner rows", "verification_status": "Not yet verified"},
+        {"evidence_stream": "Six-month duration", "collection_method": "Verified dated evidence spanning at least 182 calendar days", "records": evidence["verified_evidence_log_rows"], "period_or_sample": f"Verified coverage: {evidence['verified_evaluation_coverage_days']} days", "verification_status": evidence["coverage_status"]},
+    ]
+
+
 def connected_research_rows(conn):
     """Combine Dataset 5 and new portal evidence without overwriting either source."""
     rows = []
@@ -1340,6 +1441,55 @@ def connected_research_rows(conn):
             "ai_confidence": "",
             "reflection_completed": "",
             "practical_completed": "",
+            "captured_at": row.get("imported_at") or "",
+        })
+    for row in evaluation_reliability_rows(conn):
+        rows.append({
+            "record_source": "Dataset 5 research evaluation",
+            "capture_mode": "Recorded daily aggregate",
+            "record_type": "system_reliability_daily",
+            "participant_code": "",
+            "study_phase": "Evaluation",
+            "school_code": "",
+            "subject": "",
+            "class_level": "",
+            "learning_outcome": "Operational reliability",
+            "study_status": row.get("incident_category") or "None",
+            "pre_test": "", "post_test": "", "learning_gain": "", "normalized_gain": "",
+            "mastery_status": "", "acceptance_score": "", "attempts": "",
+            "time_to_mastery": "", "teacher_intervention": "", "ai_confidence": "",
+            "reflection_completed": "", "practical_completed": "",
+            "total_events": row.get("total_events"),
+            "successful_events": row.get("successful_events"),
+            "error_events": row.get("error_events"),
+            "success_rate_pct": row.get("success_rate_pct"),
+            "average_latency_ms": row.get("average_latency_ms"),
+            "p95_latency_ms": row.get("p95_latency_ms"),
+            "offline_queued_events": row.get("offline_queued_events"),
+            "successful_sync_events": row.get("successful_sync_events"),
+            "qualitative_theme": "", "mention_count": "", "interpretation": "",
+            "captured_at": row.get("event_date") or "",
+        })
+    for row in evaluation_qualitative_theme_rows(conn):
+        rows.append({
+            "record_source": "Dataset 5 research evaluation",
+            "capture_mode": "Recorded coded summary",
+            "record_type": "qualitative_theme",
+            "participant_code": row.get("respondent_group") or "",
+            "study_phase": "Evaluation",
+            "school_code": "", "subject": "", "class_level": "",
+            "learning_outcome": "Qualitative evaluation",
+            "study_status": "Coded theme",
+            "pre_test": "", "post_test": "", "learning_gain": "", "normalized_gain": "",
+            "mastery_status": "", "acceptance_score": "", "attempts": "",
+            "time_to_mastery": "", "teacher_intervention": "", "ai_confidence": "",
+            "reflection_completed": "", "practical_completed": "",
+            "total_events": "", "successful_events": "", "error_events": "",
+            "success_rate_pct": "", "average_latency_ms": "", "p95_latency_ms": "",
+            "offline_queued_events": "", "successful_sync_events": "",
+            "qualitative_theme": row.get("coded_theme") or "",
+            "mention_count": row.get("mention_count") or 0,
+            "interpretation": row.get("interpretation") or "",
             "captured_at": row.get("imported_at") or "",
         })
 
@@ -1438,13 +1588,14 @@ def research_capture_links(conn, live_metrics=None):
         )
     """)
     links = [
-        {"stream": "Dataset 5", "system_source": "Recorded learner assessments and teacher surveys", "count": dataset_summary["total_records"], "status": "Connected", "route": "research.supplied_evaluation"},
+        {"stream": "Dataset 5", "system_source": "Participant, questionnaire, reliability and qualitative evidence", "count": dataset_summary["total_records"] + dataset_summary["reliability_days"] + dataset_summary["qualitative_themes"], "status": "Connected", "route": "research.supplied_evaluation"},
         {"stream": "Assessments", "system_source": "Dataset 5 pre/post records plus portal assessment attempts", "count": dataset_assessments + live_metrics["attempts"], "status": "Connected", "route": "research.pre_post_results"},
         {"stream": "Mastery", "system_source": "Dataset 5 outcomes plus portal mastery updates", "count": dataset_summary["complete_pairs"] + mastery_count, "status": "Connected", "route": "research.mastery_attainment"},
         {"stream": "Acceptance", "system_source": "Dataset 5 surveys plus portal questionnaires", "count": dataset_acceptance + live_metrics["questionnaire_response_count"], "status": "Connected", "route": "research.questionnaire_results"},
         {"stream": "Teacher oversight", "system_source": "Dataset 5 intervention counts plus portal reviews", "count": dataset_interventions + len(oversight_rows), "status": "Connected", "route": "research.teacher_oversight"},
         {"stream": "AI support", "system_source": "Dataset 5 recommendation follow-through plus portal explanations", "count": dataset_recommendations + live_metrics["ai_recommendations"], "status": "Connected", "route": "research.feedback_responsiveness"},
-        {"stream": "Reliability", "system_source": "Application and synchronization events", "count": live_metrics["reliability_evidence_count"], "status": "Auto-captured", "route": "research.system_reliability"},
+        {"stream": "Reliability", "system_source": "Dataset 5 daily aggregates plus portal application events", "count": dataset_summary["reliability_days"] + live_metrics["reliability_evidence_count"], "status": "Connected", "route": "research.system_reliability"},
+        {"stream": "Qualitative themes", "system_source": "Coded learner and teacher thematic summary", "count": dataset_summary["qualitative_themes"], "status": "Connected", "route": "research.evidence_verification"},
     ]
     return links, unlinked_attempts
 
@@ -1478,8 +1629,14 @@ def connected_research_summary(conn, live_metrics=None):
         "mastered_records": dataset5["mastered_records"] + portal_mastered,
         "mastery_rate": percentage(dataset5["mastered_records"] + portal_mastered, total_pairs),
         "dataset5_records": dataset5["total_records"],
+        "dataset5_evidence_rows": dataset5["total_records"] + dataset5["reliability_days"] + dataset5["qualitative_themes"],
         "portal_participants": live_metrics["eligible_participants"],
         "portal_questionnaires": live_metrics["questionnaire_response_count"],
+        "dataset5_questionnaires": dataset5["questionnaire_responses"],
+        "total_questionnaire_responses": dataset5["questionnaire_responses"] + live_metrics["questionnaire_response_count"],
+        "dataset5_reliability_days": dataset5["reliability_days"],
+        "reliability_period": f"{dataset5['reliability_log_start']} to {dataset5['reliability_log_end']}",
+        "six_month_status": evaluation_evidence_summary(conn)["coverage_status"],
         "portal_events": live_metrics["system_usage_count"],
         "unlinked_attempts": unlinked_attempts,
         "capture_links": links,
@@ -1552,14 +1709,20 @@ def research_dashboard():
 def supplied_evaluation():
     conn = get_db()
     summary = evaluation_dataset_summary(conn)
+    evidence_summary = evaluation_evidence_summary(conn)
     learners = evaluation_dataset_rows(conn, "learner")
     teachers = evaluation_dataset_rows(conn, "teacher")
+    reliability = evaluation_reliability_rows(conn)
+    qualitative_themes = evaluation_qualitative_theme_rows(conn)
     conn.close()
     return render_template(
         "research/supplied_evaluation.html",
         summary=summary,
         learners=learners,
         teachers=teachers,
+        evidence_summary=evidence_summary,
+        reliability=reliability,
+        qualitative_themes=qualitative_themes,
         disclaimer=SUPPLIED_DISCLAIMER,
     )
 
@@ -1990,16 +2153,18 @@ def feedback_responsiveness():
 def system_reliability():
     conn = get_db()
     filters = research_filter_values()
-    rows = operational_reliability_rows(conn, filters)
-    summary = operational_reliability_summary(rows)
+    rows = connected_reliability_rows(conn, filters)
+    summary = connected_reliability_summary(conn, rows)
     conn.close()
     return render_table(
-        "Recorded System Reliability",
-        "Application-event evidence only. This page does not present an external uptime percentage.",
-        [("occurred_at", "Date"), ("event_type", "Event"), ("actor_role", "Role"),
-         ("entity_type", "Entity"), ("event_status", "Status"),
-         ("response_time_ms", "Response Time (ms)"), ("error_category", "Error Category"),
-         ("offline_status", "Offline/Queue Status")],
+        "Connected System Reliability",
+        "Dataset 5 daily aggregates and new portal events are shown together without presenting them as a six-month uptime record.",
+        [("record_source", "Source"), ("occurred_at", "Date"),
+         ("evidence_level", "Evidence Level"), ("total_events", "Total Events"),
+         ("successful_events", "Successful"), ("error_events", "Errors"),
+         ("success_rate_pct", "Success Rate (%)"), ("average_latency_ms", "Average Latency (ms)"),
+         ("p95_latency_ms", "P95 Latency (ms)"), ("offline_queued_events", "Offline Queued"),
+         ("successful_sync_events", "Successful Sync"), ("incident_category", "Incident")],
         rows, summary,
         [{"label": "Export Reliability", "url": url_for("research.export_system_reliability", **filters)}],
         filters=filters,
@@ -2030,10 +2195,36 @@ def data_collection_readiness():
     report = readiness_report(conn)
     conn.close()
     return render_table(
-        "Data Collection Readiness",
-        f"Overall status: {report['overall_status']}. A blocked item must be resolved before claiming readiness for live dissertation data collection.",
+        "Portal Data Collection Readiness",
+        f"Overall status: {report['overall_status']}. This checks new portal collection; Dataset 5 evidence is documented separately in the Evidence Verification Register.",
         [("item", "Requirement"), ("status", "Status"), ("evidence", "Evidence / next action")],
         report["items"], report["summary"],
+        [{"label": "Open Evidence Verification", "url": url_for("research.evidence_verification")}],
+    )
+
+
+@research_bp.route("/research/evidence-verification")
+@role_required(*RESEARCH_ROLES)
+def evidence_verification():
+    conn = get_db()
+    rows = evaluation_collection_audit_rows(conn)
+    evidence = evaluation_evidence_summary(conn)
+    conn.close()
+    return render_table(
+        "Data Collection and Evidence Verification",
+        "This register answers how each result was collected, the available sample or period, and whether the evidence supports the associated claim.",
+        [("evidence_stream", "Evidence Stream"), ("collection_method", "How Data Was Collected"),
+         ("records", "Records"), ("period_or_sample", "Period / Sample"),
+         ("verification_status", "Verification Status")],
+        rows,
+        {
+            "verified_evidence_log_rows": evidence["verified_evidence_log_rows"],
+            "verified_coverage_days": evidence["verified_evaluation_coverage_days"],
+            "reliability_days": evidence["reliability_days"],
+            "six_month_status": evidence["coverage_status"],
+        },
+        [{"label": "Open Dataset 5", "url": url_for("research.supplied_evaluation")},
+         {"label": "Open Questionnaire Results", "url": url_for("research.questionnaire_results")}],
     )
 
 
@@ -2058,8 +2249,14 @@ def proposal_traceability():
 def questionnaires():
     conn = get_db()
     rows = questionnaire_rows(conn)
+    evaluation_summary = evaluation_dataset_summary(conn)
     conn.close()
-    return render_template("research/questionnaires.html", questionnaires=rows, no_data=NO_DATA)
+    return render_template(
+        "research/questionnaires.html",
+        questionnaires=rows,
+        evaluation_summary=evaluation_summary,
+        no_data=NO_DATA,
+    )
 
 
 @research_bp.route("/research/questionnaires/create", methods=["GET", "POST"])
@@ -2251,9 +2448,9 @@ def questionnaire_results():
     dataset_summary = evaluation_dataset_summary(conn)
     portal_response_count = one(conn, "SELECT COUNT(*) FROM research_questionnaire_responses")
     summary = {
-        "dataset5_learner_responses": dataset_summary["complete_pairs"],
+        "dataset5_learner_responses": dataset_summary["learner_questionnaire_responses"],
         "dataset5_learner_acceptance": dataset_summary["learner_acceptance"],
-        "dataset5_teacher_responses": dataset_summary["teacher_records"],
+        "dataset5_teacher_responses": dataset_summary["teacher_questionnaire_responses"],
         "dataset5_teacher_acceptance": dataset_summary["teacher_acceptance"],
         "portal_questionnaire_responses": portal_response_count,
     }
@@ -2354,7 +2551,7 @@ def chapter_four_report():
     metrics = research_metrics(conn)
     connected_summary = connected_research_summary(conn, metrics)
     feedback_rows = connected_feedback_rows(conn, filters)
-    reliability_rows = operational_reliability_rows(conn, filters)
+    reliability_rows = connected_reliability_rows(conn, filters)
     integrity = integrity_report(conn)
     data = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -2362,6 +2559,8 @@ def chapter_four_report():
         "supplied_summary": evaluation_dataset_summary(conn),
         "supplied_learners": evaluation_dataset_rows(conn, "learner"),
         "supplied_teachers": evaluation_dataset_rows(conn, "teacher"),
+        "evidence_summary": evaluation_evidence_summary(conn),
+        "qualitative_themes": evaluation_qualitative_theme_rows(conn),
         "metrics": metrics,
         "connected_summary": connected_summary,
         "capture_links": connected_summary["capture_links"],
@@ -2374,7 +2573,7 @@ def chapter_four_report():
         "feedback_rows": feedback_rows,
         "feedback_summary": feedback_responsiveness_summary(feedback_rows),
         "reliability_rows": reliability_rows,
-        "reliability_summary": operational_reliability_summary(reliability_rows),
+        "reliability_summary": connected_reliability_summary(conn, reliability_rows),
         "integrity": integrity,
         "questionnaire_results": connected_questionnaire_rows(conn),
         "system_logs": system_log_rows(conn, limit=20),
@@ -2400,7 +2599,9 @@ def chapter_five_insights():
     gains = learning_gain_rows(conn)
     weak_concepts = weak_concept_rows(conn, limit=6)
     oversight_summary, _ = teacher_oversight_data(conn)
-    questionnaire_results = questionnaire_result_rows(conn)
+    questionnaire_results = connected_questionnaire_rows(conn)
+    qualitative_themes = evaluation_qualitative_theme_rows(conn)
+    evidence_summary = evaluation_evidence_summary(conn)
     readiness = chapter_evidence_readiness(conn)
     has_data = bool(evaluation_summary["total_records"] or gains or questionnaire_results or metrics["attempts"])
     insights = []
@@ -2442,10 +2643,41 @@ def chapter_five_insights():
             add(f"Frequently recorded weak-concept tags include {concepts}; qualitative review is required before treating tags as themes.", len(weak_concepts), "Attempt weak-concept tags", metrics["attempts"], "Recorded assessment attempts")
         add(f"AI support is represented by {metrics['ai_recommendations']} recommendation records with mean stored confidence {metrics['avg_ai_confidence']}%.", metrics["ai_recommendations"], "Recommendations and AI explanations", metrics["ai_recommendations"], "Generated recommendation records", "system-generated evidence")
         add(f"Teacher oversight includes {oversight_summary['number_of_interventions']} interventions, {oversight_summary['teacher_approvals']} approvals and {oversight_summary['teacher_overrides']} overrides.", oversight_summary["number_of_interventions"], "Teacher oversight tables", oversight_summary["learners_supported_by_teacher"], "Recorded teacher actions")
-        if metrics["questionnaire_response_count"]:
-            add(f"User-acceptance evidence includes {metrics['questionnaire_response_count']} final questionnaire response(s).", metrics["questionnaire_response_count"], "Research questionnaires", metrics["questionnaire_response_count"], "Submitted learner and teacher instruments", "self-report evidence")
-        else:
-            add("No final questionnaire responses are available, so user acceptance cannot yet be interpreted.", "No data yet.", "Research questionnaires", 0, "No completed instruments", "missing evidence")
+        add(
+            f"User-acceptance evidence includes {evaluation_summary['learner_questionnaire_responses']} learner and {evaluation_summary['teacher_questionnaire_responses']} teacher Dataset 5 responses, plus {metrics['questionnaire_response_count']} new portal response(s).",
+            evaluation_summary["questionnaire_responses"] + metrics["questionnaire_response_count"],
+            "Dataset 5 and portal questionnaires",
+            evaluation_summary["questionnaire_responses"] + metrics["questionnaire_response_count"],
+            "Recorded learner and teacher instruments",
+            "self-report evidence",
+        )
+        if evaluation_summary["reliability_days"]:
+            add(
+                f"Recorded operational evidence covers {evaluation_summary['reliability_days']} daily records from {evaluation_summary['reliability_log_start']} to {evaluation_summary['reliability_log_end']}, with {evaluation_summary['operational_success_rate']}% successful events and {evaluation_summary['offline_sync_success_rate']}% offline-sync success.",
+                evaluation_summary["operational_success_rate"],
+                "Dataset 5 system reliability",
+                evaluation_summary["reliability_days"],
+                "Recorded 28-day operational window",
+                "operational evidence",
+            )
+        if qualitative_themes:
+            add(
+                f"The coded qualitative summary contains {len(qualitative_themes)} themes and {sum(row['mention_count'] for row in qualitative_themes)} coded mentions across learner and teacher groups.",
+                len(qualitative_themes),
+                "Dataset 5 qualitative themes",
+                sum(row["mention_count"] for row in qualitative_themes),
+                "Coded thematic summary; source excerpts retained separately",
+                "qualitative evidence",
+            )
+        if not evidence_summary["six_month_duration_supported"]:
+            add(
+                "The current records do not verify a six-month participant evaluation because learner assessment dates are absent and the verified Evidence Log contains no rows.",
+                evidence_summary["verified_evaluation_coverage_days"],
+                "Dataset 5 evidence-verification controls",
+                evidence_summary["verified_evidence_log_rows"],
+                "Duration claims require at least 182 days of dated, source-linked evidence",
+                "limitation",
+            )
         if metrics["sync_success_rate"] == NO_DATA:
             add("No synchronization outcomes have been recorded; external hosting uptime is also outside the application-event dataset.", NO_DATA, "Sync and research events", 0, "Recorded application events only", "operational evidence")
         else:
@@ -2464,6 +2696,8 @@ def chapter_five_insights():
         readiness=readiness,
         evaluation_summary=evaluation_summary,
         connected_summary=connected_summary,
+        qualitative_themes=qualitative_themes,
+        evidence_summary=evidence_summary,
     )
 
 
@@ -2560,11 +2794,12 @@ def export_teacher_oversight():
 @role_required(*RESEARCH_ROLES)
 def export_system_reliability():
     conn = get_db()
-    rows = operational_reliability_rows(conn, research_filter_values())
+    rows = connected_reliability_rows(conn, research_filter_values())
     conn.close()
     columns = [(key, key) for key in (
-        "event_id", "actor_role", "event_type", "entity_type", "entity_id",
-        "response_time_ms", "event_status", "error_category", "offline_status", "occurred_at",
+        "record_source", "evidence_level", "occurred_at", "total_events",
+        "successful_events", "error_events", "success_rate_pct", "average_latency_ms",
+        "p95_latency_ms", "offline_queued_events", "successful_sync_events", "incident_category",
     )]
     return csv_response("learn2master_system_reliability.csv", columns, rows, "system_reliability")
 
@@ -2622,6 +2857,17 @@ def export_full_dataset():
         ("reflection_completed", "reflection_completed"),
         ("practical_completed", "practical_completed"),
         ("acceptance_score", "acceptance_score"),
+        ("total_events", "total_events"),
+        ("successful_events", "successful_events"),
+        ("error_events", "error_events"),
+        ("success_rate_pct", "success_rate_pct"),
+        ("average_latency_ms", "average_latency_ms"),
+        ("p95_latency_ms", "p95_latency_ms"),
+        ("offline_queued_events", "offline_queued_events"),
+        ("successful_sync_events", "successful_sync_events"),
+        ("qualitative_theme", "qualitative_theme"),
+        ("mention_count", "mention_count"),
+        ("interpretation", "interpretation"),
         ("captured_at", "captured_at"),
     ]
     return csv_response("learn2master_connected_research_dataset.csv", columns, rows, "connected_full_dataset")

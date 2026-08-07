@@ -21,6 +21,7 @@
   <a class="research-button" href="{{ url_for('research.system_reliability') }}">Reliability</a>
   <a class="research-button" href="{{ url_for('research.data_integrity') }}">Data Integrity</a>
   <a class="research-button" href="{{ url_for('research.data_collection_readiness') }}">Collection Readiness</a>
+  <a class="research-button" href="{{ url_for('research.evidence_verification') }}">Evidence Verification</a>
   <a class="research-button" href="{{ url_for('research.proposal_traceability') }}">Proposal Traceability</a>
   <a class="research-button" href="{{ url_for('research.questionnaires') }}">Questionnaires</a>
   <a class="research-button" href="{{ url_for('research.chapter_four_report') }}">Chapter Four</a>
@@ -53,7 +54,11 @@
   <div class="stat-card connected-card"><h3>Combined Mean Gain</h3><p class="stat-number">+{{ connected_summary.average_gain }}</p></div>
   <div class="stat-card connected-card"><h3>Improved Records</h3><p class="stat-number">{{ connected_summary.improved_records }}/{{ connected_summary.total_paired_records }}</p></div>
   <div class="stat-card connected-card"><h3>Combined Mastery Rate</h3><p class="stat-number">{{ connected_summary.mastery_rate }}%</p></div>
+  <div class="stat-card connected-card"><h3>Dataset 5 Questionnaire Responses</h3><p class="stat-number">{{ connected_summary.dataset5_questionnaires }}</p></div>
+  <div class="stat-card connected-card"><h3>Total Questionnaire Responses</h3><p class="stat-number">{{ connected_summary.total_questionnaire_responses }}</p></div>
+  <div class="stat-card connected-card"><h3>Reliability Evidence</h3><p class="stat-number">{{ connected_summary.dataset5_reliability_days }} days</p></div>
 </div>
+<div class="capture-alert"><strong>Duration verification:</strong> {{ connected_summary.six_month_status }}. The currently recorded reliability period is {{ connected_summary.reliability_period }}; open Evidence Verification for the collection-method and claim-support register.</div>
 
 <section class="learn-card">
   <h2>How the Entire System Feeds the Research Report</h2>
@@ -79,6 +84,10 @@
   <div class="stat-card dataset5-card"><h3>Mastery Rate</h3><p class="stat-number">{{ supplied_metrics.mastery_rate }}%</p></div>
   <div class="stat-card dataset5-card"><h3>Learner Acceptance</h3><p class="stat-number">{{ supplied_metrics.learner_acceptance }}/5</p></div>
   <div class="stat-card dataset5-card"><h3>Teacher Acceptance</h3><p class="stat-number">{{ supplied_metrics.teacher_acceptance }}/5</p></div>
+  <div class="stat-card dataset5-card"><h3>Learner Questionnaire Responses</h3><p class="stat-number">{{ supplied_metrics.learner_questionnaire_responses }}</p></div>
+  <div class="stat-card dataset5-card"><h3>Teacher Questionnaire Responses</h3><p class="stat-number">{{ supplied_metrics.teacher_questionnaire_responses }}</p></div>
+  <div class="stat-card dataset5-card"><h3>Operational Success</h3><p class="stat-number">{{ supplied_metrics.operational_success_rate }}%</p></div>
+  <div class="stat-card dataset5-card"><h3>Recorded Reliability Window</h3><p class="stat-number">{{ supplied_metrics.reliability_days }} days</p></div>
 </div>
 
 <section class="learn-card">
@@ -104,7 +113,7 @@
   <div class="stat-card"><h3>Mastery Attainment</h3><p class="stat-number">{{ metrics.mastery_attainment_rate }}%</p></div>
   <div class="stat-card"><h3>Time to Mastery</h3><p class="stat-number">{{ metrics.average_time_to_mastery }}h</p></div>
   <div class="stat-card"><h3>Teacher Interventions</h3><p class="stat-number">{{ metrics.teacher_intervention_count }}</p></div>
-  <div class="stat-card"><h3>Questionnaire Responses</h3><p class="stat-number">{{ metrics.questionnaire_response_count }}</p></div>
+  <div class="stat-card"><h3>New Portal Questionnaire Responses</h3><p class="stat-number">{{ metrics.questionnaire_response_count }}</p></div>
   <div class="stat-card"><h3>Learner Satisfaction</h3><p class="stat-number">{{ metrics.average_learner_satisfaction }}</p></div>
   <div class="stat-card"><h3>Teacher Satisfaction</h3><p class="stat-number">{{ metrics.average_teacher_satisfaction }}</p></div>
   <div class="stat-card"><h3>System Usage</h3><p class="stat-number">{{ metrics.system_usage_count }}</p></div>

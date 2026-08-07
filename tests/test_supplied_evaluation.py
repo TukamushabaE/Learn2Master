@@ -1,3 +1,6 @@
+import csv
+import io
+
 from conftest import login
 from services.evaluation_dataset import (
     SUPPLIED_AUTHENTICITY,
@@ -16,6 +19,8 @@ def test_dataset5_import_preserves_supplied_rows_and_results(db):
         "learners": 64,
         "teachers": 8,
         "total": 72,
+        "reliability_days": 28,
+        "qualitative_themes": 9,
         "source_label": "Learn2Master_Dataset5.xlsx",
         "classification": SUPPLIED_CLASSIFICATION,
         "authenticity_status": SUPPLIED_AUTHENTICITY,
@@ -32,6 +37,17 @@ def test_dataset5_import_preserves_supplied_rows_and_results(db):
     assert summary["missing_post_test_records"] == 2
     assert summary["learner_acceptance"] == 3.91
     assert summary["teacher_acceptance"] == 4.41
+    assert summary["learner_questionnaire_responses"] == 60
+    assert summary["teacher_questionnaire_responses"] == 8
+    assert summary["questionnaire_responses"] == 68
+    assert summary["reliability_days"] == 28
+    assert summary["reliability_log_start"] == "2026-06-18"
+    assert summary["reliability_log_end"] == "2026-07-15"
+    assert summary["operational_success_rate"] == 98.82
+    assert summary["offline_sync_success_rate"] == 97.44
+    assert summary["weighted_average_latency_ms"] == 404.5
+    assert summary["qualitative_themes"] == 9
+    assert summary["qualitative_mentions"] == 128
 
     classifications = db.execute(
         """
@@ -55,7 +71,10 @@ def test_dataset_page_and_export_present_recorded_research_data(client, db):
     assert b"USER-SUPPLIED DE-IDENTIFIED DATA" not in page.data
     assert SUPPLIED_CLASSIFICATION.encode() not in page.data
     assert SUPPLIED_AUTHENTICITY.encode() not in page.data
-    assert b"six-month participant evaluation" in page.data
+    assert b"How the evaluation data was collected" in page.data
+    assert b"28 recorded days" in page.data
+    assert b"Six-month participant evaluation is not yet verified" in page.data
+    assert b"Clear next steps and progression requirements" in page.data
 
     export = client.get("/research/supplied-evaluation/export.csv")
     assert export.status_code == 200
@@ -99,18 +118,25 @@ def test_dataset5_links_to_reports_without_overwriting_live_participants(client,
     assert b"Connected Research Evidence Summary" in chapter_four.data
     assert b"Learn2Master_Dataset5.xlsx" in chapter_four.data
     assert b"KTHS-L001" in chapter_four.data
-    assert b"Automatically Updated Portal Evidence" in chapter_four.data
+    assert b"Connected Detailed Evidence" in chapter_four.data
+    assert b"Data Collection and Verification Statement" in chapter_four.data
+    assert b"2026-06-18" in chapter_four.data
 
     chapter_five = client.get("/research/chapter-five-insights")
     assert chapter_five.status_code == 200
     assert b"Connected Discussion and Insights" in chapter_five.data
     assert b"Dataset 5 records show a mean increase" in chapter_five.data
+    assert b"Clear next steps and progression requirements" in chapter_five.data
+    assert b"not yet verified" in chapter_five.data
 
     connected_export = client.get("/research/export/full-dataset")
     assert connected_export.status_code == 200
     assert b"record_source,capture_mode,record_type" in connected_export.data
     assert b"Dataset 5 research evaluation" in connected_export.data
     assert b"KTHS-L001" in connected_export.data
+    assert b"system_reliability_daily" in connected_export.data
+    assert b"qualitative_theme" in connected_export.data
+    assert b"Clear next steps and progression requirements" in connected_export.data
 
 
 def test_new_linked_portal_attempt_is_automatically_counted(db):
@@ -150,6 +176,7 @@ def test_dataset5_is_linked_across_detailed_research_features(client, db):
         "/research/questionnaire-results": (b"Dataset 5 Learner Acceptance", b"3.91", b"Dataset 5 Teacher Acceptance"),
         "/research/teacher-oversight": (b"Dataset 5", b"Teacher Intervention", b"KZHS-L002"),
         "/research/feedback-responsiveness": (b"Dataset 5", b"KZHS-L001", b"Recorded AI recommendation"),
+        "/research/system-reliability": (b"Dataset 5", b"2026-06-18", b"98.78"),
     }
     for path, expected_values in expected_pages.items():
         response = client.get(path)
@@ -175,6 +202,54 @@ def test_feature_exports_use_the_same_connected_dataset(client, db):
         assert response.mimetype == "text/csv"
         assert b"source" in response.data.lower()
         assert b"Dataset 5" in response.data
+
+
+def test_questionnaire_management_and_evidence_audit_use_dataset5_counts(client, db):
+    import_evaluation_dataset(conn=db)
+    login(client, "admin", "12345")
+
+    questionnaire_page = client.get("/research/questionnaires")
+    assert questionnaire_page.status_code == 200
+    assert b"Recorded Evaluation Responses" in questionnaire_page.data
+    assert b"Learner responses" in questionnaire_page.data
+    assert b"Teacher responses" in questionnaire_page.data
+    assert b"New portal responses" in questionnaire_page.data
+    assert b"<strong>60</strong>" in questionnaire_page.data
+    assert b"<strong>8</strong>" in questionnaire_page.data
+    assert b"<strong>68</strong>" in questionnaire_page.data
+
+    audit_page = client.get("/research/evidence-verification")
+    assert audit_page.status_code == 200
+    assert b"Data Collection and Evidence Verification" in audit_page.data
+    assert b"Single-group matched pre-test/post-test evaluation" in audit_page.data
+    assert b"Supported for the recorded 28-day window" in audit_page.data
+    assert b"Six-month participant evaluation is not yet verified" in audit_page.data
+
+
+def test_system_reliability_and_full_exports_include_recorded_evidence(client, db):
+    import_evaluation_dataset(conn=db)
+    login(client, "admin", "12345")
+
+    reliability_export = client.get("/research/export/system-reliability")
+    assert reliability_export.status_code == 200
+    assert b"Dataset 5" in reliability_export.data
+    assert b"2026-06-18" in reliability_export.data
+
+    full_export = client.get("/research/export/full-dataset")
+    assert full_export.status_code == 200
+    assert b"total_events" in full_export.data
+    assert b"mention_count" in full_export.data
+    assert b"system_reliability_daily" in full_export.data
+    assert b"qualitative_theme" in full_export.data
+    dataset_rows = [
+        row for row in csv.DictReader(io.StringIO(full_export.get_data(as_text=True).lstrip("\ufeff")))
+        if row["record_source"] == "Dataset 5 research evaluation"
+    ]
+    assert len(dataset_rows) == 109
+    assert sum(row["record_type"] == "learner_paired_assessment" for row in dataset_rows) == 64
+    assert sum(row["record_type"] == "teacher_questionnaire" for row in dataset_rows) == 8
+    assert sum(row["record_type"] == "system_reliability_daily" for row in dataset_rows) == 28
+    assert sum(row["record_type"] == "qualitative_theme" for row in dataset_rows) == 9
 
 
 def test_account_management_links_research_identities_without_creating_logins(client, db):
