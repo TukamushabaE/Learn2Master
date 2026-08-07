@@ -172,7 +172,7 @@ def import_evaluation_dataset(conn=None, path=None):
                     "school_code": teacher.get("school_code"),
                     "subject": teacher.get("subject"),
                     "class_level": None,
-                    "study_status": "Supplied survey row",
+                    "study_status": "Teacher survey record",
                     "pre_test_pct": None,
                     "post_test_pct": None,
                     "gain_points": None,

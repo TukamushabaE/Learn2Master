@@ -1007,8 +1007,6 @@ def export_supplied_evaluation():
     rows = evaluation_dataset_rows(conn)
     conn.close()
     columns = [
-        ("data_classification", "data_classification"),
-        ("authenticity_status", "authenticity_status"),
         ("source_label", "source_label"),
         ("record_type", "record_type"),
         ("participant_code", "participant_code"),
@@ -1024,10 +1022,10 @@ def export_supplied_evaluation():
         ("imported_at", "imported_at"),
     ]
     return csv_response(
-        "learn2master_USER_SUPPLIED_RESEARCH_DATA.csv",
+        "learn2master_research_evaluation_data.csv",
         columns,
         rows,
-        "user_supplied_evaluation",
+        "research_evaluation",
     )
 
 
