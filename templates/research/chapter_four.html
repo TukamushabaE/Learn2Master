@@ -2,7 +2,7 @@
 {% block title %}Chapter Four Report{% endblock %}
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
-<style>.print-actions{display:flex;gap:10px;justify-content:flex-end;margin-bottom:14px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.chapter-table{width:100%;border-collapse:collapse;margin-top:10px}.chapter-table th,.chapter-table td{border:1px solid #e2e9f2;padding:8px;text-align:left;vertical-align:top}.chapter-table th{background:#f6f9fd}.chapter-section{break-inside:avoid}@media print{.sidebar,.topbar,.footer,.print-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}.chapter-table{font-size:11px}}</style>
+<style>.print-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:14px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.chapter-table{width:100%;border-collapse:collapse;margin-top:10px}.chapter-table th,.chapter-table td{border:1px solid #e2e9f2;padding:8px;text-align:left;vertical-align:top}.chapter-table th{background:#f6f9fd}.chapter-section{break-inside:avoid}.dataset5-evidence{border:2px solid #0f8f83;background:#f4fffd}.operational-heading{border-top:3px solid #dce5ef;margin-top:28px;padding-top:20px}@media print{.sidebar,.topbar,.footer,.print-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}.chapter-table{font-size:11px}}</style>
 {% endblock %}
 {% macro table_block(title, columns, rows) %}
 <section class="learn-card chapter-section">
@@ -22,13 +22,25 @@
 {% block content %}
 <div class="print-actions">
   <a class="button" href="{{ url_for('research.chapter_guide') }}">Open Chapter Guide</a>
+  <a class="button" href="{{ url_for('research.export_supplied_evaluation') }}">Export Dataset5</a>
   <a class="button" href="{{ url_for('research.export_full_dataset') }}">Export Full Dataset</a>
   <button class="button" onclick="window.print()">Print Chapter Four</button>
 </div>
 <section class="hero-panel">
-  <div><p class="eyebrow">Dissertation Chapter Four</p><h1>Research Results Report</h1><p>Printable summary tables for participant profile, pre/post results, gain, mastery, teacher oversight, user acceptance and system usage.</p></div>
-  <div class="hero-badge"><span>Participants</span><strong>{{ metrics.total_participants }}</strong></div>
+  <div><p class="eyebrow">Dissertation Chapter Four • Dataset5</p><h1>Research Results Report</h1><p>The primary evaluation results now use Learn2Master_Dataset5.xlsx, followed by separately labelled account-generated operational records.</p></div>
+  <div class="hero-badge"><span>Dataset5 Learners</span><strong>{{ supplied_summary.learner_records }}</strong></div>
 </section>
+<section class="learn-card chapter-section dataset5-evidence">
+  <h2>Dataset5 Evaluation Summary</h2>
+  <p><strong>Source:</strong> {{ supplied_summary.source_label }} · <strong>Classification:</strong> {{ supplied_summary.classification }} / {{ supplied_summary.authenticity_status }}</p>
+  <p><strong>Learner records:</strong> {{ supplied_summary.learner_records }} · <strong>Complete pairs:</strong> {{ supplied_summary.complete_pairs }} · <strong>Teacher surveys:</strong> {{ supplied_summary.teacher_records }}</p>
+  <p><strong>Mean pre-test:</strong> {{ supplied_summary.average_pre_test }}% · <strong>Mean post-test:</strong> {{ supplied_summary.average_post_test }}% · <strong>Mean gain:</strong> +{{ supplied_summary.average_gain }} points · <strong>Improved:</strong> {{ supplied_summary.improved_pairs }}/{{ supplied_summary.complete_pairs }} ({{ supplied_summary.improved_rate }}%)</p>
+  <p><strong>Strict mastery:</strong> {{ supplied_summary.mastered_records }}/{{ supplied_summary.complete_pairs }} ({{ supplied_summary.mastery_rate }}%) · <strong>Learner acceptance:</strong> {{ supplied_summary.learner_acceptance }}/5 · <strong>Teacher acceptance:</strong> {{ supplied_summary.teacher_acceptance }}/5</p>
+  <p>Interpretation: a favourable paired pre/post association for this supplied sample. The import does not independently authenticate assessment dates or establish causal effectiveness or six-month evaluation coverage.</p>
+</section>
+{{ table_block('Dataset5 Learner Records (first 12 shown)', [('participant_code','Code'),('school_code','School'),('subject','Subject'),('class_level','Class'),('study_status','Status'),('pre_test_pct','Pre-test'),('post_test_pct','Post-test'),('gain_points','Gain'),('mastery_status','Mastery'),('acceptance_mean','Acceptance')], supplied_learners) }}
+{{ table_block('Dataset5 Teacher Survey Records', [('participant_code','Teacher Code'),('school_code','School'),('subject','Subject'),('acceptance_mean','Acceptance Mean'),('source_label','Source')], supplied_teachers) }}
+<div class="operational-heading"><h2>Separate Live Account-Generated Evidence</h2><p>The tables below retain older operational portal activity for traceability. They are not Dataset5.</p></div>
 <section class="learn-card chapter-section">
   <p><strong>Generated:</strong> {{ generated_at }} · <strong>Valid paired cases:</strong> {{ gain_summary.valid_pairs }} · <strong>Excluded/unpaired pre-test cases:</strong> {{ excluded_unpaired_cases }}</p>
   <p><strong>Applied filters:</strong> {{ filters if filters else 'All eligible records' }}</p>

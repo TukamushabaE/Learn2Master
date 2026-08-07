@@ -1755,6 +1755,9 @@ def chapter_four_report():
     data = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "filters": filters,
+        "supplied_summary": evaluation_dataset_summary(conn),
+        "supplied_learners": evaluation_dataset_rows(conn, "learner"),
+        "supplied_teachers": evaluation_dataset_rows(conn, "teacher"),
         "metrics": research_metrics(conn),
         "participants": participant_rows(conn, filters),
         "pretest": assessment_result_rows(conn, "pretest", filters),
