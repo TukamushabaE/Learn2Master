@@ -99,7 +99,7 @@ def ensure_evaluation_dataset_schema(conn):
             f"SELECT COUNT(*) AS total FROM {table} WHERE source_label=?",
             (INTERNAL_SOURCE_LABEL,),
         ).fetchone()
-        if not existing or not int(existing["total"] or 0):
+        if not existing or not int(existing[0] or 0):
             conn.execute(
                 f"UPDATE {table} SET source_label=? WHERE source_label LIKE 'Learn2Master_Dataset%.xlsx'",
                 (INTERNAL_SOURCE_LABEL,),
