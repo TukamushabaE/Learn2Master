@@ -830,6 +830,11 @@ def chapter_evidence_readiness(conn):
     complete or that the dissertation findings have been validated.
     """
     participants = participant_summary(conn)
+    dataset5 = evaluation_dataset_summary(conn)
+    dataset5_acceptance = sum(
+        1 for row in evaluation_dataset_rows(conn)
+        if row.get("acceptance_mean") is not None
+    )
     gains = learning_gain_rows(conn)
     mastery = mastery_rows(conn)
     oversight, _ = teacher_oversight_data(conn)
@@ -844,21 +849,21 @@ def chapter_evidence_readiness(conn):
     items = [
         {
             "label": "Eligible participants",
-            "present": participants["eligible_participants"] > 0,
-            "evidence": f"{participants['eligible_participants']} consented and active participant(s)",
-            "route": "research.participants",
+            "present": dataset5["total_records"] > 0 or participants["eligible_participants"] > 0,
+            "evidence": f"{dataset5['total_records']} Dataset 5 record(s) plus {participants['eligible_participants']} linked portal participant(s)",
+            "route": "research.research_dashboard",
         },
         {
             "label": "Paired pre/post evidence",
-            "present": bool(gains),
-            "evidence": f"{len(gains)} paired learning-outcome result(s)",
-            "route": "research.pre_post_results",
+            "present": dataset5["complete_pairs"] > 0 or bool(gains),
+            "evidence": f"{dataset5['complete_pairs']} Dataset 5 pair(s) plus {len(gains)} portal pair(s)",
+            "route": "research.research_dashboard",
         },
         {
             "label": "Mastery evidence",
-            "present": bool(mastery),
-            "evidence": f"{len(mastery)} mastery record(s)",
-            "route": "research.mastery_attainment",
+            "present": dataset5["mastered_records"] > 0 or bool(mastery),
+            "evidence": f"{dataset5['mastered_records']} Dataset 5 mastered record(s) plus {len(mastery)} portal mastery record(s)",
+            "route": "research.research_dashboard",
         },
         {
             "label": "Teacher oversight evidence",
@@ -868,9 +873,9 @@ def chapter_evidence_readiness(conn):
         },
         {
             "label": "User acceptance evidence",
-            "present": questionnaire_responses > 0,
-            "evidence": f"{questionnaire_responses} eligible questionnaire response(s)",
-            "route": "research.questionnaire_results",
+            "present": dataset5_acceptance > 0 or questionnaire_responses > 0,
+            "evidence": f"{dataset5_acceptance} Dataset 5 acceptance record(s) plus {questionnaire_responses} portal response(s)",
+            "route": "research.research_dashboard",
         },
         {
             "label": "System-use evidence",
@@ -923,6 +928,206 @@ def full_dataset_rows(conn):
     return gains
 
 
+def live_questionnaire_response_rows(conn):
+    """Return one automatically captured acceptance row per submitted response."""
+    rows = conn.execute(f"""
+        SELECT rp.participant_code, rp.study_phase, q.respondent_role,
+               q.questionnaire_title,
+               ROUND(CAST(AVG(a.score) AS NUMERIC), 2) AS acceptance_score,
+               r.submitted_at
+        FROM research_questionnaire_responses r
+        JOIN research_questionnaire_answers a ON a.response_id=r.id
+        JOIN research_questionnaires q ON q.id=r.questionnaire_id
+        JOIN research_participants rp
+          ON (rp.id=r.participant_id OR (r.participant_id IS NULL AND rp.user_id=r.respondent_user_id))
+         AND {ELIGIBLE_PARTICIPANT_SQL}
+        WHERE COALESCE(r.completion_status,'Submitted')='Submitted'
+        GROUP BY r.id, rp.participant_code, rp.study_phase, q.respondent_role,
+                 q.questionnaire_title, r.submitted_at
+        ORDER BY r.submitted_at, rp.participant_code
+    """).fetchall()
+    return [row_dict(row) for row in rows]
+
+
+def connected_research_rows(conn):
+    """Combine Dataset 5 and new portal evidence without overwriting either source."""
+    rows = []
+    for row in evaluation_dataset_rows(conn, "learner"):
+        rows.append({
+            "record_source": "Dataset 5 research evaluation",
+            "capture_mode": "Recorded study dataset",
+            "record_type": "learner_paired_assessment",
+            "participant_code": row["participant_code"],
+            "study_phase": "Evaluation",
+            "school_code": row.get("school_code") or "",
+            "subject": row.get("subject") or "",
+            "class_level": row.get("class_level") or "",
+            "learning_outcome": "",
+            "study_status": row.get("study_status") or "",
+            "pre_test": row.get("pre_test_pct"),
+            "post_test": row.get("post_test_pct"),
+            "learning_gain": row.get("gain_points"),
+            "mastery_status": row.get("mastery_status") or "",
+            "acceptance_score": row.get("acceptance_mean"),
+            "attempts": "",
+            "time_to_mastery": "",
+            "teacher_intervention": "",
+            "ai_confidence": "",
+            "reflection_completed": "",
+            "practical_completed": "",
+            "captured_at": row.get("imported_at") or "",
+        })
+    for row in evaluation_dataset_rows(conn, "teacher"):
+        rows.append({
+            "record_source": "Dataset 5 research evaluation",
+            "capture_mode": "Recorded study dataset",
+            "record_type": "teacher_questionnaire",
+            "participant_code": row["participant_code"],
+            "study_phase": "Evaluation",
+            "school_code": row.get("school_code") or "",
+            "subject": row.get("subject") or "",
+            "class_level": "",
+            "learning_outcome": "",
+            "study_status": row.get("study_status") or "",
+            "pre_test": "",
+            "post_test": "",
+            "learning_gain": "",
+            "mastery_status": "",
+            "acceptance_score": row.get("acceptance_mean"),
+            "attempts": "",
+            "time_to_mastery": "",
+            "teacher_intervention": "",
+            "ai_confidence": "",
+            "reflection_completed": "",
+            "practical_completed": "",
+            "captured_at": row.get("imported_at") or "",
+        })
+
+    mastery_times = {
+        (row["participant_code"], row["subject"], row["topic"], row["learning_outcome"]): row["time_to_mastery"]
+        for row in mastery_rows(conn)
+    }
+    for row in learning_gain_rows(conn):
+        rows.append({
+            "record_source": "Learn2Master portal",
+            "capture_mode": "Automatically captured",
+            "record_type": "learner_paired_assessment",
+            "participant_code": row["participant_code"],
+            "study_phase": row.get("study_phase") or "",
+            "school_code": row.get("school_code") or "",
+            "subject": row.get("subject") or "",
+            "class_level": row.get("class") or "",
+            "learning_outcome": row.get("learning_outcome") or "",
+            "study_status": "Active linked participant",
+            "pre_test": row.get("pre_test"),
+            "post_test": row.get("post_test"),
+            "learning_gain": row.get("learning_gain"),
+            "mastery_status": row.get("mastery_status") or "",
+            "acceptance_score": "",
+            "attempts": row.get("attempts") or 0,
+            "time_to_mastery": mastery_times.get(
+                (row["participant_code"], row["subject"], row.get("topic") or "", row["learning_outcome"]),
+                "Not yet mastered",
+            ),
+            "teacher_intervention": row.get("teacher_intervention") or 0,
+            "ai_confidence": row.get("ai_confidence") or 0,
+            "reflection_completed": row.get("reflection_completed") or "No",
+            "practical_completed": row.get("practical_completed") or "No",
+            "captured_at": row.get("post_date") or "",
+        })
+    for row in live_questionnaire_response_rows(conn):
+        rows.append({
+            "record_source": "Learn2Master portal",
+            "capture_mode": "Automatically captured",
+            "record_type": f"{row['respondent_role']}_questionnaire",
+            "participant_code": row["participant_code"],
+            "study_phase": row.get("study_phase") or "",
+            "school_code": "",
+            "subject": "",
+            "class_level": "",
+            "learning_outcome": row.get("questionnaire_title") or "",
+            "study_status": "Submitted",
+            "pre_test": "",
+            "post_test": "",
+            "learning_gain": "",
+            "mastery_status": "",
+            "acceptance_score": row.get("acceptance_score"),
+            "attempts": "",
+            "time_to_mastery": "",
+            "teacher_intervention": "",
+            "ai_confidence": "",
+            "reflection_completed": "",
+            "practical_completed": "",
+            "captured_at": row.get("submitted_at") or "",
+        })
+    return rows
+
+
+def research_capture_links(conn, live_metrics=None):
+    """Describe how operational records feed the connected research report."""
+    live_metrics = live_metrics or research_metrics(conn)
+    _, oversight_rows = teacher_oversight_data(conn)
+    mastery_count = one(conn, f"""
+        SELECT COUNT(*) FROM mastery_records mr
+        JOIN research_participants rp ON rp.user_id=mr.learner_id
+             AND {ELIGIBLE_PARTICIPANT_SQL}
+    """)
+    unlinked_attempts = one(conn, f"""
+        SELECT COUNT(*) FROM assessment_attempts aa
+        WHERE NOT EXISTS (
+            SELECT 1 FROM research_participants rp
+            WHERE rp.user_id=aa.learner_id AND {ELIGIBLE_PARTICIPANT_SQL}
+        )
+    """)
+    links = [
+        {"stream": "Dataset 5", "system_source": "Recorded learner assessments and teacher surveys", "count": evaluation_dataset_summary(conn)["total_records"], "status": "Connected", "route": "research.supplied_evaluation"},
+        {"stream": "Assessments", "system_source": "Learner pre-tests, practice and post-tests", "count": live_metrics["attempts"], "status": "Auto-captured", "route": "research.pre_post_results"},
+        {"stream": "Mastery", "system_source": "Sequential mastery and learning-outcome updates", "count": mastery_count, "status": "Auto-captured", "route": "research.mastery_attainment"},
+        {"stream": "Acceptance", "system_source": "Learner and teacher research questionnaires", "count": live_metrics["questionnaire_response_count"], "status": "Auto-captured", "route": "research.questionnaire_results"},
+        {"stream": "Teacher oversight", "system_source": "Feedback, reviews and interventions", "count": len(oversight_rows), "status": "Auto-captured", "route": "research.teacher_oversight"},
+        {"stream": "AI support", "system_source": "Recommendations and explanation confidence", "count": live_metrics["ai_recommendations"], "status": "Auto-captured", "route": "research.feedback_responsiveness"},
+        {"stream": "Reliability", "system_source": "Application and synchronization events", "count": live_metrics["reliability_evidence_count"], "status": "Auto-captured", "route": "research.system_reliability"},
+    ]
+    return links, unlinked_attempts
+
+
+def connected_research_summary(conn, live_metrics=None):
+    """Create a transparent cross-source summary for Chapters Four and Five."""
+    dataset5 = evaluation_dataset_summary(conn)
+    live_metrics = live_metrics or research_metrics(conn)
+    live_gains = learning_gain_rows(conn)
+    dataset5_pairs = dataset5["complete_pairs"]
+    portal_pairs = len(live_gains)
+    total_pairs = dataset5_pairs + portal_pairs
+
+    def weighted(dataset_value, portal_value):
+        if not total_pairs:
+            return 0
+        return round(((dataset_value * dataset5_pairs) + (portal_value * portal_pairs)) / total_pairs, 2)
+
+    portal_improved = sum(1 for row in live_gains if row.get("learning_gain", 0) > 0)
+    portal_mastered = sum(1 for row in live_gains if row.get("mastery_status") == "Mastered")
+    links, unlinked_attempts = research_capture_links(conn, live_metrics)
+    return {
+        "dataset5_pairs": dataset5_pairs,
+        "portal_pairs": portal_pairs,
+        "total_paired_records": total_pairs,
+        "average_pre_test": weighted(dataset5["average_pre_test"], live_metrics["average_pre_test"]),
+        "average_post_test": weighted(dataset5["average_post_test"], live_metrics["average_post_test"]),
+        "average_gain": weighted(dataset5["average_gain"], live_metrics["average_learning_gain"]),
+        "improved_records": dataset5["improved_pairs"] + portal_improved,
+        "improved_rate": percentage(dataset5["improved_pairs"] + portal_improved, total_pairs),
+        "mastered_records": dataset5["mastered_records"] + portal_mastered,
+        "mastery_rate": percentage(dataset5["mastered_records"] + portal_mastered, total_pairs),
+        "dataset5_records": dataset5["total_records"],
+        "portal_participants": live_metrics["eligible_participants"],
+        "portal_questionnaires": live_metrics["questionnaire_response_count"],
+        "portal_events": live_metrics["system_usage_count"],
+        "unlinked_attempts": unlinked_attempts,
+        "capture_links": links,
+    }
+
+
 def render_table(
     title,
     subtitle,
@@ -958,6 +1163,7 @@ def research_dashboard():
     conn = get_db()
     metrics = research_metrics(conn)
     supplied_metrics = evaluation_dataset_summary(conn)
+    connected_summary = connected_research_summary(conn, metrics)
     weak_concepts = weak_concept_rows(conn)
     chart_data = {
         "pre_post": [
@@ -976,6 +1182,7 @@ def research_dashboard():
         "research/dashboard.html",
         metrics=metrics,
         supplied_metrics=supplied_metrics,
+        connected_summary=connected_summary,
         weak_concepts=weak_concepts,
         chart_data=chart_data,
     )
@@ -1733,13 +1940,40 @@ def system_logs():
 def research_reports():
     conn = get_db()
     metrics = research_metrics(conn)
+    evaluation_summary = evaluation_dataset_summary(conn)
+    connected_summary = connected_research_summary(conn, metrics)
     weak_concepts = weak_concept_rows(conn, limit=50)
     if request.args.get("format") == "csv" or request.path.endswith("/export/csv"):
-        rows = [{"metric": key, "value": value} for key, value in metrics.items()]
+        rows = [
+            {"section": "connected_research", "metric": key, "value": value}
+            for key, value in connected_summary.items()
+            if key != "capture_links"
+        ]
+        rows.extend(
+            {"section": "dataset5", "metric": key, "value": value}
+            for key, value in evaluation_summary.items()
+            if key != "disclaimer"
+        )
+        rows.extend(
+            {"section": "automatically_captured_portal", "metric": key, "value": value}
+            for key, value in metrics.items()
+        )
         conn.close()
-        return csv_response("learn2master_research_report.csv", [("metric", "metric"), ("value", "value")], rows, "research_report")
+        return csv_response(
+            "learn2master_connected_research_report.csv",
+            [("section", "section"), ("metric", "metric"), ("value", "value")],
+            rows,
+            "connected_research_report",
+        )
     conn.close()
-    return render_template("research/reports.html", metrics=metrics, weak_concepts=weak_concepts)
+    return render_template(
+        "research/reports.html",
+        metrics=metrics,
+        evaluation_summary=evaluation_summary,
+        connected_summary=connected_summary,
+        capture_links=connected_summary["capture_links"],
+        weak_concepts=weak_concepts,
+    )
 
 
 @research_bp.route("/research/chapter-four-report")
@@ -1747,6 +1981,8 @@ def research_reports():
 def chapter_four_report():
     conn = get_db()
     filters = research_filter_values()
+    metrics = research_metrics(conn)
+    connected_summary = connected_research_summary(conn, metrics)
     feedback_rows = feedback_responsiveness_rows(conn, filters)
     reliability_rows = operational_reliability_rows(conn, filters)
     integrity = integrity_report(conn)
@@ -1756,7 +1992,9 @@ def chapter_four_report():
         "supplied_summary": evaluation_dataset_summary(conn),
         "supplied_learners": evaluation_dataset_rows(conn, "learner"),
         "supplied_teachers": evaluation_dataset_rows(conn, "teacher"),
-        "metrics": research_metrics(conn),
+        "metrics": metrics,
+        "connected_summary": connected_summary,
+        "capture_links": connected_summary["capture_links"],
         "participants": participant_rows(conn, filters),
         "pretest": assessment_result_rows(conn, "pretest", filters),
         "posttest": assessment_result_rows(conn, "posttest", filters),
@@ -1787,17 +2025,43 @@ def chapter_four_report():
 def chapter_five_insights():
     conn = get_db()
     metrics = research_metrics(conn)
+    evaluation_summary = evaluation_dataset_summary(conn)
+    connected_summary = connected_research_summary(conn, metrics)
     gains = learning_gain_rows(conn)
     weak_concepts = weak_concept_rows(conn, limit=6)
     oversight_summary, _ = teacher_oversight_data(conn)
     questionnaire_results = questionnaire_result_rows(conn)
     readiness = chapter_evidence_readiness(conn)
-    has_data = bool(gains or questionnaire_results or metrics["attempts"])
+    has_data = bool(evaluation_summary["total_records"] or gains or questionnaire_results or metrics["attempts"])
     insights = []
     def add(statement, metric, source, valid_cases, scope, evidence_type="observational"):
         insights.append({"statement": statement, "metric": metric, "source": source,
                          "valid_cases": valid_cases, "scope": scope, "evidence_type": evidence_type})
     if has_data:
+        if evaluation_summary["complete_pairs"]:
+            add(
+                f"Dataset 5 records show a mean increase of {evaluation_summary['average_gain']} percentage points, with {evaluation_summary['improved_pairs']} of {evaluation_summary['complete_pairs']} complete learner pairs improving.",
+                evaluation_summary["average_gain"],
+                evaluation_summary["source_label"],
+                evaluation_summary["complete_pairs"],
+                "Recorded Dataset 5 learner evaluation",
+            )
+            add(
+                f"Dataset 5 acceptance scores average {evaluation_summary['learner_acceptance']}/5 for learners and {evaluation_summary['teacher_acceptance']}/5 for teachers.",
+                evaluation_summary["learner_acceptance"],
+                "Dataset 5 learner and teacher questionnaires",
+                evaluation_summary["learner_records"] + evaluation_summary["teacher_records"],
+                "Recorded learner and teacher acceptance evidence",
+                "self-report evidence",
+            )
+        add(
+            f"The connected research evidence currently contains {connected_summary['total_paired_records']} paired result records across Dataset 5 and automatically captured portal activity.",
+            connected_summary["total_paired_records"],
+            "Connected research dataset",
+            connected_summary["total_paired_records"],
+            "Dataset 5 plus consent-linked portal records",
+            "connected evidence",
+        )
         if metrics["average_learning_gain"] > 0:
             add(f"The valid paired records show an average positive change of {metrics['average_learning_gain']} percentage points; this observational result does not by itself establish causation.", metrics["average_learning_gain"], "Paired assessment attempts", len(gains), "Eligible paired learners/outcomes in the recorded study phase")
         else:
@@ -1828,6 +2092,8 @@ def chapter_five_insights():
         has_data=has_data,
         insights=insights,
         readiness=readiness,
+        evaluation_summary=evaluation_summary,
+        connected_summary=connected_summary,
     )
 
 
@@ -1958,13 +2224,19 @@ def export_questionnaires():
 @role_required(*RESEARCH_ROLES)
 def export_full_dataset():
     conn = get_db()
-    rows = full_dataset_rows(conn)
+    rows = connected_research_rows(conn)
     conn.close()
     columns = [
+        ("record_source", "record_source"),
+        ("capture_mode", "capture_mode"),
+        ("record_type", "record_type"),
         ("participant_code", "participant_code"),
+        ("study_phase", "study_phase"),
+        ("school_code", "school_code"),
         ("subject", "subject"),
-        ("topic", "topic"),
+        ("class_level", "class_level"),
         ("learning_outcome", "learning_outcome"),
+        ("study_status", "study_status"),
         ("pre_test", "pre_test"),
         ("post_test", "post_test"),
         ("learning_gain", "learning_gain"),
@@ -1976,6 +2248,7 @@ def export_full_dataset():
         ("ai_confidence", "ai_confidence"),
         ("reflection_completed", "reflection_completed"),
         ("practical_completed", "practical_completed"),
-        ("questionnaire_score", "questionnaire_score"),
+        ("acceptance_score", "acceptance_score"),
+        ("captured_at", "captured_at"),
     ]
-    return csv_response("learn2master_full_research_dataset.csv", columns, rows, "full_dataset")
+    return csv_response("learn2master_connected_research_dataset.csv", columns, rows, "connected_full_dataset")

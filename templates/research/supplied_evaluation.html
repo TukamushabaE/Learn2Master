@@ -11,14 +11,17 @@
 
 {% block content %}
 <div class="demo-actions">
-  <a class="demo-button" href="{{ url_for('research.research_dashboard') }}">Operational Research Dashboard</a>
+  <a class="demo-button" href="{{ url_for('research.research_dashboard') }}">Connected Research Dashboard</a>
+  <a class="demo-button" href="{{ url_for('research.chapter_four_report') }}">Chapter Four Report</a>
+  <a class="demo-button" href="{{ url_for('research.chapter_five_insights') }}">Chapter Five Insights</a>
+  <a class="demo-button" href="{{ url_for('research.export_full_dataset') }}">Download Connected Dataset</a>
   <a class="demo-button" href="{{ url_for('research.export_supplied_evaluation') }}">Download Research Dataset CSV</a>
   <button class="demo-button" onclick="window.print()">Print</button>
 </div>
 
 <div class="provenance-warning" role="status">
   <strong>RECORDED RESEARCH EVALUATION DATA</strong>
-  Dataset 5 contains coded learner assessment records and teacher survey records collected for the Learn2Master framework evaluation. Participant codes protect personal identity while preserving the recorded study results for analysis.
+  Dataset 5 contains coded learner assessment records and teacher survey records collected for the Learn2Master framework evaluation. It is linked to the dashboard, Chapters Four and Five, research reports and the connected dataset export. Participant codes protect personal identity while preserving the recorded study results for analysis.
 </div>
 
 <section class="hero-panel">

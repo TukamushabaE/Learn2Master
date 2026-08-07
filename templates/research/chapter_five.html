@@ -2,12 +2,24 @@
 {% block title %}Chapter Five Insights{% endblock %}
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
-<style>.insight-list{display:grid;gap:12px}.insight-list li{border:1px solid #e3ebf5;border-radius:8px;background:#fff;padding:14px;list-style:none}.print-actions{display:flex;justify-content:flex-end;margin-bottom:14px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}@media print{.sidebar,.topbar,.footer,.print-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}}</style>
+<style>.insight-list{display:grid;gap:12px}.insight-list li{border:1px solid #e3ebf5;border-radius:8px;background:#fff;padding:14px;list-style:none}.print-actions{display:flex;gap:10px;justify-content:flex-end;margin-bottom:14px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.connected-summary{border:2px solid #4d91c6;background:#f5faff}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}.summary-grid div{border:1px solid #d9e7f4;background:#fff;border-radius:10px;padding:12px}.summary-grid span{display:block;color:#687789;font-size:.78rem}.summary-grid strong{display:block;font-size:1.35rem;color:#10233f;margin-top:4px}@media print{.sidebar,.topbar,.footer,.print-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}}</style>
 {% endblock %}
 {% block content %}
-<div class="print-actions"><a class="button" href="{{ url_for('research.chapter_guide') }}">Open Chapter Guide</a><button class="button" onclick="window.print()">Print Insights</button></div>
+<div class="print-actions"><a class="button" href="{{ url_for('research.export_full_dataset') }}">Export Connected Dataset</a><a class="button" href="{{ url_for('research.chapter_guide') }}">Open Chapter Guide</a><button class="button" onclick="window.print()">Print Insights</button></div>
 <section class="hero-panel">
-  <div><p class="eyebrow">Dissertation Chapter Five</p><h1>Discussion and Insights</h1><p>Interpretive summary generated from research dashboard evidence, teacher oversight, AI recommendations and user acceptance records.</p></div>
+  <div><p class="eyebrow">Dissertation Chapter Five</p><h1>Connected Discussion and Insights</h1><p>Interpretive summary generated from Dataset 5 and automatically captured assessment, mastery, teacher, AI, acceptance and reliability evidence.</p></div>
+</section>
+<section class="learn-card connected-summary">
+  <h2>Evidence Used in this Discussion</h2>
+  <div class="summary-grid">
+    <div><span>Dataset 5 pairs</span><strong>{{ connected_summary.dataset5_pairs }}</strong></div>
+    <div><span>New portal pairs</span><strong>{{ connected_summary.portal_pairs }}</strong></div>
+    <div><span>Total paired records</span><strong>{{ connected_summary.total_paired_records }}</strong></div>
+    <div><span>Combined mean gain</span><strong>+{{ connected_summary.average_gain }}</strong></div>
+    <div><span>Improvement rate</span><strong>{{ connected_summary.improved_rate }}%</strong></div>
+    <div><span>Combined mastery</span><strong>{{ connected_summary.mastery_rate }}%</strong></div>
+  </div>
+  <p>Future consent-linked portal records are included automatically when this page is opened. The connected export preserves each row's source and capture mode.</p>
 </section>
 <section class="learn-card">
   <p><strong>Evidence streams started:</strong> {{ readiness.present_count }} of {{ readiness.total_count }}. Discuss only verified evidence collected for the approved study.</p>

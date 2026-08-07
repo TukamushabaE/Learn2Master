@@ -5,7 +5,7 @@
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
 <style>
-.research-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.research-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.research-button.demo{background:#fff4e5;color:#8a3b0a;border-color:#b54708}.cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin:0 0 24px}.stat-card{border:1px solid #e4ebf4;border-radius:18px;background:#fff;padding:18px;box-shadow:0 10px 28px rgba(15,35,65,.07)}.stat-card h3{font-size:.82rem;color:#687789;margin:0 0 10px}.stat-number{font-size:1.65rem;font-weight:900;color:#10233f;margin:0}.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.chart-card{border:1px solid #e4ebf4;border-radius:14px;background:#fff;padding:14px}.bar-row{display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:center;margin:10px 0}.bar-track{height:10px;background:#e8eef6;border-radius:999px;overflow:hidden}.bar-fill{height:100%;background:#143d73}.bar-fill.dataset5{background:#0f8f83}.mini-note{color:#687789}.demo-notice{border:2px solid #b54708;background:#fff4e5;color:#7a2e0e;border-radius:16px;padding:16px;margin:0 0 20px}.demo-notice strong{display:block;margin-bottom:5px}.dataset5-heading{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;margin:24px 0 12px}.dataset5-heading h2{margin:0;color:#10233f}.source-badge{display:inline-block;background:#dff7f3;color:#08756b;border-radius:999px;padding:7px 11px;font-weight:900}.operational-divider{border-top:3px solid #dce5ef;margin-top:30px;padding-top:24px}.operational-divider h2{margin:0 0 6px}.dataset5-card{border-color:#98d9d2;background:#f6fffd}
+.research-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.research-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.research-button.demo{background:#e9fbf8;color:#08756b;border-color:#0f8f83}.cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin:0 0 24px}.stat-card{border:1px solid #e4ebf4;border-radius:18px;background:#fff;padding:18px;box-shadow:0 10px 28px rgba(15,35,65,.07)}.stat-card h3{font-size:.82rem;color:#687789;margin:0 0 10px}.stat-number{font-size:1.65rem;font-weight:900;color:#10233f;margin:0}.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.chart-card{border:1px solid #e4ebf4;border-radius:14px;background:#fff;padding:14px}.bar-row{display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:center;margin:10px 0}.bar-track{height:10px;background:#e8eef6;border-radius:999px;overflow:hidden}.bar-fill{height:100%;background:#143d73}.bar-fill.dataset5{background:#0f8f83}.mini-note{color:#687789}.demo-notice{border:2px solid #0f8f83;background:#f1fffc;color:#0b5e57;border-radius:16px;padding:16px;margin:0 0 20px}.demo-notice strong{display:block;margin-bottom:5px}.dataset5-heading{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;margin:24px 0 12px}.dataset5-heading h2{margin:0;color:#10233f}.source-badge{display:inline-block;background:#dff7f3;color:#08756b;border-radius:999px;padding:7px 11px;font-weight:900}.operational-divider{border-top:3px solid #dce5ef;margin-top:30px;padding-top:24px}.operational-divider h2{margin:0 0 6px}.dataset5-card{border-color:#98d9d2;background:#f6fffd}.connected-card{border-color:#7cb8e8;background:#f5faff}.capture-table{width:100%;border-collapse:collapse}.capture-table th,.capture-table td{padding:10px;border-bottom:1px solid #e5edf5;text-align:left}.capture-table th{color:#496174;font-size:.78rem;text-transform:uppercase}.capture-status{font-weight:900;color:#08756b}.capture-alert{border:2px solid #d97706;background:#fff8e8;color:#804b00;border-radius:12px;padding:14px;margin-top:14px}
 </style>
 {% endblock %}
 
@@ -29,19 +29,41 @@
 </div>
 <section class="hero-panel">
   <div>
-    <p class="eyebrow">Dataset5 • Chapter Four Evidence</p>
-    <h1>Learn2Master Evaluation Results</h1>
-    <p>The primary figures below now come from Learn2Master_Dataset5.xlsx: coded learner study records, paired assessments and learner/teacher acceptance surveys.</p>
+    <p class="eyebrow">Connected Dissertation Evidence</p>
+    <h1>Learn2Master Connected Research Evaluation</h1>
+    <p>Dataset 5 is linked with the research report and the portal's ongoing assessments, mastery updates, questionnaires, teacher actions and system evidence.</p>
   </div>
-  <div class="hero-badge"><span>Matched Learners</span><strong>{{ supplied_metrics.complete_pairs }}</strong></div>
+  <div class="hero-badge"><span>Total Paired Records</span><strong>{{ connected_summary.total_paired_records }}</strong></div>
 </section>
 
 {% if supplied_metrics.learner_records or supplied_metrics.teacher_records %}
 <div class="demo-notice">
-  <strong>Now displaying Dataset5: {{ supplied_metrics.learner_records }} learner rows, {{ supplied_metrics.complete_pairs }} matched pairs and {{ supplied_metrics.teacher_records }} teacher survey rows.</strong>
-  Source: {{ supplied_metrics.source_label }}. These are the recorded research evaluation results. <a href="{{ url_for('research.supplied_evaluation') }}">Open all Dataset5 rows.</a>
+  <strong>Connected research evidence is active across the entire system.</strong>
+  Dataset 5 contributes {{ supplied_metrics.complete_pairs }} paired learner records and {{ supplied_metrics.teacher_records }} teacher survey records. New consent-linked portal activity is added automatically to the same reports and connected export.
 </div>
 {% endif %}
+
+<div class="dataset5-heading"><div><h2>Combined Research Evidence</h2><p class="mini-note">Transparent cross-source totals; Dataset 5 remains traceable and new portal records update automatically.</p></div><span class="source-badge">CONNECTED</span></div>
+<div class="cards-grid">
+  <div class="stat-card connected-card"><h3>Dataset 5 Records</h3><p class="stat-number">{{ connected_summary.dataset5_records }}</p></div>
+  <div class="stat-card connected-card"><h3>Portal Participants</h3><p class="stat-number">{{ connected_summary.portal_participants }}</p></div>
+  <div class="stat-card connected-card"><h3>Total Paired Records</h3><p class="stat-number">{{ connected_summary.total_paired_records }}</p></div>
+  <div class="stat-card connected-card"><h3>Combined Mean Pre-test</h3><p class="stat-number">{{ connected_summary.average_pre_test }}%</p></div>
+  <div class="stat-card connected-card"><h3>Combined Mean Post-test</h3><p class="stat-number">{{ connected_summary.average_post_test }}%</p></div>
+  <div class="stat-card connected-card"><h3>Combined Mean Gain</h3><p class="stat-number">+{{ connected_summary.average_gain }}</p></div>
+  <div class="stat-card connected-card"><h3>Improved Records</h3><p class="stat-number">{{ connected_summary.improved_records }}/{{ connected_summary.total_paired_records }}</p></div>
+  <div class="stat-card connected-card"><h3>Combined Mastery Rate</h3><p class="stat-number">{{ connected_summary.mastery_rate }}%</p></div>
+</div>
+
+<section class="learn-card">
+  <h2>How the Entire System Feeds the Research Report</h2>
+  <p class="mini-note">Once a user account is connected to an active, consented research participant record, every new record in these streams is included automatically.</p>
+  <div style="overflow:auto"><table class="capture-table">
+    <thead><tr><th>Evidence stream</th><th>System source</th><th>Records</th><th>Link status</th><th>Open</th></tr></thead>
+    <tbody>{% for link in connected_summary.capture_links %}<tr><td><strong>{{ link.stream }}</strong></td><td>{{ link.system_source }}</td><td>{{ link.count }}</td><td class="capture-status">{{ link.status }}</td><td><a href="{{ url_for(link.route) }}">View</a></td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% if connected_summary.unlinked_attempts %}<div class="capture-alert"><strong>{{ connected_summary.unlinked_attempts }} assessment attempt(s) need a research participant link.</strong> Open <a href="{{ url_for('research.participants') }}">Participants</a>, connect the user account and record the approved consent status. Future records will then flow into the reports automatically.</div>{% endif %}
+</section>
 
 <div class="dataset5-heading"><div><h2>Dataset5 Summary Results</h2><p class="mini-note">Recorded learner assessment and teacher survey results used in the evaluation analysis.</p></div><span class="source-badge">DATASET5</span></div>
 <div class="cards-grid">
@@ -69,8 +91,8 @@
 </section>
 
 <div class="operational-divider">
-  <h2>Live Account-Generated Records</h2>
-  <p class="mini-note">This separate section contains the older portal activity generated by existing learner and teacher accounts. It is not Dataset5.</p>
+  <h2>Automatically Captured Portal Evidence</h2>
+  <p class="mini-note">These values come directly from consent-linked learner and teacher activity and update whenever the portal captures new evidence.</p>
 </div>
 <div class="cards-grid">
   <div class="stat-card"><h3>Eligible Participants</h3><p class="stat-number">{{ metrics.eligible_participants }}</p></div>
@@ -129,6 +151,6 @@
 <section class="learn-card ai-panel">
   <h2>Latest Data Collection Activity</h2>
   <p>{{ metrics.latest_data_collection_activity }}</p>
-  <p class="mini-note">Exports: <a href="{{ url_for('research.export_pre_post') }}">Pre/Post</a> · <a href="{{ url_for('research.export_learning_gain') }}">Learning Gain</a> · <a href="{{ url_for('research.export_mastery') }}">Mastery</a> · <a href="{{ url_for('research.export_feedback_responsiveness') }}">Feedback</a> · <a href="{{ url_for('research.export_teacher_oversight') }}">Teacher Oversight</a> · <a href="{{ url_for('research.export_system_reliability') }}">Reliability</a> · <a href="{{ url_for('research.export_questionnaires') }}">Questionnaires</a> · <a href="{{ url_for('research.export_full_dataset') }}">Full Dataset</a></p>
+  <p class="mini-note">Exports: <a href="{{ url_for('research.export_full_dataset') }}"><strong>Connected Research Dataset</strong></a> · <a href="{{ url_for('research.export_pre_post') }}">Pre/Post</a> · <a href="{{ url_for('research.export_learning_gain') }}">Learning Gain</a> · <a href="{{ url_for('research.export_mastery') }}">Mastery</a> · <a href="{{ url_for('research.export_feedback_responsiveness') }}">Feedback</a> · <a href="{{ url_for('research.export_teacher_oversight') }}">Teacher Oversight</a> · <a href="{{ url_for('research.export_system_reliability') }}">Reliability</a> · <a href="{{ url_for('research.export_questionnaires') }}">Questionnaires</a></p>
 </section>
 {% endblock %}
