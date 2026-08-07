@@ -7,12 +7,12 @@
 {% block content %}
 <div class="print-actions"><a class="button" href="{{ url_for('research.export_full_dataset') }}">Export Connected Dataset</a><a class="button" href="{{ url_for('research.chapter_guide') }}">Open Chapter Guide</a><button class="button" onclick="window.print()">Print Insights</button></div>
 <section class="hero-panel">
-  <div><p class="eyebrow">Dissertation Chapter Five</p><h1>Connected Discussion and Insights</h1><p>Interpretive summary generated from Dataset 5 and automatically captured assessment, mastery, teacher, AI, acceptance and reliability evidence.</p></div>
+  <div><p class="eyebrow">Dissertation Chapter Five</p><h1>Connected Discussion and Insights</h1><p>Interpretive summary generated from the evaluation register and automatically captured assessment, mastery, teacher, AI, acceptance and reliability evidence.</p></div>
 </section>
 <section class="learn-card connected-summary">
   <h2>Evidence Used in this Discussion</h2>
   <div class="summary-grid">
-    <div><span>Dataset 5 pairs</span><strong>{{ connected_summary.dataset5_pairs }}</strong></div>
+    <div><span>Evaluation pairs</span><strong>{{ connected_summary.evaluation_pairs }}</strong></div>
     <div><span>New portal pairs</span><strong>{{ connected_summary.portal_pairs }}</strong></div>
     <div><span>Total paired records</span><strong>{{ connected_summary.total_paired_records }}</strong></div>
     <div><span>Combined mean gain</span><strong>+{{ connected_summary.average_gain }}</strong></div>
@@ -20,7 +20,7 @@
     <div><span>Combined mastery</span><strong>{{ connected_summary.mastery_rate }}%</strong></div>
   </div>
   <p>Future consent-linked portal records are included automatically when this page is opened. The connected export preserves each row's source and capture mode.</p>
-  <p><strong>Questionnaire evidence:</strong> {{ evaluation_summary.learner_questionnaire_responses }} learner and {{ evaluation_summary.teacher_questionnaire_responses }} teacher Dataset 5 responses. <strong>Reliability evidence:</strong> {{ evaluation_summary.reliability_days }} daily records from {{ evaluation_summary.reliability_log_start }} to {{ evaluation_summary.reliability_log_end }}.</p>
+  <p><strong>Questionnaire evidence:</strong> {{ evaluation_summary.learner_questionnaire_responses }} learner and {{ evaluation_summary.teacher_questionnaire_responses }} teacher evaluation responses. <strong>Reliability evidence:</strong> {{ evaluation_summary.reliability_days }} daily records from {{ evaluation_summary.reliability_log_start }} to {{ evaluation_summary.reliability_log_end }}.</p>
   <p><strong>Duration verification:</strong> {{ evidence_summary.coverage_status }} ({{ evidence_summary.verified_evaluation_coverage_days }} verified coverage days).</p>
 </section>
 <section class="learn-card">
@@ -34,7 +34,7 @@
     {% endfor %}
   </ul>
   <h2>Qualitative interpretation</h2>
-  <p>Dataset 5 contains the following recorded theme counts. Retain the approved thematic-analysis notes and protected source excerpts separately so a supervisor can audit the themes.</p>
+  <p>The evaluation register contains the following recorded theme counts. Retain the approved thematic-analysis notes and protected source excerpts separately so a supervisor can audit the themes.</p>
   <ul class="insight-list">
     {% for theme in qualitative_themes %}
     <li><strong>{{ theme.respondent_group }}: {{ theme.coded_theme }}</strong><br><small>Mentions: {{ theme.mention_count }} · Interpretation: {{ theme.interpretation }}</small></li>

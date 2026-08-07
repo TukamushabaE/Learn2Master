@@ -11,6 +11,7 @@ from database import DatabaseIntegrityError, get_db
 from routes.guards import role_required
 from security import csrf_protect
 from services.evaluation_dataset import (
+    PUBLIC_RECORD_SOURCE,
     SUPPLIED_DISCLAIMER,
     evaluation_evidence_summary,
     evaluation_dataset_rows,
@@ -35,6 +36,10 @@ research_bp = Blueprint("research", __name__)
 
 RESEARCH_ROLES = ("school_admin", "super_admin", "teacher")
 NO_DATA = "No data yet."
+EVALUATION_SCHOOL_CODES = {
+    "kigezi high school": "KZHS",
+    "kigata high school": "KTHS",
+}
 ELIGIBLE_PARTICIPANT_SQL = """
     rp.active_status='Active'
     AND rp.consent_status='Granted'
@@ -835,8 +840,8 @@ def chapter_evidence_readiness(conn):
     complete or that the dissertation findings have been validated.
     """
     participants = participant_summary(conn)
-    dataset5 = evaluation_dataset_summary(conn)
-    dataset5_acceptance = sum(
+    evaluation_register = evaluation_dataset_summary(conn)
+    evaluation_acceptance = sum(
         1 for row in evaluation_dataset_rows(conn)
         if row.get("acceptance_mean") is not None
     )
@@ -854,20 +859,20 @@ def chapter_evidence_readiness(conn):
     items = [
         {
             "label": "Eligible participants",
-            "present": dataset5["total_records"] > 0 or participants["eligible_participants"] > 0,
-            "evidence": f"{dataset5['total_records']} Dataset 5 record(s) plus {participants['eligible_participants']} linked portal participant(s)",
+            "present": evaluation_register["total_records"] > 0 or participants["eligible_participants"] > 0,
+            "evidence": f"{evaluation_register['total_records']} evaluation record(s) plus {participants['eligible_participants']} linked portal participant(s)",
             "route": "research.research_dashboard",
         },
         {
             "label": "Paired pre/post evidence",
-            "present": dataset5["complete_pairs"] > 0 or bool(gains),
-            "evidence": f"{dataset5['complete_pairs']} Dataset 5 pair(s) plus {len(gains)} portal pair(s)",
+            "present": evaluation_register["complete_pairs"] > 0 or bool(gains),
+            "evidence": f"{evaluation_register['complete_pairs']} evaluation pair(s) plus {len(gains)} portal pair(s)",
             "route": "research.research_dashboard",
         },
         {
             "label": "Mastery evidence",
-            "present": dataset5["mastered_records"] > 0 or bool(mastery),
-            "evidence": f"{dataset5['mastered_records']} Dataset 5 mastered record(s) plus {len(mastery)} portal mastery record(s)",
+            "present": evaluation_register["mastered_records"] > 0 or bool(mastery),
+            "evidence": f"{evaluation_register['mastered_records']} evaluation mastery record(s) plus {len(mastery)} portal mastery record(s)",
             "route": "research.research_dashboard",
         },
         {
@@ -878,8 +883,8 @@ def chapter_evidence_readiness(conn):
         },
         {
             "label": "User acceptance evidence",
-            "present": dataset5_acceptance > 0 or questionnaire_responses > 0,
-            "evidence": f"{dataset5_acceptance} Dataset 5 acceptance record(s) plus {questionnaire_responses} portal response(s)",
+            "present": evaluation_acceptance > 0 or questionnaire_responses > 0,
+            "evidence": f"{evaluation_acceptance} evaluation acceptance record(s) plus {questionnaire_responses} portal response(s)",
             "route": "research.research_dashboard",
         },
         {
@@ -954,23 +959,69 @@ def live_questionnaire_response_rows(conn):
     return [row_dict(row) for row in rows]
 
 
-def dataset5_matches_filters(filters=None):
-    """Dataset 5 has participant reference fields, not portal foreign keys or assessment dates."""
+def evaluation_register_matches_filters(filters=None):
+    """Evaluation records have participant references, not portal foreign keys or assessment dates."""
     filters = filters or {}
     if filters.get("study_phase") not in (None, "", "Evaluation"):
         return False
     return not any(filters.get(key) not in (None, "") for key in (
-        "school_id", "class_id", "subject_id", "topic_id", "outcome_id",
-        "date_from", "date_to",
+        "topic_id", "outcome_id", "date_from", "date_to",
     ))
 
 
-def dataset5_participant_rows(conn, filters=None):
-    if not dataset5_matches_filters(filters):
+def evaluation_register_filter_context(conn, filters=None):
+    """Resolve portal filter IDs to the reference values stored in evaluation rows."""
+    filters = filters or {}
+    if not evaluation_register_matches_filters(filters):
+        return None
+    context = {}
+    if filters.get("school_id"):
+        school = conn.execute(
+            "SELECT school_name FROM schools WHERE school_id=?",
+            (filters["school_id"],),
+        ).fetchone()
+        context["school_code"] = EVALUATION_SCHOOL_CODES.get(
+            (school["school_name"] if school else "").strip().lower()
+        )
+        if not context["school_code"]:
+            return None
+    if filters.get("class_id"):
+        school_class = conn.execute(
+            "SELECT class_name FROM classes WHERE class_id=?",
+            (filters["class_id"],),
+        ).fetchone()
+        context["class_level"] = school_class["class_name"] if school_class else None
+        if not context["class_level"]:
+            return None
+    if filters.get("subject_id"):
+        subject = conn.execute(
+            "SELECT subject_name FROM subjects WHERE subject_id=?",
+            (filters["subject_id"],),
+        ).fetchone()
+        context["subject"] = subject["subject_name"] if subject else None
+        if not context["subject"]:
+            return None
+    return context
+
+
+def evaluation_register_row_matches_context(row, context):
+    if context is None:
+        return False
+    return all(
+        str(row.get(key) or "").strip().lower() == str(value or "").strip().lower()
+        for key, value in context.items()
+    )
+
+
+def evaluation_register_participant_rows(conn, filters=None):
+    context = evaluation_register_filter_context(conn, filters)
+    if context is None:
         return []
     filters = filters or {}
     results = []
     for row in evaluation_dataset_rows(conn):
+        if not evaluation_register_row_matches_context(row, context):
+            continue
         role_name = row["record_type"]
         if filters.get("role") and filters["role"] != role_name:
             continue
@@ -981,7 +1032,7 @@ def dataset5_participant_rows(conn, filters=None):
             continue
         learner_payload = row.get("payload", {}).get("learner_study") or {}
         results.append({
-            "record_source": "Dataset 5",
+            "record_source": PUBLIC_RECORD_SOURCE,
             "participant_code": row["participant_code"],
             "role_name": role_name,
             "school_name": row.get("school_code") or "",
@@ -989,9 +1040,9 @@ def dataset5_participant_rows(conn, filters=None):
             "subject_name": row.get("subject") or "",
             "study_phase": "Evaluation",
             "participation_status": learner_payload.get("eligibility_status") or study_status,
-            "consent_status": "Not stored in Dataset 5",
-            "assent_status": "Not stored in Dataset 5",
-            "parent_consent_status": "Not stored in Dataset 5",
+            "consent_status": "Not recorded in evaluation source",
+            "assent_status": "Not recorded in evaluation source",
+            "parent_consent_status": "Not recorded in evaluation source",
             "active_status": study_status,
             "_view_url": url_for(
                 "research.evaluation_participant_view",
@@ -1002,7 +1053,7 @@ def dataset5_participant_rows(conn, filters=None):
 
 
 def connected_participant_rows(conn, filters=None):
-    dataset_rows = dataset5_participant_rows(conn, filters)
+    dataset_rows = evaluation_register_participant_rows(conn, filters)
     portal_rows = participant_rows(conn, filters)
     for row in portal_rows:
         row["record_source"] = "Learn2Master portal"
@@ -1012,7 +1063,7 @@ def connected_participant_rows(conn, filters=None):
 
 
 def connected_participant_summary(conn, rows, filters=None):
-    dataset_rows = [row for row in rows if row["record_source"] == "Dataset 5"]
+    dataset_rows = [row for row in rows if row["record_source"] == PUBLIC_RECORD_SOURCE]
     portal_rows = [row for row in rows if row["record_source"] == "Learn2Master portal"]
     eligible_portal = [
         row for row in portal_rows
@@ -1023,11 +1074,11 @@ def connected_participant_summary(conn, rows, filters=None):
     ]
     return {
         "total_research_identities": len(rows),
-        "dataset5_records": len(dataset_rows),
+        "evaluation_records": len(dataset_rows),
         "portal_participants": len(portal_rows),
         "learners": sum(1 for row in rows if row.get("role_name") == "learner"),
         "teachers": sum(1 for row in rows if row.get("role_name") == "teacher"),
-        "completed_dataset5_learners": sum(
+        "completed_evaluation_learners": sum(
             1 for row in dataset_rows
             if row.get("role_name") == "learner" and row.get("active_status") == "Completed"
         ),
@@ -1035,8 +1086,9 @@ def connected_participant_summary(conn, rows, filters=None):
     }
 
 
-def dataset5_assessment_rows(conn, assessment_type=None, filters=None):
-    if not dataset5_matches_filters(filters):
+def evaluation_register_assessment_rows(conn, assessment_type=None, filters=None):
+    context = evaluation_register_filter_context(conn, filters)
+    if context is None:
         return []
     requested = {
         "pretest": ("pre_test_pct", "pre_test"),
@@ -1045,23 +1097,25 @@ def dataset5_assessment_rows(conn, assessment_type=None, filters=None):
     types = [requested[assessment_type]] if assessment_type in requested else list(requested.values())
     results = []
     for row in evaluation_dataset_rows(conn, "learner"):
+        if not evaluation_register_row_matches_context(row, context):
+            continue
         for value_key, display_type in types:
             value = row.get(value_key)
             if value is None:
                 continue
             results.append({
-                "record_source": "Dataset 5",
+                "record_source": PUBLIC_RECORD_SOURCE,
                 "participant_code": row["participant_code"],
                 "study_phase": "Evaluation",
                 "learner_id": "",
                 "subject": row.get("subject") or "",
-                "topic": "Evaluation dataset",
+                "topic": "Framework evaluation",
                 "learning_outcome": "Framework evaluation",
                 "assessment_type": display_type,
                 "score": value,
                 "total_marks": 100,
                 "percentage": value,
-                "date_taken": "Not recorded in Dataset 5",
+                "date_taken": "Not recorded in evaluation source",
                 "start_time": "Not recorded",
                 "end_time": "Not recorded",
                 "time_spent": "Not recorded",
@@ -1074,18 +1128,21 @@ def dataset5_assessment_rows(conn, assessment_type=None, filters=None):
 
 
 def connected_assessment_rows(conn, assessment_type=None, filters=None):
-    dataset_rows = dataset5_assessment_rows(conn, assessment_type, filters)
+    dataset_rows = evaluation_register_assessment_rows(conn, assessment_type, filters)
     portal_rows = assessment_result_rows(conn, assessment_type, filters)
     for row in portal_rows:
         row["record_source"] = "Learn2Master portal"
     return dataset_rows + portal_rows
 
 
-def dataset5_learning_gain_rows(conn, filters=None):
-    if not dataset5_matches_filters(filters):
+def evaluation_register_learning_gain_rows(conn, filters=None):
+    context = evaluation_register_filter_context(conn, filters)
+    if context is None:
         return []
     results = []
     for row in evaluation_dataset_rows(conn, "learner"):
+        if not evaluation_register_row_matches_context(row, context):
+            continue
         pre = row.get("pre_test_pct")
         post = row.get("post_test_pct")
         if pre is None or post is None:
@@ -1096,17 +1153,17 @@ def dataset5_learning_gain_rows(conn, filters=None):
         improvement = round((float(gain) / float(pre)) * 100, 1) if float(pre) > 0 else "Not applicable"
         payload = row.get("payload", {}).get("learner_study") or {}
         results.append({
-            "record_source": "Dataset 5",
+            "record_source": PUBLIC_RECORD_SOURCE,
             "participant_code": row["participant_code"],
             "study_phase": "Evaluation",
             "school_code": row.get("school_code") or "",
             "school": row.get("school_code") or "",
             "class": row.get("class_level") or "",
             "subject": row.get("subject") or "",
-            "topic": "Evaluation dataset",
+            "topic": "Framework evaluation",
             "learning_outcome": "Framework evaluation",
-            "pre_attempt_id": f"D5-{row['participant_code']}-PRE",
-            "post_attempt_id": f"D5-{row['participant_code']}-POST",
+            "pre_attempt_id": f"EVAL-{row['participant_code']}-PRE",
+            "post_attempt_id": f"EVAL-{row['participant_code']}-POST",
             "pre_test": pre,
             "post_test": post,
             "absolute_gain": gain,
@@ -1127,26 +1184,26 @@ def dataset5_learning_gain_rows(conn, filters=None):
 
 
 def connected_learning_gain_rows(conn, filters=None):
-    dataset_rows = dataset5_learning_gain_rows(conn, filters)
+    dataset_rows = evaluation_register_learning_gain_rows(conn, filters)
     portal_rows = learning_gain_rows(conn, filters)
     for row in portal_rows:
         row["record_source"] = "Learn2Master portal"
     return dataset_rows + portal_rows
 
 
-def dataset5_mastery_rows(conn, filters=None):
+def evaluation_register_mastery_rows(conn, filters=None):
     source_rows = {
         item["participant_code"]: item
         for item in evaluation_dataset_rows(conn, "learner")
     }
     results = []
-    for row in dataset5_learning_gain_rows(conn, filters):
+    for row in evaluation_register_learning_gain_rows(conn, filters):
         source = source_rows[row["participant_code"]]
         payload = source.get("payload", {}).get("learner_study") or {}
         mastered = row["mastery_status"] == "Mastered"
         time_hours = payload.get("time_to_mastery_hours")
         results.append({
-            "record_source": "Dataset 5",
+            "record_source": PUBLIC_RECORD_SOURCE,
             "participant_code": row["participant_code"],
             "study_phase": "Evaluation",
             "subject": row["subject"],
@@ -1163,18 +1220,18 @@ def dataset5_mastery_rows(conn, filters=None):
 
 
 def connected_mastery_rows(conn, filters=None):
-    dataset_rows = dataset5_mastery_rows(conn, filters)
+    dataset_rows = evaluation_register_mastery_rows(conn, filters)
     portal_rows = mastery_rows(conn, filters)
     for row in portal_rows:
         row["record_source"] = "Learn2Master portal"
     return dataset_rows + portal_rows
 
 
-def dataset5_questionnaire_rows(conn):
+def evaluation_register_questionnaire_rows(conn):
     results = []
     configurations = (
-        ("learner", "learner_survey", "LQ", "learner_acceptance_mean", "Dataset 5 Learner Acceptance"),
-        ("teacher", "teacher_survey", "TQ", "teacher_acceptance_mean", "Dataset 5 Teacher Acceptance"),
+        ("learner", "learner_survey", "LQ", "learner_acceptance_mean", "Learner Acceptance Evaluation"),
+        ("teacher", "teacher_survey", "TQ", "teacher_acceptance_mean", "Teacher Acceptance Evaluation"),
     )
     for role, payload_key, prefix, mean_key, title in configurations:
         responses = []
@@ -1192,7 +1249,7 @@ def dataset5_questionnaire_rows(conn):
         if not responses:
             continue
         results.append({
-            "record_source": "Dataset 5",
+            "record_source": PUBLIC_RECORD_SOURCE,
             "questionnaire_title": title,
             "respondent_role": role,
             "construct_name": "Overall acceptance",
@@ -1206,41 +1263,41 @@ def dataset5_questionnaire_rows(conn):
 
 
 def connected_questionnaire_rows(conn):
-    dataset_rows = dataset5_questionnaire_rows(conn)
+    dataset_rows = evaluation_register_questionnaire_rows(conn)
     portal_rows = questionnaire_result_rows(conn)
     for row in portal_rows:
         row["record_source"] = "Learn2Master portal"
     return dataset_rows + portal_rows
 
 
-def dataset5_teacher_oversight_rows(conn):
+def evaluation_register_teacher_oversight_rows(conn):
     rows = []
     for record in evaluation_dataset_rows(conn, "learner"):
         payload = record.get("payload", {}).get("learner_study") or {}
         intervention_count = int(payload.get("teacher_interventions") or 0)
         for number in range(1, intervention_count + 1):
             rows.append({
-                "record_source": "Dataset 5",
+                "record_source": PUBLIC_RECORD_SOURCE,
                 "record_type": "Teacher Intervention",
                 "participant_code": record["participant_code"],
                 "learning_outcome": "Framework evaluation",
                 "action": f"Intervention {number} of {intervention_count}",
                 "comment": "Recorded intervention during the evaluation",
                 "details": record.get("mastery_status") or "",
-                "created_at": "Date not recorded in Dataset 5",
+                "created_at": "Date not recorded in evaluation source",
             })
     return rows
 
 
 def connected_teacher_oversight_data(conn):
     portal_summary, portal_rows = teacher_oversight_data(conn)
-    dataset_rows = dataset5_teacher_oversight_rows(conn)
+    dataset_rows = evaluation_register_teacher_oversight_rows(conn)
     for row in portal_rows:
         row["record_source"] = "Learn2Master portal"
     rows = dataset_rows + portal_rows
     summary = dict(portal_summary)
     summary.update({
-        "dataset5_interventions": len(dataset_rows),
+        "evaluation_interventions": len(dataset_rows),
         "portal_interventions": portal_summary["number_of_interventions"],
         "number_of_interventions": len(dataset_rows) + portal_summary["number_of_interventions"],
         "learners_supported_by_teacher": len({row["participant_code"] for row in rows}),
@@ -1248,26 +1305,29 @@ def connected_teacher_oversight_data(conn):
     return summary, rows
 
 
-def dataset5_feedback_rows(conn, filters=None):
-    if not dataset5_matches_filters(filters):
+def evaluation_register_feedback_rows(conn, filters=None):
+    context = evaluation_register_filter_context(conn, filters)
+    if context is None:
         return []
     rows = []
     for record in evaluation_dataset_rows(conn, "learner"):
+        if not evaluation_register_row_matches_context(record, context):
+            continue
         payload = record.get("payload", {}).get("learner_study") or {}
         received = int(payload.get("recommendations_received") or 0)
         acted_on = min(received, int(payload.get("recommendations_acted_on") or 0))
         for number in range(1, received + 1):
             followed = number <= acted_on
             rows.append({
-                "record_source": "Dataset 5",
+                "record_source": PUBLIC_RECORD_SOURCE,
                 "participant_code": record["participant_code"],
                 "study_phase": "Evaluation",
                 "subject": record.get("subject") or "",
-                "topic": "Evaluation dataset",
+                "topic": "Framework evaluation",
                 "learning_outcome": "Framework evaluation",
-                "recommendation_id": f"D5-{record['participant_code']}-R{number}",
+                "recommendation_id": f"EVAL-{record['participant_code']}-R{number}",
                 "recommendation_type": "Recorded AI recommendation",
-                "generated_at": "Date not recorded in Dataset 5",
+                "generated_at": "Date not recorded in evaluation source",
                 "viewed": "Yes" if followed else "Not recorded",
                 "followed": "Yes" if followed else "No",
                 "response_delay_hours": "",
@@ -1281,7 +1341,7 @@ def dataset5_feedback_rows(conn, filters=None):
 
 
 def connected_feedback_rows(conn, filters=None):
-    dataset_rows = dataset5_feedback_rows(conn, filters)
+    dataset_rows = evaluation_register_feedback_rows(conn, filters)
     portal_rows = feedback_responsiveness_rows(conn, filters)
     for row in portal_rows:
         row["record_source"] = "Learn2Master portal"
@@ -1297,7 +1357,7 @@ def connected_reliability_rows(conn, filters=None):
         if filters.get("date_to") and row["event_date"] > filters["date_to"]:
             continue
         dataset_rows.append({
-                "record_source": "Dataset 5",
+                "record_source": PUBLIC_RECORD_SOURCE,
                 "evidence_level": "Daily aggregate",
                 "occurred_at": row["event_date"],
                 "total_events": row["total_events"],
@@ -1349,7 +1409,7 @@ def connected_reliability_summary(conn, rows=None):
         for row in rows if row.get("average_latency_ms") not in (None, "")
     )
     evidence = evaluation_evidence_summary(conn)
-    dataset_days = sum(1 for row in rows if row.get("record_source") == "Dataset 5")
+    dataset_days = sum(1 for row in rows if row.get("record_source") == PUBLIC_RECORD_SOURCE)
     portal_events = sum(1 for row in rows if row.get("record_source") == "Learn2Master portal")
     return {
         "recorded_events": total_events,
@@ -1358,7 +1418,7 @@ def connected_reliability_summary(conn, rows=None):
         "recorded_success_rate": round(successful_events / total_events * 100, 2) if total_events else NO_DATA,
         "average_response_time_ms": round(latency_weight / latency_events, 1) if latency_events else NO_DATA,
         "offline_sync_success_rate": round(successful_sync / offline_queued * 100, 2) if offline_queued else NO_DATA,
-        "dataset5_daily_records": dataset_days,
+        "evaluation_daily_records": dataset_days,
         "portal_event_records": portal_events,
         "recorded_period": (
             f"{evidence['reliability_log_start']} to {evidence['reliability_log_end']}"
@@ -1367,7 +1427,7 @@ def connected_reliability_summary(conn, rows=None):
         "verified_coverage_days": evidence["verified_evaluation_coverage_days"],
         "six_month_status": evidence["coverage_status"],
         "median_response_time_ms": "Not calculated for daily aggregates",
-        "scope_note": "Dataset 5 supplies daily operational aggregates; new portal events are added individually and retain their source label.",
+        "scope_note": "The evaluation register supplies daily operational aggregates; new portal events are added individually and retain their source label.",
     }
 
 
@@ -1375,19 +1435,19 @@ def evaluation_collection_audit_rows(conn):
     summary = evaluation_dataset_summary(conn)
     evidence = evaluation_evidence_summary(conn)
     return [
-        {"evidence_stream": "Participant register", "collection_method": "Purposive maximum-variation sampling in two CBC secondary schools", "records": summary["learner_records"] + summary["teacher_records"], "period_or_sample": "64 recorded learners; 8 recorded teachers", "verification_status": "Recorded in Dataset 5"},
+        {"evidence_stream": "Participant register", "collection_method": "Purposive maximum-variation sampling in two CBC secondary schools", "records": summary["learner_records"] + summary["teacher_records"], "period_or_sample": "64 recorded learners; 8 recorded teachers", "verification_status": "Recorded in evaluation register"},
         {"evidence_stream": "Learning outcomes", "collection_method": "Single-group matched pre-test/post-test evaluation", "records": summary["complete_pairs"], "period_or_sample": "60 complete pairs; 2 withdrawals; 2 missing post-tests", "verification_status": "Supported as a pre/post association"},
         {"evidence_stream": "Learner acceptance", "collection_method": "Ten-item 5-point Likert questionnaire; LQ9 reverse-scored", "records": summary["learner_questionnaire_responses"], "period_or_sample": f"Mean {summary['learner_acceptance']}/5", "verification_status": "Recorded for this sample"},
         {"evidence_stream": "Teacher acceptance", "collection_method": "Eight-item 5-point Likert questionnaire", "records": summary["teacher_questionnaire_responses"], "period_or_sample": f"Mean {summary['teacher_acceptance']}/5", "verification_status": "Recorded for this sample"},
         {"evidence_stream": "System reliability", "collection_method": "Daily aggregate operational and offline-synchronization log", "records": summary["reliability_days"], "period_or_sample": f"{summary['reliability_log_start']} to {summary['reliability_log_end']}", "verification_status": "Supported for the recorded 28-day window"},
         {"evidence_stream": "Qualitative evidence", "collection_method": "Thematic summary of learner and teacher responses", "records": summary["qualitative_themes"], "period_or_sample": f"{summary['qualitative_mentions']} recorded mentions", "verification_status": "Theme counts recorded; retain source excerpts separately"},
-        {"evidence_stream": "Participant assessment dates", "collection_method": "Exact dated assessment source records", "records": 0, "period_or_sample": "Dates are not present in Dataset 5 learner rows", "verification_status": "Not yet verified"},
+        {"evidence_stream": "Participant assessment dates", "collection_method": "Exact dated assessment source records", "records": 0, "period_or_sample": "Dates are not present in the learner evaluation rows", "verification_status": "Not yet verified"},
         {"evidence_stream": "Six-month duration", "collection_method": "Verified dated evidence spanning at least 182 calendar days", "records": evidence["verified_evidence_log_rows"], "period_or_sample": f"Verified coverage: {evidence['verified_evaluation_coverage_days']} days", "verification_status": evidence["coverage_status"]},
     ]
 
 
 def connected_research_rows(conn):
-    """Combine Dataset 5 and new portal evidence without overwriting either source."""
+    """Combine evaluation-register and new portal evidence without overwriting either source."""
     rows = []
     for row in evaluation_dataset_rows(conn, "learner"):
         payload = row.get("payload", {}).get("learner_study") or {}
@@ -1397,7 +1457,7 @@ def connected_research_rows(conn):
         if pre_test is not None and gain is not None and float(pre_test) < 100:
             normalized_gain = round(float(gain) / (100 - float(pre_test)), 3)
         rows.append({
-            "record_source": "Dataset 5 research evaluation",
+            "record_source": PUBLIC_RECORD_SOURCE,
             "capture_mode": "Recorded study dataset",
             "record_type": "learner_paired_assessment",
             "participant_code": row["participant_code"],
@@ -1423,7 +1483,7 @@ def connected_research_rows(conn):
         })
     for row in evaluation_dataset_rows(conn, "teacher"):
         rows.append({
-            "record_source": "Dataset 5 research evaluation",
+            "record_source": PUBLIC_RECORD_SOURCE,
             "capture_mode": "Recorded study dataset",
             "record_type": "teacher_questionnaire",
             "participant_code": row["participant_code"],
@@ -1449,7 +1509,7 @@ def connected_research_rows(conn):
         })
     for row in evaluation_reliability_rows(conn):
         rows.append({
-            "record_source": "Dataset 5 research evaluation",
+            "record_source": PUBLIC_RECORD_SOURCE,
             "capture_mode": "Recorded daily aggregate",
             "record_type": "system_reliability_daily",
             "participant_code": "",
@@ -1476,7 +1536,7 @@ def connected_research_rows(conn):
         })
     for row in evaluation_qualitative_theme_rows(conn):
         rows.append({
-            "record_source": "Dataset 5 research evaluation",
+            "record_source": PUBLIC_RECORD_SOURCE,
             "capture_mode": "Recorded thematic summary",
             "record_type": "qualitative_theme",
             "participant_code": row.get("respondent_group") or "",
@@ -1592,13 +1652,13 @@ def research_capture_links(conn, live_metrics=None):
         )
     """)
     links = [
-        {"stream": "Dataset 5", "system_source": "Participant, questionnaire, reliability and qualitative evidence", "count": dataset_summary["total_records"] + dataset_summary["reliability_days"] + dataset_summary["qualitative_themes"], "status": "Connected", "route": "research.supplied_evaluation"},
-        {"stream": "Assessments", "system_source": "Dataset 5 pre/post records plus portal assessment attempts", "count": dataset_assessments + live_metrics["attempts"], "status": "Connected", "route": "research.pre_post_results"},
-        {"stream": "Mastery", "system_source": "Dataset 5 outcomes plus portal mastery updates", "count": dataset_summary["complete_pairs"] + mastery_count, "status": "Connected", "route": "research.mastery_attainment"},
-        {"stream": "Acceptance", "system_source": "Dataset 5 surveys plus portal questionnaires", "count": dataset_acceptance + live_metrics["questionnaire_response_count"], "status": "Connected", "route": "research.questionnaire_results"},
-        {"stream": "Teacher oversight", "system_source": "Dataset 5 intervention counts plus portal reviews", "count": dataset_interventions + len(oversight_rows), "status": "Connected", "route": "research.teacher_oversight"},
-        {"stream": "AI support", "system_source": "Dataset 5 recommendation follow-through plus portal explanations", "count": dataset_recommendations + live_metrics["ai_recommendations"], "status": "Connected", "route": "research.feedback_responsiveness"},
-        {"stream": "Reliability", "system_source": "Dataset 5 daily aggregates plus portal application events", "count": dataset_summary["reliability_days"] + live_metrics["reliability_evidence_count"], "status": "Connected", "route": "research.system_reliability"},
+        {"stream": "Evaluation register", "system_source": "Participant, questionnaire, reliability and qualitative evidence", "count": dataset_summary["total_records"] + dataset_summary["reliability_days"] + dataset_summary["qualitative_themes"], "status": "Connected", "route": "research.supplied_evaluation"},
+        {"stream": "Assessments", "system_source": "Evaluation pre/post records plus portal assessment attempts", "count": dataset_assessments + live_metrics["attempts"], "status": "Connected", "route": "research.pre_post_results"},
+        {"stream": "Mastery", "system_source": "Evaluation outcomes plus portal mastery updates", "count": dataset_summary["complete_pairs"] + mastery_count, "status": "Connected", "route": "research.mastery_attainment"},
+        {"stream": "Acceptance", "system_source": "Evaluation surveys plus portal questionnaires", "count": dataset_acceptance + live_metrics["questionnaire_response_count"], "status": "Connected", "route": "research.questionnaire_results"},
+        {"stream": "Teacher oversight", "system_source": "Evaluation intervention counts plus portal reviews", "count": dataset_interventions + len(oversight_rows), "status": "Connected", "route": "research.teacher_oversight"},
+        {"stream": "AI support", "system_source": "Evaluation recommendation follow-through plus portal explanations", "count": dataset_recommendations + live_metrics["ai_recommendations"], "status": "Connected", "route": "research.feedback_responsiveness"},
+        {"stream": "Reliability", "system_source": "Evaluation daily aggregates plus portal application events", "count": dataset_summary["reliability_days"] + live_metrics["reliability_evidence_count"], "status": "Connected", "route": "research.system_reliability"},
         {"stream": "Qualitative themes", "system_source": "Recorded learner and teacher thematic summary", "count": dataset_summary["qualitative_themes"], "status": "Connected", "route": "research.evidence_verification"},
     ]
     return links, unlinked_attempts
@@ -1606,40 +1666,40 @@ def research_capture_links(conn, live_metrics=None):
 
 def connected_research_summary(conn, live_metrics=None):
     """Create a transparent cross-source summary for Chapters Four and Five."""
-    dataset5 = evaluation_dataset_summary(conn)
+    evaluation_register = evaluation_dataset_summary(conn)
     live_metrics = live_metrics or research_metrics(conn)
     live_gains = learning_gain_rows(conn)
-    dataset5_pairs = dataset5["complete_pairs"]
+    evaluation_pairs = evaluation_register["complete_pairs"]
     portal_pairs = len(live_gains)
-    total_pairs = dataset5_pairs + portal_pairs
+    total_pairs = evaluation_pairs + portal_pairs
 
     def weighted(dataset_value, portal_value):
         if not total_pairs:
             return 0
-        return round(((dataset_value * dataset5_pairs) + (portal_value * portal_pairs)) / total_pairs, 2)
+        return round(((dataset_value * evaluation_pairs) + (portal_value * portal_pairs)) / total_pairs, 2)
 
     portal_improved = sum(1 for row in live_gains if row.get("learning_gain", 0) > 0)
     portal_mastered = sum(1 for row in live_gains if row.get("mastery_status") == "Mastered")
     links, unlinked_attempts = research_capture_links(conn, live_metrics)
     return {
-        "dataset5_pairs": dataset5_pairs,
+        "evaluation_pairs": evaluation_pairs,
         "portal_pairs": portal_pairs,
         "total_paired_records": total_pairs,
-        "average_pre_test": weighted(dataset5["average_pre_test"], live_metrics["average_pre_test"]),
-        "average_post_test": weighted(dataset5["average_post_test"], live_metrics["average_post_test"]),
-        "average_gain": weighted(dataset5["average_gain"], live_metrics["average_learning_gain"]),
-        "improved_records": dataset5["improved_pairs"] + portal_improved,
-        "improved_rate": percentage(dataset5["improved_pairs"] + portal_improved, total_pairs),
-        "mastered_records": dataset5["mastered_records"] + portal_mastered,
-        "mastery_rate": percentage(dataset5["mastered_records"] + portal_mastered, total_pairs),
-        "dataset5_records": dataset5["total_records"],
-        "dataset5_evidence_rows": dataset5["total_records"] + dataset5["reliability_days"] + dataset5["qualitative_themes"],
+        "average_pre_test": weighted(evaluation_register["average_pre_test"], live_metrics["average_pre_test"]),
+        "average_post_test": weighted(evaluation_register["average_post_test"], live_metrics["average_post_test"]),
+        "average_gain": weighted(evaluation_register["average_gain"], live_metrics["average_learning_gain"]),
+        "improved_records": evaluation_register["improved_pairs"] + portal_improved,
+        "improved_rate": percentage(evaluation_register["improved_pairs"] + portal_improved, total_pairs),
+        "mastered_records": evaluation_register["mastered_records"] + portal_mastered,
+        "mastery_rate": percentage(evaluation_register["mastered_records"] + portal_mastered, total_pairs),
+        "evaluation_records": evaluation_register["total_records"],
+        "evaluation_evidence_rows": evaluation_register["total_records"] + evaluation_register["reliability_days"] + evaluation_register["qualitative_themes"],
         "portal_participants": live_metrics["eligible_participants"],
         "portal_questionnaires": live_metrics["questionnaire_response_count"],
-        "dataset5_questionnaires": dataset5["questionnaire_responses"],
-        "total_questionnaire_responses": dataset5["questionnaire_responses"] + live_metrics["questionnaire_response_count"],
-        "dataset5_reliability_days": dataset5["reliability_days"],
-        "reliability_period": f"{dataset5['reliability_log_start']} to {dataset5['reliability_log_end']}",
+        "evaluation_questionnaires": evaluation_register["questionnaire_responses"],
+        "total_questionnaire_responses": evaluation_register["questionnaire_responses"] + live_metrics["questionnaire_response_count"],
+        "evaluation_reliability_days": evaluation_register["reliability_days"],
+        "reliability_period": f"{evaluation_register['reliability_log_start']} to {evaluation_register['reliability_log_end']}",
         "six_month_status": evaluation_evidence_summary(conn)["coverage_status"],
         "portal_events": live_metrics["system_usage_count"],
         "unlinked_attempts": unlinked_attempts,
@@ -1790,7 +1850,7 @@ def participants():
     conn.close()
     return render_table(
         "Controlled Participant Register",
-        "One controlled register contains all Dataset 5 evaluation participants and new consent-linked portal participants. Every evaluation participant opens to an evidence profile showing how the record is used across the system.",
+        "One controlled register contains all recorded evaluation participants and new consent-linked portal participants. Every evaluation participant opens to an evidence profile showing how the record is used across the system.",
         [
             ("record_source", "Source"),
             ("participant_code", "Participant Code"),
@@ -2031,7 +2091,7 @@ def pre_post_results():
     conn.close()
     return render_table(
         "Pre-test and Post-test Results",
-        "Dataset 5 assessment records and new portal attempts are presented together with their source. Unrecorded dates and timing are not invented.",
+        "Recorded evaluation assessments and new portal attempts are presented together with their source. Unrecorded dates and timing remain clearly marked.",
         assessment_columns(),
         rows,
         actions=[{"label": "Export Pre/Post CSV", "url": url_for("research.export_pre_post", **filters)}],
@@ -2094,7 +2154,7 @@ def learning_gain():
     conn.close()
     return render_table(
         "Learning Gain Analysis",
-        "Dataset 5 pairs and new portal pairs use the same formula: post-test percentage minus pre-test percentage. The source column prevents accidental double counting.",
+        "Evaluation-register pairs and new portal pairs use the same formula: post-test percentage minus pre-test percentage. The source column prevents accidental double counting.",
         [
             ("record_source", "Source"),
             ("participant_code", "Participant"),
@@ -2142,7 +2202,7 @@ def mastery_attainment():
     conn.close()
     return render_table(
         "Mastery Attainment Report",
-        "Evidence for Objective 3 combines Dataset 5 mastery outcomes with automatically updated portal mastery records.",
+        "Evidence for Objective 3 combines recorded evaluation mastery outcomes with automatically updated portal mastery records.",
         [
             ("record_source", "Source"),
             ("participant_code", "Participant"),
@@ -2171,7 +2231,7 @@ def teacher_oversight():
     conn.close()
     return render_table(
         "Teacher Oversight Report",
-        "Dataset 5 intervention counts are linked with detailed approvals, overrides, feedback and reviews captured by the portal.",
+        "Recorded evaluation intervention counts are linked with detailed approvals, overrides, feedback and reviews captured by the portal.",
         [
             ("record_source", "Source"),
             ("record_type", "Record Type"),
@@ -2199,7 +2259,7 @@ def feedback_responsiveness():
     conn.close()
     return render_table(
         "AI Feedback Responsiveness",
-        "Dataset 5 recommendation follow-through is linked with new portal recommendation evidence. Portal follow-through still requires later practice or post-test evidence.",
+        "Recorded recommendation follow-through is linked with new portal recommendation evidence. Portal follow-through still requires later practice or post-test evidence.",
         [("record_source", "Source"), ("participant_code", "Participant"), ("study_phase", "Phase"),
          ("subject", "Subject"), ("topic", "Topic"),
          ("learning_outcome", "Learning Outcome"), ("recommendation_type", "Type"),
@@ -2224,7 +2284,7 @@ def system_reliability():
     conn.close()
     return render_table(
         "Connected System Reliability",
-        "Dataset 5 daily aggregates and new portal events are shown together without presenting them as a six-month uptime record.",
+        "Recorded daily aggregates and new portal events are shown together without presenting them as a six-month uptime record.",
         [("record_source", "Source"), ("occurred_at", "Date"),
          ("evidence_level", "Evidence Level"), ("total_events", "Total Events"),
          ("successful_events", "Successful"), ("error_events", "Errors"),
@@ -2262,7 +2322,7 @@ def data_collection_readiness():
     conn.close()
     return render_table(
         "Portal Data Collection Readiness",
-        f"Overall status: {report['overall_status']}. This checks new portal collection; Dataset 5 evidence is documented separately in the Evidence Verification Register.",
+        f"Overall status: {report['overall_status']}. This checks new portal collection; recorded evaluation evidence is documented in the Evidence Verification Register.",
         [("item", "Requirement"), ("status", "Status"), ("evidence", "Evidence / next action")],
         report["items"], report["summary"],
         [{"label": "Open Evidence Verification", "url": url_for("research.evidence_verification")}],
@@ -2289,7 +2349,7 @@ def evidence_verification():
             "reliability_days": evidence["reliability_days"],
             "six_month_status": evidence["coverage_status"],
         },
-        [{"label": "Open Dataset 5", "url": url_for("research.supplied_evaluation")},
+        [{"label": "Open Evaluation Results", "url": url_for("research.supplied_evaluation")},
          {"label": "Open Questionnaire Results", "url": url_for("research.questionnaire_results")}],
     )
 
@@ -2514,16 +2574,16 @@ def questionnaire_results():
     dataset_summary = evaluation_dataset_summary(conn)
     portal_response_count = one(conn, "SELECT COUNT(*) FROM research_questionnaire_responses")
     summary = {
-        "dataset5_learner_responses": dataset_summary["learner_questionnaire_responses"],
-        "dataset5_learner_acceptance": dataset_summary["learner_acceptance"],
-        "dataset5_teacher_responses": dataset_summary["teacher_questionnaire_responses"],
-        "dataset5_teacher_acceptance": dataset_summary["teacher_acceptance"],
+        "evaluation_learner_responses": dataset_summary["learner_questionnaire_responses"],
+        "evaluation_learner_acceptance": dataset_summary["learner_acceptance"],
+        "evaluation_teacher_responses": dataset_summary["teacher_questionnaire_responses"],
+        "evaluation_teacher_acceptance": dataset_summary["teacher_acceptance"],
         "portal_questionnaire_responses": portal_response_count,
     }
     conn.close()
     return render_table(
         "Questionnaire Results",
-        "Aggregated 5-point Likert evidence from Dataset 5 and newly submitted portal questionnaires, separated by source.",
+        "Aggregated 5-point Likert evidence from the evaluation register and newly submitted portal questionnaires, separated by source.",
         [
             ("record_source", "Source"),
             ("questionnaire_title", "Questionnaire"),
@@ -2583,7 +2643,7 @@ def research_reports():
             if key != "capture_links"
         ]
         rows.extend(
-            {"section": "dataset5", "metric": key, "value": value}
+            {"section": "evaluation_register", "metric": key, "value": value}
             for key, value in evaluation_summary.items()
             if key != "disclaimer"
         )
@@ -2677,26 +2737,26 @@ def chapter_five_insights():
     if has_data:
         if evaluation_summary["complete_pairs"]:
             add(
-                f"Dataset 5 records show a mean increase of {evaluation_summary['average_gain']} percentage points, with {evaluation_summary['improved_pairs']} of {evaluation_summary['complete_pairs']} complete learner pairs improving.",
+                f"The evaluation records show a mean increase of {evaluation_summary['average_gain']} percentage points, with {evaluation_summary['improved_pairs']} of {evaluation_summary['complete_pairs']} complete learner pairs improving.",
                 evaluation_summary["average_gain"],
                 evaluation_summary["source_label"],
                 evaluation_summary["complete_pairs"],
-                "Recorded Dataset 5 learner evaluation",
+                "Recorded learner evaluation",
             )
             add(
-                f"Dataset 5 acceptance scores average {evaluation_summary['learner_acceptance']}/5 for learners and {evaluation_summary['teacher_acceptance']}/5 for teachers.",
+                f"Recorded acceptance scores average {evaluation_summary['learner_acceptance']}/5 for learners and {evaluation_summary['teacher_acceptance']}/5 for teachers.",
                 evaluation_summary["learner_acceptance"],
-                "Dataset 5 learner and teacher questionnaires",
+                "Learner and teacher evaluation questionnaires",
                 evaluation_summary["learner_records"] + evaluation_summary["teacher_records"],
                 "Recorded learner and teacher acceptance evidence",
                 "self-report evidence",
             )
         add(
-            f"The connected research evidence currently contains {connected_summary['total_paired_records']} paired result records across Dataset 5 and automatically captured portal activity.",
+            f"The connected research evidence currently contains {connected_summary['total_paired_records']} paired result records across the evaluation register and automatically captured portal activity.",
             connected_summary["total_paired_records"],
             "Connected research dataset",
             connected_summary["total_paired_records"],
-            "Dataset 5 plus consent-linked portal records",
+            "Evaluation register plus consent-linked portal records",
             "connected evidence",
         )
         if metrics["average_learning_gain"] > 0:
@@ -2710,9 +2770,9 @@ def chapter_five_insights():
         add(f"AI support is represented by {metrics['ai_recommendations']} recommendation records with mean stored confidence {metrics['avg_ai_confidence']}%.", metrics["ai_recommendations"], "Recommendations and AI explanations", metrics["ai_recommendations"], "Generated recommendation records", "system-generated evidence")
         add(f"Teacher oversight includes {oversight_summary['number_of_interventions']} interventions, {oversight_summary['teacher_approvals']} approvals and {oversight_summary['teacher_overrides']} overrides.", oversight_summary["number_of_interventions"], "Teacher oversight tables", oversight_summary["learners_supported_by_teacher"], "Recorded teacher actions")
         add(
-            f"User-acceptance evidence includes {evaluation_summary['learner_questionnaire_responses']} learner and {evaluation_summary['teacher_questionnaire_responses']} teacher Dataset 5 responses, plus {metrics['questionnaire_response_count']} new portal response(s).",
+            f"User-acceptance evidence includes {evaluation_summary['learner_questionnaire_responses']} learner and {evaluation_summary['teacher_questionnaire_responses']} teacher evaluation responses, plus {metrics['questionnaire_response_count']} new portal response(s).",
             evaluation_summary["questionnaire_responses"] + metrics["questionnaire_response_count"],
-            "Dataset 5 and portal questionnaires",
+            "Evaluation-register and portal questionnaires",
             evaluation_summary["questionnaire_responses"] + metrics["questionnaire_response_count"],
             "Recorded learner and teacher instruments",
             "self-report evidence",
@@ -2721,7 +2781,7 @@ def chapter_five_insights():
             add(
                 f"Recorded operational evidence covers {evaluation_summary['reliability_days']} daily records from {evaluation_summary['reliability_log_start']} to {evaluation_summary['reliability_log_end']}, with {evaluation_summary['operational_success_rate']}% successful events and {evaluation_summary['offline_sync_success_rate']}% offline-sync success.",
                 evaluation_summary["operational_success_rate"],
-                "Dataset 5 system reliability",
+                "Evaluation system reliability",
                 evaluation_summary["reliability_days"],
                 "Recorded 28-day operational window",
                 "operational evidence",
@@ -2730,7 +2790,7 @@ def chapter_five_insights():
             add(
                 f"The recorded qualitative summary contains {len(qualitative_themes)} themes and {sum(row['mention_count'] for row in qualitative_themes)} recorded mentions across learner and teacher groups.",
                 len(qualitative_themes),
-                "Dataset 5 qualitative themes",
+                "Evaluation qualitative themes",
                 sum(row["mention_count"] for row in qualitative_themes),
                 "Thematic summary; source excerpts retained separately",
                 "qualitative evidence",
@@ -2739,7 +2799,7 @@ def chapter_five_insights():
             add(
                 "The current records do not verify a six-month participant evaluation because learner assessment dates are absent and the verified Evidence Log contains no rows.",
                 evidence_summary["verified_evaluation_coverage_days"],
-                "Dataset 5 evidence-verification controls",
+                "Evaluation evidence-verification controls",
                 evidence_summary["verified_evidence_log_rows"],
                 "Duration claims require at least 182 days of dated, source-linked evidence",
                 "limitation",

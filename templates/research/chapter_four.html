@@ -2,7 +2,7 @@
 {% block title %}Chapter Four Report{% endblock %}
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
-<style>.print-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:14px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.chapter-table{width:100%;border-collapse:collapse;margin-top:10px}.chapter-table th,.chapter-table td{border:1px solid #e2e9f2;padding:8px;text-align:left;vertical-align:top}.chapter-table th{background:#f6f9fd}.chapter-section{break-inside:avoid}.dataset5-evidence{border:2px solid #0f8f83;background:#f4fffd}.connected-evidence{border:2px solid #4d91c6;background:#f5faff}.operational-heading{border-top:3px solid #dce5ef;margin-top:28px;padding-top:20px}.capture-status{font-weight:800;color:#08756b}@media print{.sidebar,.topbar,.footer,.print-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}.chapter-table{font-size:11px}}</style>
+<style>.print-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:14px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.chapter-table{width:100%;border-collapse:collapse;margin-top:10px}.chapter-table th,.chapter-table td{border:1px solid #e2e9f2;padding:8px;text-align:left;vertical-align:top}.chapter-table th{background:#f6f9fd}.chapter-section{break-inside:avoid}.evaluation-evidence{border:2px solid #0f8f83;background:#f4fffd}.connected-evidence{border:2px solid #4d91c6;background:#f5faff}.operational-heading{border-top:3px solid #dce5ef;margin-top:28px;padding-top:20px}.capture-status{font-weight:800;color:#08756b}@media print{.sidebar,.topbar,.footer,.print-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none;border:0}.chapter-table{font-size:11px}}</style>
 {% endblock %}
 {% macro table_block(title, columns, rows) %}
 <section class="learn-card chapter-section">
@@ -22,24 +22,24 @@
 {% block content %}
 <div class="print-actions">
   <a class="button" href="{{ url_for('research.chapter_guide') }}">Open Chapter Guide</a>
-  <a class="button" href="{{ url_for('research.export_supplied_evaluation') }}">Export Dataset5</a>
+  <a class="button" href="{{ url_for('research.export_supplied_evaluation') }}">Export Evaluation Data</a>
   <a class="button" href="{{ url_for('research.export_full_dataset') }}">Export Connected Dataset</a>
   <button class="button" onclick="window.print()">Print Chapter Four</button>
 </div>
 <section class="hero-panel">
-  <div><p class="eyebrow">Dissertation Chapter Four • Connected Evidence</p><h1>Research Results Report</h1><p>Dataset 5 and automatically captured portal records now feed the same research report while retaining their source labels.</p></div>
+  <div><p class="eyebrow">Dissertation Chapter Four • Connected Evidence</p><h1>Research Results Report</h1><p>Recorded evaluation and automatically captured portal records now feed the same research report while retaining their source labels.</p></div>
   <div class="hero-badge"><span>Total Paired Records</span><strong>{{ connected_summary.total_paired_records }}</strong></div>
 </section>
 <section class="learn-card chapter-section connected-evidence">
   <h2>Connected Research Evidence Summary</h2>
-  <p><strong>Dataset 5 paired records:</strong> {{ connected_summary.dataset5_pairs }} · <strong>New portal paired records:</strong> {{ connected_summary.portal_pairs }} · <strong>Total:</strong> {{ connected_summary.total_paired_records }}</p>
+  <p><strong>Evaluation paired records:</strong> {{ connected_summary.evaluation_pairs }} · <strong>New portal paired records:</strong> {{ connected_summary.portal_pairs }} · <strong>Total:</strong> {{ connected_summary.total_paired_records }}</p>
   <p><strong>Combined mean pre-test:</strong> {{ connected_summary.average_pre_test }}% · <strong>Combined mean post-test:</strong> {{ connected_summary.average_post_test }}% · <strong>Combined mean gain:</strong> +{{ connected_summary.average_gain }} points</p>
   <p><strong>Improved records:</strong> {{ connected_summary.improved_records }}/{{ connected_summary.total_paired_records }} ({{ connected_summary.improved_rate }}%) · <strong>Combined mastery:</strong> {{ connected_summary.mastered_records }}/{{ connected_summary.total_paired_records }} ({{ connected_summary.mastery_rate }}%)</p>
   <p>Every new eligible assessment, mastery update, questionnaire response, teacher action and research event is read directly from the portal database when this report is opened or exported.</p>
   <table class="chapter-table"><thead><tr><th>Evidence stream</th><th>System source</th><th>Records</th><th>Status</th></tr></thead><tbody>{% for link in capture_links %}<tr><td>{{ link.stream }}</td><td>{{ link.system_source }}</td><td>{{ link.count }}</td><td class="capture-status">{{ link.status }}</td></tr>{% endfor %}</tbody></table>
 </section>
-<section class="learn-card chapter-section dataset5-evidence">
-  <h2>Dataset5 Evaluation Summary</h2>
+<section class="learn-card chapter-section evaluation-evidence">
+  <h2>Evaluation Results Summary</h2>
   <p><strong>Source:</strong> {{ supplied_summary.source_label }} · <strong>Data type:</strong> Recorded research evaluation data</p>
   <p><strong>Learner records:</strong> {{ supplied_summary.learner_records }} · <strong>Complete pairs:</strong> {{ supplied_summary.complete_pairs }} · <strong>Teacher surveys:</strong> {{ supplied_summary.teacher_records }}</p>
   <p><strong>Mean pre-test:</strong> {{ supplied_summary.average_pre_test }}% · <strong>Mean post-test:</strong> {{ supplied_summary.average_post_test }}% · <strong>Mean gain:</strong> +{{ supplied_summary.average_gain }} points · <strong>Improved:</strong> {{ supplied_summary.improved_pairs }}/{{ supplied_summary.complete_pairs }} ({{ supplied_summary.improved_rate }}%)</p>
@@ -52,9 +52,9 @@
   <p><strong>Design:</strong> {{ evidence_summary.collection_design }}. <strong>Sampling:</strong> {{ evidence_summary.sampling_strategy }}.</p>
   <p><strong>Verified Evidence Log rows:</strong> {{ evidence_summary.verified_evidence_log_rows }}. <strong>Verified coverage:</strong> {{ evidence_summary.verified_evaluation_coverage_days }} days. <strong>Duration status:</strong> {{ evidence_summary.coverage_status }}.</p>
 </section>
-{{ table_block('Dataset5 Learner Records (first 12 shown)', [('participant_code','Code'),('school_code','School'),('subject','Subject'),('class_level','Class'),('study_status','Status'),('pre_test_pct','Pre-test'),('post_test_pct','Post-test'),('gain_points','Gain'),('mastery_status','Mastery'),('acceptance_mean','Acceptance')], supplied_learners) }}
-{{ table_block('Dataset5 Teacher Survey Records', [('participant_code','Teacher Code'),('school_code','School'),('subject','Subject'),('acceptance_mean','Acceptance Mean'),('source_label','Source')], supplied_teachers) }}
-<div class="operational-heading"><h2>Connected Detailed Evidence</h2><p>The tables below combine Dataset 5 records with consent-linked portal activity. The source field distinguishes recorded evaluation data from newly captured portal evidence.</p></div>
+{{ table_block('Learner Evaluation Records (first 12 shown)', [('participant_code','Code'),('school_code','School'),('subject','Subject'),('class_level','Class'),('study_status','Status'),('pre_test_pct','Pre-test'),('post_test_pct','Post-test'),('gain_points','Gain'),('mastery_status','Mastery'),('acceptance_mean','Acceptance')], supplied_learners) }}
+{{ table_block('Teacher Survey Records', [('participant_code','Teacher Code'),('school_code','School'),('subject','Subject'),('acceptance_mean','Acceptance Mean'),('source_label','Source')], supplied_teachers) }}
+<div class="operational-heading"><h2>Connected Detailed Evidence</h2><p>The tables below combine evaluation-register records with consent-linked portal activity. The source field distinguishes recorded evaluation data from newly captured portal evidence.</p></div>
 <section class="learn-card chapter-section">
   <p><strong>Generated:</strong> {{ generated_at }} · <strong>Valid paired cases:</strong> {{ gain_summary.valid_pairs }} · <strong>Excluded/unpaired pre-test cases:</strong> {{ excluded_unpaired_cases }}</p>
   <p><strong>Applied filters:</strong> {{ filters if filters else 'All eligible records' }}</p>
