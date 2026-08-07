@@ -136,3 +136,56 @@ def test_new_linked_portal_attempt_is_automatically_counted(db):
         row["count"] for row in after["capture_links"] if row["stream"] == "Assessments"
     )
     assert after_assessments == before_assessments + 1
+
+
+def test_dataset5_is_linked_across_detailed_research_features(client, db):
+    import_evaluation_dataset(conn=db)
+    login(client, "admin", "12345")
+
+    expected_pages = {
+        "/research/participants": (b"Dataset 5", b"KZHS-L001", b"72"),
+        "/research/pre-post-results": (b"Dataset 5", b"KZHS-L001", b"pre_test"),
+        "/research/learning-gain": (b"Dataset 5", b"KZHS-L001", b"21.51"),
+        "/research/mastery-attainment": (b"Dataset 5", b"KZHS-L001", b"Mastered"),
+        "/research/questionnaire-results": (b"Dataset 5 Learner Acceptance", b"3.91", b"Dataset 5 Teacher Acceptance"),
+        "/research/teacher-oversight": (b"Dataset 5", b"Teacher Intervention", b"KZHS-L002"),
+        "/research/feedback-responsiveness": (b"Dataset 5", b"KZHS-L001", b"Recorded AI recommendation"),
+    }
+    for path, expected_values in expected_pages.items():
+        response = client.get(path)
+        assert response.status_code == 200
+        for value in expected_values:
+            assert value in response.data
+
+
+def test_feature_exports_use_the_same_connected_dataset(client, db):
+    import_evaluation_dataset(conn=db)
+    login(client, "admin", "12345")
+
+    for path in (
+        "/research/export/pre-post",
+        "/research/export/learning-gain",
+        "/research/export/mastery",
+        "/research/export/questionnaires",
+        "/research/export/teacher-oversight",
+        "/research/export/feedback-responsiveness",
+    ):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert response.mimetype == "text/csv"
+        assert b"source" in response.data.lower()
+        assert b"Dataset 5" in response.data
+
+
+def test_account_management_links_research_identities_without_creating_logins(client, db):
+    import_evaluation_dataset(conn=db)
+    account_count = db.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"]
+    login(client, "admin", "12345")
+
+    page = client.get("/admin/users")
+    assert page.status_code == 200
+    assert b"Linked Research Identities" in page.data
+    assert b"Dataset 5 participant register" in page.data
+    assert b"Total coded records" in page.data
+    assert b">72<" in page.data
+    assert db.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"] == account_count

@@ -4,6 +4,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
 <style>
 .admin-toolbar,.account-row,.report-row{display:grid;gap:12px}.admin-toolbar{grid-template-columns:2fr 1fr 1fr auto;align-items:end}.admin-input,.admin-select{width:100%;padding:11px 12px;border:1px solid #d8dee8;border-radius:8px;background:#fff}.account-row{grid-template-columns:2fr 1fr 1fr 1fr auto;align-items:center;padding:14px 0;border-bottom:1px solid #edf0f5}.status-badge{display:inline-flex;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#eef6ff;color:#155da8}.status-Suspended,.status-Locked{background:#fff1f1;color:#a61b1b}.status-Pending{background:#fff8db;color:#836100}.admin-actions{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}.small-button{border:1px solid #cfd7e3;border-radius:8px;background:#fff;padding:7px 10px;font-weight:700;text-decoration:none;color:#1f2937;cursor:pointer}.danger-button{border-color:#f1b7b7;color:#a61b1b}.primary-button{background:#143d73;color:#fff;border-color:#143d73}.security-pill{font-weight:800;color:#143d73}@media(max-width:900px){.admin-toolbar,.account-row{grid-template-columns:1fr}.admin-actions{justify-content:flex-start}}
+.identity-link-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0}.identity-link-grid div{padding:12px;border:1px solid #dfe8f2;border-radius:10px;background:#f8fbff}.identity-link-grid span{display:block;color:#63768a;font-size:.78rem}.identity-link-grid strong{font-size:1.45rem;color:#143d73}
 </style>
 {% endblock %}
 {% block content %}
@@ -14,6 +15,22 @@
         <p>Manage learners, teachers, school administrators and super administrators with status, security level, reporting and audit traceability.</p>
     </div>
     <div class="hero-badge"><span>Visible Accounts</span><strong>{{ users|length }}</strong></div>
+</section>
+
+<section class="learn-card">
+    <span class="subject-code">Linked Research Identities</span>
+    <h2>Dataset 5 participant register</h2>
+    <p>The coded research identities are linked to the research reports without being turned into login accounts. This keeps authentication secure while the same participant codes appear in assessment, learning-gain, mastery and questionnaire evidence.</p>
+    <div class="identity-link-grid">
+        <div><span>Total coded records</span><strong>{{ research_identity_summary.total_records }}</strong></div>
+        <div><span>Coded learners</span><strong>{{ research_identity_summary.learner_records }}</strong></div>
+        <div><span>Coded teachers</span><strong>{{ research_identity_summary.teacher_records }}</strong></div>
+        <div><span>Complete pre/post pairs</span><strong>{{ research_identity_summary.complete_pairs }}</strong></div>
+    </div>
+    <div class="admin-actions" style="justify-content:flex-start">
+        <a class="small-button primary-button" href="{{ url_for('research.participants') }}">Open Linked Participant Register</a>
+        <a class="small-button" href="{{ url_for('research.supplied_evaluation') }}">Open Dataset 5 Results</a>
+    </div>
 </section>
 
 <section class="learn-card">

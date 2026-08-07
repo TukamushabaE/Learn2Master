@@ -8,6 +8,7 @@ from database import DatabaseIntegrityError, get_db
 from engine import get_kb
 from routes.guards import role_required
 from security import csrf_protect
+from services.evaluation_dataset import evaluation_dataset_summary
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -744,6 +745,7 @@ def users():
     """, params).fetchall()
     roles = available_roles(conn)
     schools = managed_schools(conn, admin)
+    research_identity_summary = evaluation_dataset_summary(conn)
     conn.close()
     return render_template(
         "admin/users.html",
@@ -754,6 +756,7 @@ def users():
         role_filter=role_filter,
         status_filter=status_filter,
         search=search,
+        research_identity_summary=research_identity_summary,
     )
 
 
