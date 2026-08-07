@@ -29,6 +29,22 @@
     <div><span>Pending AI Reviews</span><strong>{{ overview.pending_recs }}</strong></div>
 </div>
 
+<section class="learn-card">
+    <span class="subject-code">Recorded Evaluation Evidence</span>
+    <h2>Connected Learn2Master evaluation data</h2>
+    <p>The controlled evaluation register is connected to assessment, learning gain, mastery, questionnaires, teacher support, AI response and dissertation reports.</p>
+    <div class="evidence-grid">
+        <div><span>Evaluation Participants</span><strong>{{ evaluation_summary.total_records }}</strong></div>
+        <div><span>Complete Pre/Post Pairs</span><strong>{{ evaluation_summary.complete_pairs }}</strong></div>
+        <div><span>Questionnaire Responses</span><strong>{{ evaluation_summary.questionnaire_responses }}</strong></div>
+        <div><span>Reliability Days</span><strong>{{ evaluation_summary.reliability_days }}</strong></div>
+    </div>
+    <div class="teacher-quick-actions">
+        <a href="{{ url_for('research.participants') }}" class="teacher-action"><strong>Controlled Participant Register</strong><small>Open every evaluation participant and linked evidence profile.</small></a>
+        <a href="{{ url_for('research.research_dashboard') }}" class="teacher-action"><strong>Research Dashboard</strong><small>Review the connected results and system evidence.</small></a>
+    </div>
+</section>
+
 <section class="learn-card ai-panel">
     <span class="subject-code">AI Intervention Suggestion</span>
     <h2>Teacher Action Recommended</h2>

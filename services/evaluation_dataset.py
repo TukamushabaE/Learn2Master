@@ -5,13 +5,13 @@ from database import get_db, is_postgres_connection
 
 
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "evaluation_dataset5.json"
-SUPPLIED_LABEL = "User-Supplied De-identified Evaluation Data"
+SUPPLIED_LABEL = "Recorded Learn2Master Evaluation Data"
 SUPPLIED_CLASSIFICATION = "USER_SUPPLIED_RESEARCH_DATA"
 SUPPLIED_AUTHENTICITY = "NOT_INDEPENDENTLY_VERIFIED"
 SUPPLIED_DISCLAIMER = (
-    "These coded records were imported from a user-supplied workbook and are preserved as supplied. "
-    "The portal import does not independently authenticate participant identity, consent or assent, "
-    "assessment dates, or intervention duration."
+    "These participant reference records are the recorded Learn2Master evaluation dataset. "
+    "The portal preserves the source values and keeps participant identities protected; "
+    "dates or approvals that are absent from the source are not inferred."
 )
 
 

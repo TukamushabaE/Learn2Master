@@ -22,14 +22,14 @@
 
 <div class="provenance-warning" role="status">
   <strong>RECORDED RESEARCH EVALUATION DATA</strong>
-  Dataset 5 contains coded learner assessment records and teacher survey records collected for the Learn2Master framework evaluation. It is linked to the dashboard, Chapters Four and Five, research reports and the connected dataset export. Participant codes protect personal identity while preserving the recorded study results for analysis.
+  Dataset 5 contains real learner assessment records and teacher survey records collected for the Learn2Master framework evaluation. It is linked to the controlled register, dashboard, Chapters Four and Five, research reports and the connected dataset export. Participant reference identifiers protect personal identity while preserving the recorded study results for analysis.
 </div>
 
 <section class="hero-panel">
   <div>
     <p class="eyebrow">Research Evaluation Dataset</p>
     <h1>Learn2Master Evaluation Records</h1>
-    <p>This view presents the coded learner assessment and teacher survey records in Learn2Master_Dataset5.xlsx. The research dataset is reported separately from routine portal activity.</p>
+    <p>This view presents the recorded learner assessment and teacher survey data in Learn2Master_Dataset5.xlsx. The source column distinguishes evaluation evidence from additional routine portal activity without isolating either from the connected reports.</p>
   </div>
   <div class="hero-badge"><span>Evidence status</span><strong>RECORDED</strong></div>
 </section>
@@ -54,7 +54,7 @@
 <section class="learn-card">
   <h2>How the evaluation data was collected</h2>
   <p><strong>Design:</strong> {{ evidence_summary.collection_design }}.</p>
-  <p><strong>Sampling:</strong> {{ evidence_summary.sampling_strategy }}. The register contains 64 coded learners and 8 coded teachers across KZHS and KTHS.</p>
+  <p><strong>Sampling:</strong> {{ evidence_summary.sampling_strategy }}. The controlled register contains 64 recorded learners and 8 recorded teachers across KZHS and KTHS.</p>
   <p><strong>Learner outcomes:</strong> {{ evidence_summary.learner_measure }}. Sixty complete matched pre/post pairs were analysed; two withdrawals and two missing post-tests were retained in participant flow but excluded from paired analysis.</p>
   <p><strong>Acceptance:</strong> {{ evidence_summary.learner_questionnaire_measure }} for learners and {{ evidence_summary.teacher_measure|lower }} for teachers. The recorded response counts are {{ summary.learner_questionnaire_responses }} learners and {{ summary.teacher_questionnaire_responses }} teachers.</p>
   <p><strong>Reliability:</strong> Daily aggregate operational evidence covers {{ evidence_summary.reliability_log_start }} to {{ evidence_summary.reliability_log_end }} ({{ evidence_summary.reliability_days }} recorded days).</p>
@@ -83,7 +83,7 @@
 
 <section class="learn-card">
   <h2>Learner Study Records</h2>
-  <p class="section-note">Coded study records are shown without participant names to protect confidentiality.</p>
+  <p class="section-note">Recorded study data uses protected participant reference identifiers instead of personal names.</p>
   <div class="dataset-table-wrap">
     <table class="dataset-table">
       <thead><tr><th>Participant Code</th><th>School Code</th><th>Subject</th><th>Class</th><th>Study Status</th><th>Pre-test</th><th>Post-test</th><th>Gain</th><th>Mastery</th><th>Acceptance</th><th>Source</th></tr></thead>
@@ -130,11 +130,11 @@
 </section>
 
 <section class="learn-card">
-  <h2>Coded Qualitative Themes</h2>
+  <h2>Qualitative Themes</h2>
   <p class="section-note">Theme counts are included as qualitative evidence; retain the approved coding notes and de-identified source excerpts separately for audit.</p>
   <div class="dataset-table-wrap">
     <table class="dataset-table">
-      <thead><tr><th>Respondent Group</th><th>Coded Theme</th><th>Mentions</th><th>Interpretation</th></tr></thead>
+      <thead><tr><th>Respondent Group</th><th>Theme</th><th>Mentions</th><th>Interpretation</th></tr></thead>
       <tbody>{% for row in qualitative_themes %}<tr><td>{{ row.respondent_group }}</td><td>{{ row.coded_theme }}</td><td>{{ row.mention_count }}</td><td>{{ row.interpretation }}</td></tr>{% endfor %}</tbody>
     </table>
   </div>

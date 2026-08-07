@@ -1,0 +1,67 @@
+{% extends "layouts/base.html" %}
+{% block title %}Evaluation Participant {{ participant.participant_code }}{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>
+.profile-actions{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:15px}.profile-button{display:inline-block;background:#143d73;color:#fff;padding:9px 12px;border-radius:8px;text-decoration:none;font-weight:800}.profile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px}.profile-grid div{padding:13px;border:1px solid #dfe8f2;border-radius:10px;background:#fff}.profile-grid span{display:block;color:#63768a;font-size:.78rem}.profile-grid strong{display:block;color:#10233f;font-size:1.12rem;margin-top:4px}.evidence-table{width:100%;border-collapse:collapse}.evidence-table th,.evidence-table td{padding:9px;border-bottom:1px solid #e7edf5;text-align:left}.evidence-table th{background:#f7faff;color:#496174}.connection-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}.connection-grid a{border:1px solid #98d9d2;background:#f4fffd;color:#08756b;border-radius:10px;padding:12px;text-decoration:none;font-weight:800}
+</style>
+{% endblock %}
+{% block content %}
+<div class="profile-actions"><a class="profile-button" href="{{ url_for('research.participants') }}">Controlled Register</a><a class="profile-button" href="{{ url_for('research.export_full_dataset') }}">Download Connected Dataset</a></div>
+<section class="hero-panel">
+  <div><p class="eyebrow">Recorded Real Evaluation Participant</p><h1>{{ participant.participant_code }}</h1><p>This protected participant reference identifies the same evaluation record across the register, analysis, reports and downloadable evidence.</p></div>
+  <div class="hero-badge"><span>Role</span><strong>{{ participant.record_type|title }}</strong></div>
+</section>
+
+<section class="learn-card">
+  <span class="subject-code">Controlled Identity</span>
+  <h2>Participant register details</h2>
+  <div class="profile-grid">
+    <div><span>Participant reference</span><strong>{{ participant.participant_code }}</strong></div>
+    <div><span>School</span><strong>{{ participant.school_code }}</strong></div>
+    <div><span>Subject</span><strong>{{ participant.subject }}</strong></div>
+    <div><span>Class</span><strong>{{ participant.class_level or 'Teacher record' }}</strong></div>
+    <div><span>Study status</span><strong>{{ participant.study_status }}</strong></div>
+    <div><span>Register source</span><strong>Learn2Master evaluation data</strong></div>
+  </div>
+</section>
+
+{% if participant.record_type == 'learner' %}
+<section class="learn-card">
+  <span class="subject-code">Linked Learning Evidence</span>
+  <h2>Assessment, mastery and intervention record</h2>
+  <div class="profile-grid">
+    <div><span>Pre-test</span><strong>{{ participant.pre_test_pct if participant.pre_test_pct is not none else 'Not recorded' }}{% if participant.pre_test_pct is not none %}%{% endif %}</strong></div>
+    <div><span>Post-test</span><strong>{{ participant.post_test_pct if participant.post_test_pct is not none else 'Not recorded' }}{% if participant.post_test_pct is not none %}%{% endif %}</strong></div>
+    <div><span>Learning gain</span><strong>{{ participant.gain_points if participant.gain_points is not none else 'Not calculated' }}</strong></div>
+    <div><span>Mastery</span><strong>{{ participant.mastery_status or 'Not assessed' }}</strong></div>
+    <div><span>Practice attempts</span><strong>{{ learner.practice_attempts or 0 }}</strong></div>
+    <div><span>Recommendations received</span><strong>{{ learner.recommendations_received or 0 }}</strong></div>
+    <div><span>Recommendations acted on</span><strong>{{ learner.recommendations_acted_on or 0 }}</strong></div>
+    <div><span>Feedback response</span><strong>{{ learner.feedback_response_pct or 0 }}%</strong></div>
+    <div><span>Teacher interventions</span><strong>{{ learner.teacher_interventions or 0 }}</strong></div>
+    <div><span>Reflection completed</span><strong>{{ learner.reflection_complete or 'Not recorded' }}</strong></div>
+    <div><span>Practical evidence</span><strong>{{ learner.practical_evidence_verified or 'Not recorded' }}</strong></div>
+    <div><span>Acceptance mean</span><strong>{{ participant.acceptance_mean if participant.acceptance_mean is not none else 'Not recorded' }}</strong></div>
+  </div>
+</section>
+{% else %}
+<section class="learn-card">
+  <span class="subject-code">Linked Teacher Evidence</span>
+  <h2>Teacher evaluation result</h2>
+  <div class="profile-grid"><div><span>Teacher acceptance mean</span><strong>{{ participant.acceptance_mean }}/5</strong></div><div><span>Evidence role</span><strong>Teacher questionnaire and oversight</strong></div></div>
+</section>
+{% endif %}
+
+<section class="learn-card">
+  <span class="subject-code">Questionnaire Evidence</span>
+  <h2>Recorded questionnaire responses</h2>
+  <table class="evidence-table"><thead><tr><th>Questionnaire item</th><th>Score</th></tr></thead><tbody>{% for item in questionnaire_items %}<tr><td>{{ item.item }}</td><td>{{ item.score }}</td></tr>{% else %}<tr><td colspan="2">No questionnaire response is recorded for this participant.</td></tr>{% endfor %}</tbody></table>
+</section>
+
+<section class="learn-card">
+  <span class="subject-code">Whole-system Connection</span>
+  <h2>Features reading this evaluation data</h2>
+  <div class="connection-grid">{% for item in linked_features %}<a href="{{ item.url }}">{{ item.label }}</a>{% endfor %}</div>
+</section>
+{% endblock %}
