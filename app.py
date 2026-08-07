@@ -128,10 +128,12 @@ with app.app_context():
 
             result = import_evaluation_dataset()
             app.logger.info(
-                "User-supplied evaluation data ready: %s learner rows, %s teacher rows (%s).",
+                "Recorded evaluation data ready: %s learner rows, %s teacher rows, "
+                "%s reliability days and %s qualitative themes.",
                 result["learners"],
                 result["teachers"],
-                result["authenticity_status"],
+                result["reliability_days"],
+                result["qualitative_themes"],
             )
         except Exception:
             app.logger.exception("Supplied evaluation data import failed; the core application will continue.")

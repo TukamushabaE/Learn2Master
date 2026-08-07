@@ -2,12 +2,24 @@
 {% block title %}Research Questionnaires{% endblock %}
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
-<style>.questionnaire-list{display:grid;gap:14px}.questionnaire-card{border:1px solid #e4ebf4;border-radius:8px;padding:16px;background:#fff}.questionnaire-card h3{margin:0 0 6px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:9px 12px;font-weight:800;text-decoration:none}</style>
+<style>.questionnaire-list{display:grid;gap:14px}.questionnaire-card{border:1px solid #e4ebf4;border-radius:8px;padding:16px;background:#fff}.questionnaire-card h3{margin:0 0 6px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:9px 12px;font-weight:800;text-decoration:none}.response-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-top:14px}.response-grid div{border:1px solid #b7ddd8;background:#f4fffd;border-radius:10px;padding:13px}.response-grid span{display:block;color:#54706d;font-size:.78rem}.response-grid strong{font-size:1.5rem;color:#08756b}</style>
 {% endblock %}
 {% block content %}
 <section class="hero-panel">
   <div><p class="eyebrow">User Acceptance</p><h1>Research Questionnaires</h1><p>5-point Likert questionnaires for learner and teacher evaluation of usefulness, ease of use, feedback, engagement, CBC alignment and explainability.</p></div>
   <div class="hero-badge"><span>Forms</span><strong>{{ questionnaires|length }}</strong></div>
+</section>
+<section class="learn-card">
+  <span class="subject-code">Recorded Evaluation Responses</span>
+  <h2>Dataset 5 questionnaire evidence</h2>
+  <p>These completed coded questionnaires are already included in Questionnaire Results and Chapter Four. The portal form counts below show only additional responses submitted after the online instruments were connected.</p>
+  <div class="response-grid">
+    <div><span>Learner responses</span><strong>{{ evaluation_summary.learner_questionnaire_responses }}</strong></div>
+    <div><span>Teacher responses</span><strong>{{ evaluation_summary.teacher_questionnaire_responses }}</strong></div>
+    <div><span>Total recorded responses</span><strong>{{ evaluation_summary.questionnaire_responses }}</strong></div>
+    <div><span>Learner acceptance</span><strong>{{ evaluation_summary.learner_acceptance }}/5</strong></div>
+    <div><span>Teacher acceptance</span><strong>{{ evaluation_summary.teacher_acceptance }}/5</strong></div>
+  </div>
 </section>
 <div class="actions">
   {% if session.get("role") in ["teacher", "school_admin", "super_admin"] %}
@@ -20,7 +32,7 @@
   <article class="questionnaire-card">
     <h3>{{ questionnaire.questionnaire_title }}</h3>
     <p>{{ questionnaire.questionnaire_description }}</p>
-    <p><strong>Respondent:</strong> {{ questionnaire.respondent_role|title }} · <strong>Phase:</strong> {{ questionnaire.study_phase }} · <strong>Items:</strong> {{ questionnaire.item_count }} · <strong>Responses:</strong> {{ questionnaire.response_count }}</p>
+    <p><strong>Respondent:</strong> {{ questionnaire.respondent_role|title }} · <strong>Phase:</strong> {{ questionnaire.study_phase }} · <strong>Items:</strong> {{ questionnaire.item_count }} · <strong>New portal responses:</strong> {{ questionnaire.response_count }}</p>
     <div class="actions">
       <a class="button" href="{{ url_for('research.respond_questionnaire', questionnaire_id=questionnaire.id) }}">Open Questionnaire</a>
       {% if session.get("role") in ["teacher", "school_admin", "super_admin"] %}<a class="button" href="{{ url_for('research.edit_questionnaire', questionnaire_id=questionnaire.id) }}">Edit Instrument</a>{% endif %}

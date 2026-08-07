@@ -20,6 +20,8 @@
     <div><span>Combined mastery</span><strong>{{ connected_summary.mastery_rate }}%</strong></div>
   </div>
   <p>Future consent-linked portal records are included automatically when this page is opened. The connected export preserves each row's source and capture mode.</p>
+  <p><strong>Questionnaire evidence:</strong> {{ evaluation_summary.learner_questionnaire_responses }} learner and {{ evaluation_summary.teacher_questionnaire_responses }} teacher Dataset 5 responses. <strong>Reliability evidence:</strong> {{ evaluation_summary.reliability_days }} daily records from {{ evaluation_summary.reliability_log_start }} to {{ evaluation_summary.reliability_log_end }}.</p>
+  <p><strong>Duration verification:</strong> {{ evidence_summary.coverage_status }} ({{ evidence_summary.verified_evaluation_coverage_days }} verified coverage days).</p>
 </section>
 <section class="learn-card">
   <p><strong>Evidence streams started:</strong> {{ readiness.present_count }} of {{ readiness.total_count }}. Discuss only verified evidence collected for the approved study.</p>
@@ -31,8 +33,13 @@
     <li><strong>{{ insight.statement }}</strong><br><small>Metric: {{ insight.metric }} · Source: {{ insight.source }} · Valid cases: {{ insight.valid_cases }} · Scope: {{ insight.scope }} · Evidence type: {{ insight.evidence_type }}</small></li>
     {% endfor %}
   </ul>
-  <h2>Manual qualitative interpretation</h2>
-  <p>No qualitative themes are generated automatically. Add only themes produced through the approved coding procedure, with quotations and participant identifiers handled according to the ethics protocol.</p>
+  <h2>Coded qualitative interpretation</h2>
+  <p>Dataset 5 contains the following coded theme counts. Retain the approved coding notes and de-identified source excerpts separately so a supervisor can audit the themes.</p>
+  <ul class="insight-list">
+    {% for theme in qualitative_themes %}
+    <li><strong>{{ theme.respondent_group }}: {{ theme.coded_theme }}</strong><br><small>Mentions: {{ theme.mention_count }} · Interpretation: {{ theme.interpretation }}</small></li>
+    {% endfor %}
+  </ul>
   {% endif %}
 </section>
 {% endblock %}
