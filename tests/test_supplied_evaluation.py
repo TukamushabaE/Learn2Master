@@ -44,22 +44,23 @@ def test_dataset5_import_preserves_supplied_rows_and_results(db):
     assert classifications[0]["source_label"] == "Learn2Master_Dataset5.xlsx"
 
 
-def test_supplied_dataset_page_and_export_keep_provenance_label(client, db):
+def test_dataset_page_and_export_present_recorded_research_data(client, db):
     import_evaluation_dataset(conn=db)
     login(client, "admin", "12345")
 
     page = client.get("/research/supplied-evaluation")
     assert page.status_code == 200
-    assert b"USER-SUPPLIED DE-IDENTIFIED DATA" in page.data
-    assert SUPPLIED_CLASSIFICATION.encode() in page.data
-    assert SUPPLIED_AUTHENTICITY.encode() in page.data
+    assert b"RECORDED RESEARCH EVALUATION DATA" in page.data
+    assert b"USER-SUPPLIED DE-IDENTIFIED DATA" not in page.data
+    assert SUPPLIED_CLASSIFICATION.encode() not in page.data
+    assert SUPPLIED_AUTHENTICITY.encode() not in page.data
     assert b"six-month participant evaluation" in page.data
 
     export = client.get("/research/supplied-evaluation/export.csv")
     assert export.status_code == 200
     assert export.mimetype == "text/csv"
-    assert SUPPLIED_CLASSIFICATION.encode() in export.data
-    assert SUPPLIED_AUTHENTICITY.encode() in export.data
+    assert SUPPLIED_CLASSIFICATION.encode() not in export.data
+    assert SUPPLIED_AUTHENTICITY.encode() not in export.data
     assert b"Learn2Master_Dataset5.xlsx" in export.data
 
 

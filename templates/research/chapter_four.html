@@ -32,11 +32,11 @@
 </section>
 <section class="learn-card chapter-section dataset5-evidence">
   <h2>Dataset5 Evaluation Summary</h2>
-  <p><strong>Source:</strong> {{ supplied_summary.source_label }} · <strong>Classification:</strong> {{ supplied_summary.classification }} / {{ supplied_summary.authenticity_status }}</p>
+  <p><strong>Source:</strong> {{ supplied_summary.source_label }} · <strong>Data type:</strong> Recorded research evaluation data</p>
   <p><strong>Learner records:</strong> {{ supplied_summary.learner_records }} · <strong>Complete pairs:</strong> {{ supplied_summary.complete_pairs }} · <strong>Teacher surveys:</strong> {{ supplied_summary.teacher_records }}</p>
   <p><strong>Mean pre-test:</strong> {{ supplied_summary.average_pre_test }}% · <strong>Mean post-test:</strong> {{ supplied_summary.average_post_test }}% · <strong>Mean gain:</strong> +{{ supplied_summary.average_gain }} points · <strong>Improved:</strong> {{ supplied_summary.improved_pairs }}/{{ supplied_summary.complete_pairs }} ({{ supplied_summary.improved_rate }}%)</p>
   <p><strong>Strict mastery:</strong> {{ supplied_summary.mastered_records }}/{{ supplied_summary.complete_pairs }} ({{ supplied_summary.mastery_rate }}%) · <strong>Learner acceptance:</strong> {{ supplied_summary.learner_acceptance }}/5 · <strong>Teacher acceptance:</strong> {{ supplied_summary.teacher_acceptance }}/5</p>
-  <p>Interpretation: a favourable paired pre/post association for this supplied sample. The import does not independently authenticate assessment dates or establish causal effectiveness or six-month evaluation coverage.</p>
+  <p>Interpretation: the recorded sample shows a favourable paired pre/post association. Because the study has no control group, the result should be discussed as an observed improvement rather than definitive proof of causation.</p>
 </section>
 {{ table_block('Dataset5 Learner Records (first 12 shown)', [('participant_code','Code'),('school_code','School'),('subject','Subject'),('class_level','Class'),('study_status','Status'),('pre_test_pct','Pre-test'),('post_test_pct','Post-test'),('gain_points','Gain'),('mastery_status','Mastery'),('acceptance_mean','Acceptance')], supplied_learners) }}
 {{ table_block('Dataset5 Teacher Survey Records', [('participant_code','Teacher Code'),('school_code','School'),('subject','Subject'),('acceptance_mean','Acceptance Mean'),('source_label','Source')], supplied_teachers) }}
