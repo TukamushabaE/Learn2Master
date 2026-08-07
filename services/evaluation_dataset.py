@@ -212,14 +212,22 @@ def evaluation_dataset_rows(conn, record_type=None):
         SELECT evaluation_record_id, record_type, participant_code, school_code, subject,
                class_level, study_status, pre_test_pct, post_test_pct, gain_points,
                acceptance_mean, mastery_status, data_classification,
-               authenticity_status, source_label, imported_at
+               authenticity_status, source_label, imported_at, payload_json
         FROM evaluation_dataset_records
         {where}
         ORDER BY record_type, participant_code
         """,
         params,
     ).fetchall()
-    return [{key: row[key] for key in row.keys()} for row in rows]
+    results = []
+    for row in rows:
+        result = {key: row[key] for key in row.keys() if key != "payload_json"}
+        try:
+            result["payload"] = json.loads(row["payload_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            result["payload"] = {}
+        results.append(result)
+    return results
 
 
 def evaluation_dataset_summary(conn):
