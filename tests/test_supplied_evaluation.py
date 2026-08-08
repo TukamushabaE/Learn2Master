@@ -1,5 +1,6 @@
 import csv
 import io
+from urllib.parse import parse_qs, urlparse
 
 from conftest import login
 from werkzeug.security import check_password_hash
@@ -17,6 +18,7 @@ from services.evaluation_dataset import (
     provision_evaluation_accounts,
 )
 from routes.research import connected_research_summary
+from scripts.migrate_postgres import url_with_search_path
 
 
 FORBIDDEN_PUBLIC_SOURCE_NAMES = (
@@ -24,6 +26,15 @@ FORBIDDEN_PUBLIC_SOURCE_NAMES = (
     b"dataset" + b"5",
     b"learn2master_" + b"dataset" + b"5",
 )
+
+
+def test_migration_url_uses_pooler_compatible_search_path_option():
+    migrated_url = url_with_search_path(
+        "postgresql://user:secret@example.com:5432/postgres?sslmode=require",
+        "learn2master_prod",
+    )
+    query = parse_qs(urlparse(migrated_url).query)
+    assert query["options"] == ["-c search_path=learn2master_prod"]
 
 
 def assert_public_source_name_is_normalized(response):
