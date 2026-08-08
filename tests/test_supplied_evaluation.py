@@ -18,7 +18,7 @@ from services.evaluation_dataset import (
     provision_evaluation_accounts,
 )
 from routes.research import connected_research_summary
-from scripts.migrate_postgres import url_with_search_path
+from scripts.migrate_postgres import start_migration_health_server, url_with_search_path
 
 
 FORBIDDEN_PUBLIC_SOURCE_NAMES = (
@@ -35,6 +35,11 @@ def test_migration_url_uses_pooler_compatible_search_path_option():
     )
     query = parse_qs(urlparse(migrated_url).query)
     assert query["options"] == ["-c search_path=learn2master_prod"]
+
+
+def test_migration_health_server_is_disabled_without_a_host_port(monkeypatch):
+    monkeypatch.delenv("PORT", raising=False)
+    assert start_migration_health_server() is None
 
 
 def assert_public_source_name_is_normalized(response):
