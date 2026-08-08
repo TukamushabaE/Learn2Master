@@ -8,6 +8,8 @@ and the final table counts are verified before the transaction is committed.
 import argparse
 import os
 import re
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 from urllib.parse import parse_qsl, urlencode, urlunparse
 
@@ -17,6 +19,26 @@ from psycopg2 import extras, sql
 from database import PostgresConnectionWrapper, set_postgres_search_path
 from init_db import _table_name_from_create, run_postgres, schema_statements
 from services.evaluation_dataset import ensure_evaluation_dataset_schema
+
+
+class _MigrationHealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"database migration in progress")
+
+    def log_message(self, _format, *_args):
+        return
+
+
+def start_migration_health_server():
+    port = int(os.environ.get("PORT") or 0)
+    if port <= 0:
+        return None
+    server = ThreadingHTTPServer(("0.0.0.0", port), _MigrationHealthHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
 
 
 def table_names(conn):
@@ -221,6 +243,7 @@ def copy_database(source_url, target_url, target_schema):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--target-schema", default="learn2master_prod")
+    parser.add_argument("--serve-health", action="store_true")
     args = parser.parse_args()
     source_url = os.environ.get("SOURCE_DATABASE_URL") or os.environ.get("DATABASE_URL")
     target_url = (
@@ -232,14 +255,19 @@ def main():
             "A source DATABASE_URL and target LEARN2MASTER_SUPABASE_DATABASE_URL are required."
         )
     print(f"Starting isolated database migration into schema {args.target_schema}.")
-    result = copy_database(source_url, target_url, args.target_schema)
-    print(
-        "Migration verified: "
-        f"{result['tables']} tables, {result['rows']} rows, {result['users']} users, "
-        f"{result['evaluation_records']} evaluation records and "
-        f"{result['evaluation_accounts']} linked evaluation accounts in "
-        f"schema {result['target_schema']}."
-    )
+    health_server = start_migration_health_server() if args.serve_health else None
+    try:
+        result = copy_database(source_url, target_url, args.target_schema)
+        print(
+            "Migration verified: "
+            f"{result['tables']} tables, {result['rows']} rows, {result['users']} users, "
+            f"{result['evaluation_records']} evaluation records and "
+            f"{result['evaluation_accounts']} linked evaluation accounts in "
+            f"schema {result['target_schema']}."
+        )
+    finally:
+        if health_server:
+            health_server.shutdown()
 
 
 if __name__ == "__main__":
