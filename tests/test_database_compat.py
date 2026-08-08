@@ -1,8 +1,40 @@
 import sqlite3
 
 import init_db
-from database import PostgresConnectionWrapper, translate_sql_for_postgres
+from database import (
+    PostgresConnectionWrapper,
+    set_postgres_search_path,
+    translate_sql_for_postgres,
+)
 from services.evaluation_dataset import ensure_evaluation_dataset_schema
+
+
+class _SearchPathCursor:
+    def __init__(self, statements):
+        self.statements = statements
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def execute(self, statement):
+        self.statements.append(statement)
+
+
+class _SearchPathConnection:
+    def __init__(self):
+        self.statements = []
+
+    def cursor(self):
+        return _SearchPathCursor(self.statements)
+
+
+def test_postgres_search_path_is_set_explicitly_for_pooler_connections():
+    conn = _SearchPathConnection()
+    assert set_postgres_search_path(conn, "learn2master_prod") == "learn2master_prod"
+    assert conn.statements == ['SET search_path TO "learn2master_prod"']
 
 
 def test_postgres_query_translation_handles_sqlite_patterns():
