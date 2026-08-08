@@ -72,7 +72,7 @@ def schema_copy_order(common_tables):
 def url_with_search_path(url, schema):
     parsed = urlparse(url)
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
-    query["options"] = f"-csearch_path={schema}"
+    query["options"] = f"-c search_path={schema}"
     return urlunparse(parsed._replace(query=urlencode(query)))
 
 
