@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, session
 from routes.guards import role_required
 from database import get_db
+from services.evaluation_dataset import linked_learner_evaluation_evidence
 
 student_bp = Blueprint("student", __name__)
 
@@ -61,6 +62,8 @@ def student_dashboard():
         LIMIT 4
     """, (learner_id,)).fetchall()
 
+    evaluation_evidence = linked_learner_evaluation_evidence(conn, learner_id)
+
     conn.close()
 
     stats = {
@@ -69,7 +72,14 @@ def student_dashboard():
         "attempted": attempted,
         "avg_mastery": avg_mastery,
     }
-    return render_template("student_dashboard.html", stats=stats, latest_recommendation=latest_recommendation, pathways=pathways, activities=activities)
+    return render_template(
+        "student_dashboard.html",
+        stats=stats,
+        latest_recommendation=latest_recommendation,
+        pathways=pathways,
+        activities=activities,
+        evaluation_evidence=evaluation_evidence,
+    )
 
 @student_bp.route("/student/assessments")
 @role_required("learner")
@@ -93,8 +103,13 @@ def assessments():
                  assessments.assessment_type, assessments.assessment_title
         ORDER BY subjects.subject_name, lo.sequence_order, assessments.assessment_type
     """, (learner_id,)).fetchall()
+    evaluation_evidence = linked_learner_evaluation_evidence(conn, learner_id)
     conn.close()
-    return render_template("student/assessments.html", rows=rows)
+    return render_template(
+        "student/assessments.html",
+        rows=rows,
+        evaluation_evidence=evaluation_evidence,
+    )
 
 
 @student_bp.route("/student/analytics")
@@ -124,8 +139,15 @@ def my_analytics():
         WHERE learner_id=?
         ORDER BY created_at DESC LIMIT 10
     """, (learner_id,)).fetchall()
+    evaluation_evidence = linked_learner_evaluation_evidence(conn, learner_id)
     conn.close()
-    return render_template("student/analytics.html", concept_rows=concept_rows, mastery_rows=mastery_rows, recommendations=recommendations)
+    return render_template(
+        "student/analytics.html",
+        concept_rows=concept_rows,
+        mastery_rows=mastery_rows,
+        recommendations=recommendations,
+        evaluation_evidence=evaluation_evidence,
+    )
 
 
 @student_bp.route("/learner/portfolio")
@@ -162,5 +184,11 @@ def portfolio():
         WHERE tf.learner_id=?
         ORDER BY tf.created_at DESC LIMIT 10
     """, (learner_id,)).fetchall()
+    evaluation_evidence = linked_learner_evaluation_evidence(conn, learner_id)
     conn.close()
-    return render_template("student/portfolio.html", rows=rows, latest_feedback=latest_feedback)
+    return render_template(
+        "student/portfolio.html",
+        rows=rows,
+        latest_feedback=latest_feedback,
+        evaluation_evidence=evaluation_evidence,
+    )

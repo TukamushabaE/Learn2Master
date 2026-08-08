@@ -1,6 +1,7 @@
 from routes.guards import login_required
 from flask import Blueprint, render_template, redirect, session, url_for, request
 from database import get_db
+from services.evaluation_dataset import linked_learner_evaluation_evidence
 
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -98,6 +99,7 @@ def dashboard():
         ORDER BY created_at DESC
         LIMIT 5
     """, (learner_id,)).fetchall()
+    evaluation_evidence = linked_learner_evaluation_evidence(conn, learner_id)
 
     conn.close()
 
@@ -121,5 +123,6 @@ def dashboard():
         selected_subject_id=selected_subject_id,
         selected_course=selected_course,
         selected_course_id=selected_course_id,
-        activities=activities
+        activities=activities,
+        evaluation_evidence=evaluation_evidence,
     )

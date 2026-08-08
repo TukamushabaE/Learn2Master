@@ -13,6 +13,7 @@
         <small>Teacher-in-the-loop AI • CBC • Mastery tracking</small>
     </div>
 </div>
+{% include "partials/learner_evaluation_evidence.html" %}
 
 <div class="grid grid-4" style="margin-top:22px">
     <div class="card metric-card"><div class="metric-icon">📈</div><strong>{{ dashboard_data.progress_percentage }}%</strong><span>Overall Mastery Progress</span><div class="progress-track"><div class="progress-fill" style="width:{{ dashboard_data.progress_percentage }}%"></div></div></div>

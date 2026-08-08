@@ -13,6 +13,7 @@
   </div>
   <div class="hero-badge"><span>Learning Pace</span><strong>{{ learning_pace }}</strong></div>
 </section>
+{% include "partials/learner_evaluation_evidence.html" %}
 
 <div class="evidence-grid">
   <div><span>Class Level</span><strong>{% if profile %}{{ profile.class_level }}{% else %}Senior One{% endif %}</strong></div>

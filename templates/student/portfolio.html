@@ -6,6 +6,7 @@
   <div><p class="eyebrow">Competency Evidence Portfolio</p><h1>My Mastery Evidence</h1><p>Evidence per learning outcome: pre-test, adaptive practice, reflection, practical evidence, post-test, AI recommendations, teacher feedback and mastery status.</p></div>
   <div class="hero-badge"><span>Outcomes</span><strong>{{ rows|length }}</strong></div>
 </section>
+{% include "partials/learner_evaluation_evidence.html" %}
 <section class="learn-card">
   <div class="concept-grid">
   {% for row in rows %}

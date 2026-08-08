@@ -17,6 +17,8 @@
     <div class="hero-badge"><span>Unlock Rule</span><strong>Mastery ≥80%</strong></div>
 </section>
 
+{% include "partials/learner_evaluation_evidence.html" %}
+
 <div class="learning-timeline">
     {% for card in cards %}
     {% set outcome = card.outcome %}

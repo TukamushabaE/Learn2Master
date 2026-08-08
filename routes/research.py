@@ -19,6 +19,7 @@ from services.evaluation_dataset import (
     evaluation_dataset_summary,
     evaluation_qualitative_theme_rows,
     evaluation_reliability_rows,
+    linked_learner_evaluation_evidence,
 )
 from services.research_analytics import (
     learning_gain_summary as centralized_learning_gain_summary,
@@ -2379,11 +2380,17 @@ def questionnaires():
     conn = get_db()
     rows = questionnaire_rows(conn)
     evaluation_summary = evaluation_dataset_summary(conn)
+    evaluation_evidence = (
+        linked_learner_evaluation_evidence(conn, session["user_id"])
+        if session.get("role") == "learner"
+        else None
+    )
     conn.close()
     return render_template(
         "research/questionnaires.html",
         questionnaires=rows,
         evaluation_summary=evaluation_summary,
+        evaluation_evidence=evaluation_evidence,
         no_data=NO_DATA,
     )
 

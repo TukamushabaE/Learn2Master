@@ -4,6 +4,7 @@ from routes.guards import role_required, login_required
 from engine import AIEngine
 from extensions import limiter
 import json
+from services.evaluation_dataset import linked_learner_evaluation_evidence
 
 ai_bp = Blueprint("ai", __name__)
 
@@ -28,8 +29,17 @@ def explanations():
         ORDER BY ai.created_at DESC
         LIMIT 80
     """, params).fetchall()
+    evaluation_evidence = (
+        linked_learner_evaluation_evidence(conn, session["user_id"])
+        if session.get("role") == "learner"
+        else None
+    )
     conn.close()
-    return render_template("ai/explanations.html", rows=rows)
+    return render_template(
+        "ai/explanations.html",
+        rows=rows,
+        evaluation_evidence=evaluation_evidence,
+    )
 
 @ai_bp.route("/learner/ai-coach")
 @role_required("learner")
@@ -62,8 +72,15 @@ def learner_ai_coach():
         ORDER BY ai.created_at DESC
         LIMIT 10
     """, (learner_id,)).fetchall()
+    evaluation_evidence = linked_learner_evaluation_evidence(conn, learner_id)
     conn.close()
-    return render_template("ai/learner_coach.html", recommendations=recommendations, bkt=bkt, explanations=explanations)
+    return render_template(
+        "ai/learner_coach.html",
+        recommendations=recommendations,
+        bkt=bkt,
+        explanations=explanations,
+        evaluation_evidence=evaluation_evidence,
+    )
 
 @ai_bp.route("/ai/tutor", methods=["POST"])
 @login_required

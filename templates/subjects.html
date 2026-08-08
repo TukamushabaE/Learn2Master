@@ -20,6 +20,8 @@
     </div>
 </section>
 
+{% include "partials/learner_evaluation_evidence.html" %}
+
 <div class="subject-grid">
     {% for subject in subjects %}
     <article class="subject-card">
@@ -27,7 +29,7 @@
         <div class="subject-content">
             <div class="subject-topline">
                 <span class="subject-code">{{ subject.code }}</span>
-                <span class="ai-badge">{{ subject.mastered }}/{{ subject.total }} Outcomes</span>
+                <span class="ai-badge">{% if subject.has_recorded_evidence %}Evaluation Linked · {% endif %}{{ subject.mastered }}/{{ subject.total }} Outcomes</span>
             </div>
             <h2>{{ subject.name }}</h2>
             <p>{{ subject.description }}</p>

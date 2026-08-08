@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, session
 from routes.guards import role_required
 from database import get_db
+from services.evaluation_dataset import linked_learner_evaluation_evidence
 
 subjects_bp = Blueprint("subjects", __name__)
 
@@ -17,6 +18,7 @@ def subjects():
         WHERE subject_name IN ('Physics', 'ICT')
         ORDER BY CASE subject_name WHEN 'Physics' THEN 1 WHEN 'ICT' THEN 2 ELSE 3 END
     """).fetchall()
+    evaluation_evidence = linked_learner_evaluation_evidence(conn, learner_id)
 
     subject_cards = []
     for subject in subjects:
@@ -46,10 +48,19 @@ def subjects():
             "progress": progress,
             "mastered": mastered,
             "total": total,
+            "has_recorded_evidence": bool(
+                evaluation_evidence
+                and (evaluation_evidence.get("subject") or "").strip().lower()
+                == subject["subject_name"].strip().lower()
+            ),
         })
 
     conn.close()
-    return render_template("subjects.html", subjects=subject_cards)
+    return render_template(
+        "subjects.html",
+        subjects=subject_cards,
+        evaluation_evidence=evaluation_evidence,
+    )
 
 
 @subjects_bp.route("/subjects/<int:subject_id>")
@@ -73,6 +84,12 @@ def subject_detail(subject_id):
         WHERE subject_id=?
         ORDER BY course_id
     """, (subject_id,)).fetchall()
+    evaluation_evidence = linked_learner_evaluation_evidence(conn, learner_id)
+    if evaluation_evidence and (
+        (evaluation_evidence.get("subject") or "").strip().lower()
+        != subject["subject_name"].strip().lower()
+    ):
+        evaluation_evidence = None
 
     pathway_cards = []
     for p in pathways:
@@ -94,4 +111,9 @@ def subject_detail(subject_id):
 
     conn.commit()
     conn.close()
-    return render_template("subject_detail.html", subject=subject, pathway_cards=pathway_cards)
+    return render_template(
+        "subject_detail.html",
+        subject=subject,
+        pathway_cards=pathway_cards,
+        evaluation_evidence=evaluation_evidence,
+    )
