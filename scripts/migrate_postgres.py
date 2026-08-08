@@ -220,10 +220,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--target-schema", default="learn2master_prod")
     args = parser.parse_args()
-    source_url = os.environ.get("SOURCE_DATABASE_URL")
-    target_url = os.environ.get("TARGET_DATABASE_URL")
+    source_url = os.environ.get("SOURCE_DATABASE_URL") or os.environ.get("DATABASE_URL")
+    target_url = (
+        os.environ.get("TARGET_DATABASE_URL")
+        or os.environ.get("LEARN2MASTER_SUPABASE_DATABASE_URL")
+    )
     if not source_url or not target_url:
-        raise SystemExit("SOURCE_DATABASE_URL and TARGET_DATABASE_URL are required.")
+        raise SystemExit(
+            "A source DATABASE_URL and target LEARN2MASTER_SUPABASE_DATABASE_URL are required."
+        )
+    print(f"Starting isolated database migration into schema {args.target_schema}.")
     result = copy_database(source_url, target_url, args.target_schema)
     print(
         "Migration verified: "
