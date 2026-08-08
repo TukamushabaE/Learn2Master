@@ -21,6 +21,10 @@ from services.evaluation_dataset import (
     evaluation_reliability_rows,
     linked_learner_evaluation_evidence,
 )
+from services.evaluation_analysis import (
+    evaluation_analysis,
+    evaluation_analysis_export_rows,
+)
 from services.research_analytics import (
     learning_gain_summary as centralized_learning_gain_summary,
     paired_learning_gain_rows,
@@ -1823,6 +1827,38 @@ def export_supplied_evaluation():
     )
 
 
+@research_bp.route("/research/evaluation-analysis")
+@role_required(*RESEARCH_ROLES)
+def evaluation_analysis_report():
+    conn = get_db()
+    analysis = evaluation_analysis(conn)
+    conn.close()
+    return render_template(
+        "research/evaluation_analysis.html",
+        analysis=analysis,
+        no_data=NO_DATA,
+    )
+
+
+@research_bp.route("/research/evaluation-analysis/export.csv")
+@role_required(*RESEARCH_ROLES)
+def export_evaluation_analysis():
+    conn = get_db()
+    rows = evaluation_analysis_export_rows(evaluation_analysis(conn))
+    conn.close()
+    return csv_response(
+        "learn2master_evaluation_analysis.csv",
+        [
+            ("section", "section"),
+            ("measure", "measure"),
+            ("value", "value"),
+            ("interpretation", "interpretation"),
+        ],
+        rows,
+        "evaluation_analysis",
+    )
+
+
 @research_bp.route("/research/chapter-guide")
 @role_required(*RESEARCH_ROLES)
 def chapter_guide():
@@ -2686,6 +2722,7 @@ def chapter_four_report():
     filters = research_filter_values()
     metrics = research_metrics(conn)
     connected_summary = connected_research_summary(conn, metrics)
+    statistical_analysis = evaluation_analysis(conn)
     feedback_rows = connected_feedback_rows(conn, filters)
     reliability_rows = connected_reliability_rows(conn, filters)
     integrity = integrity_report(conn)
@@ -2712,6 +2749,7 @@ def chapter_four_report():
         "reliability_summary": connected_reliability_summary(conn, reliability_rows),
         "integrity": integrity,
         "questionnaire_results": connected_questionnaire_rows(conn),
+        "statistical_analysis": statistical_analysis,
         "system_logs": system_log_rows(conn, limit=20),
         "readiness": chapter_evidence_readiness(conn),
     }
@@ -2738,6 +2776,7 @@ def chapter_five_insights():
     questionnaire_results = connected_questionnaire_rows(conn)
     qualitative_themes = evaluation_qualitative_theme_rows(conn)
     evidence_summary = evaluation_evidence_summary(conn)
+    statistical_analysis = evaluation_analysis(conn)
     readiness = chapter_evidence_readiness(conn)
     has_data = bool(evaluation_summary["total_records"] or gains or questionnaire_results or metrics["attempts"])
     insights = []
@@ -2760,6 +2799,33 @@ def chapter_five_insights():
                 evaluation_summary["learner_records"] + evaluation_summary["teacher_records"],
                 "Recorded learner and teacher acceptance evidence",
                 "self-report evidence",
+            )
+            paired = statistical_analysis["paired"]
+            add(
+                (
+                    f"The matched scores show a mean gain of {paired['mean_gain']} percentage points "
+                    f"(95% CI {paired['confidence_interval_low']} to {paired['confidence_interval_high']}), "
+                    f"paired t({paired['degrees_of_freedom']})={paired['t_statistic']}, "
+                    f"p{paired['p_value_display']}, and Cohen's dz={paired['cohens_dz']}. "
+                    "The Wilcoxon sensitivity check leads to the same directional conclusion."
+                ),
+                paired["cohens_dz"],
+                "Matched pre-test/post-test evaluation records",
+                paired["valid_pairs"],
+                "Observed within-sample change; no causal claim",
+                "inferential observational evidence",
+            )
+            reliability_text = "; ".join(
+                f"{row['scale']} alpha={row['cronbach_alpha']} ({row['interpretation'].lower()})"
+                for row in statistical_analysis["questionnaire_reliability"]
+            )
+            add(
+                f"Questionnaire internal-consistency analysis found {reliability_text}.",
+                statistical_analysis["questionnaire_reliability"][0]["cronbach_alpha"],
+                "Item-level learner and teacher questionnaire responses",
+                evaluation_summary["questionnaire_responses"],
+                "Recorded acceptance instruments",
+                "measurement reliability evidence",
             )
         add(
             f"The connected research evidence currently contains {connected_summary['total_paired_records']} paired result records across the evaluation register and automatically captured portal activity.",
@@ -2834,6 +2900,7 @@ def chapter_five_insights():
         connected_summary=connected_summary,
         qualitative_themes=qualitative_themes,
         evidence_summary=evidence_summary,
+        statistical_analysis=statistical_analysis,
     )
 
 

@@ -1,0 +1,79 @@
+{% extends "layouts/base.html" %}
+{% block title %}Evaluation Data Analysis{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+<style>
+.analysis-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:14px}.analysis-button{border:1px solid #143d73;background:#143d73;color:#fff;border-radius:8px;padding:10px 13px;font-weight:800;text-decoration:none}.analysis-button.secondary{background:#fff;color:#143d73}.analysis-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;margin:18px 0}.analysis-card{border:1px solid #dfe8f2;background:#fff;border-radius:16px;padding:16px}.analysis-card span{display:block;color:#66778a;font-size:.82rem;font-weight:700}.analysis-card strong{display:block;color:#10233f;font-size:1.55rem;margin-top:7px}.analysis-table{width:100%;border-collapse:collapse;margin-top:12px}.analysis-table th,.analysis-table td{border:1px solid #e1e8f1;padding:9px;text-align:left;vertical-align:top}.analysis-table th{background:#f4f8fc;color:#28425f}.status-pill{display:inline-block;border-radius:999px;padding:5px 9px;font-weight:900;font-size:.78rem}.status-complete{background:#ddf7eb;color:#12613d}.status-partial{background:#fff2c7;color:#805300}.status-missing{background:#fee2e2;color:#991b1b}.status-not-in-design{background:#e7edf5;color:#3f5268}.method-note{border-left:4px solid #0f8f83;background:#effcf9;padding:13px 15px;border-radius:8px}.analysis-section{break-inside:avoid}@media print{.sidebar,.topbar,.footer,.analysis-actions{display:none!important}.learn-card,.hero-panel{box-shadow:none}.analysis-table{font-size:10px}}
+</style>
+{% endblock %}
+{% macro subgroup_table(title, rows) %}
+<section class="learn-card analysis-section">
+  <h2>{{ title }}</h2>
+  <div style="overflow:auto"><table class="analysis-table">
+    <thead><tr><th>Group</th><th>n</th><th>Mean pre</th><th>Mean post</th><th>Mean gain</th><th>Gain SD</th><th>Improved</th><th>Mastery</th><th>Acceptance</th></tr></thead>
+    <tbody>{% for row in rows %}<tr><td><strong>{{ row.group }}</strong></td><td>{{ row.valid_pairs }}</td><td>{{ row.mean_pre_test }}%</td><td>{{ row.mean_post_test }}%</td><td>{{ row.mean_gain }}</td><td>{{ row.gain_standard_deviation }}</td><td>{{ row.improved }}/{{ row.valid_pairs }} ({{ row.improved_rate }}%)</td><td>{{ row.mastered }}/{{ row.valid_pairs }} ({{ row.mastery_rate }}%)</td><td>{{ row.acceptance_mean }}</td></tr>{% else %}<tr><td colspan="9">{{ no_data }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endmacro %}
+{% block content %}
+<div class="analysis-actions">
+  <a class="analysis-button" href="{{ url_for('research.export_evaluation_analysis') }}">Download Analysis CSV</a>
+  <a class="analysis-button secondary" href="{{ url_for('research.chapter_four_report') }}">Open Chapter Four</a>
+  <a class="analysis-button secondary" href="{{ url_for('research.evidence_verification') }}">Evidence Verification</a>
+</div>
+
+<section class="hero-panel">
+  <div>
+    <p class="eyebrow">Proposal-aligned evaluation</p>
+    <h1>Complete Data Analysis</h1>
+    <p>Paired learning outcomes, questionnaire reliability, subgroup patterns and an explicit record of evidence that is complete, partial or still missing.</p>
+  </div>
+  <div class="hero-badge"><span>Valid matched pairs</span><strong>{{ analysis.paired.valid_pairs }}</strong></div>
+</section>
+
+<div class="analysis-grid">
+  <div class="analysis-card"><span>Mean pre-test</span><strong>{{ analysis.paired.mean_pre_test }}%</strong></div>
+  <div class="analysis-card"><span>Mean post-test</span><strong>{{ analysis.paired.mean_post_test }}%</strong></div>
+  <div class="analysis-card"><span>Mean gain</span><strong>+{{ analysis.paired.mean_gain }}</strong></div>
+  <div class="analysis-card"><span>95% confidence interval</span><strong>{{ analysis.paired.confidence_interval_low }} to {{ analysis.paired.confidence_interval_high }}</strong></div>
+  <div class="analysis-card"><span>Improved learners</span><strong>{{ analysis.paired.improved_count }}/{{ analysis.paired.valid_pairs }}</strong></div>
+  <div class="analysis-card"><span>Cohen's dz</span><strong>{{ analysis.paired.cohens_dz }}</strong></div>
+</div>
+
+<section class="learn-card analysis-section">
+  <h2>Paired Pre-test/Post-test Statistical Results</h2>
+  <p class="method-note">{{ analysis.paired.method_note }}</p>
+  <div style="overflow:auto"><table class="analysis-table">
+    <thead><tr><th>Analysis</th><th>Statistic</th><th>Degrees of freedom / n</th><th>Two-sided p</th><th>Interpretation</th></tr></thead>
+    <tbody>
+      <tr><td>Paired-samples t-test</td><td>t = {{ analysis.paired.t_statistic }}</td><td>df = {{ analysis.paired.degrees_of_freedom }}</td><td>{{ analysis.paired.p_value_display }}</td><td>The recorded post-test scores are higher within the matched sample.</td></tr>
+      <tr><td>Wilcoxon signed-rank sensitivity check</td><td>W = {{ analysis.paired.wilcoxon.statistic }}; z = {{ analysis.paired.wilcoxon.z }}</td><td>n = {{ analysis.paired.wilcoxon.valid_non_zero_pairs }}</td><td>{{ analysis.paired.wilcoxon.p_value_display }}</td><td>The non-parametric check supports the same direction of change.</td></tr>
+      <tr><td>Standardized effect</td><td>Cohen's dz = {{ analysis.paired.cohens_dz }}</td><td>n = {{ analysis.paired.valid_pairs }}</td><td>Not applicable</td><td>Within-person standardized mean change.</td></tr>
+      <tr><td>Mean-gain interval</td><td>{{ analysis.paired.confidence_interval_low }} to {{ analysis.paired.confidence_interval_high }}</td><td>95% CI</td><td>Not applicable</td><td>Uncertainty interval around the observed mean gain.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="learn-card analysis-section">
+  <h2>Questionnaire Internal Consistency</h2>
+  <p>Cronbach's alpha is calculated from the item-level responses. It assesses whether the items in each scale behave consistently; it does not establish validity by itself.</p>
+  <table class="analysis-table"><thead><tr><th>Scale</th><th>Responses</th><th>Items</th><th>Cronbach's alpha</th><th>Interpretation</th></tr></thead><tbody>
+  {% for row in analysis.questionnaire_reliability %}<tr><td>{{ row.scale }}</td><td>{{ row.responses }}</td><td>{{ row.items }}</td><td><strong>{{ row.cronbach_alpha }}</strong></td><td>{{ row.interpretation }}</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+
+{{ subgroup_table('Exploratory Results by Subject', analysis.subject_subgroups) }}
+{{ subgroup_table('Exploratory Results by School', analysis.school_subgroups) }}
+{{ subgroup_table('Exploratory Results by Class', analysis.class_subgroups) }}
+{{ subgroup_table('Exploratory Results by Connectivity', analysis.connectivity_subgroups) }}
+{{ subgroup_table('Exploratory Results by Device Access', analysis.device_subgroups) }}
+
+<section class="learn-card analysis-section">
+  <h2>What Is Complete and What Is Still Missing</h2>
+  <p>This checklist follows the quantitative, qualitative and technical indicators in the proposal. Missing evidence is left visible because genuine dates, consent documents and interview excerpts cannot be reconstructed from aggregate results.</p>
+  <div style="overflow:auto"><table class="analysis-table">
+    <thead><tr><th>Proposal requirement</th><th>Status</th><th>Available evidence</th><th>Required next action</th></tr></thead>
+    <tbody>{% for row in analysis.completeness %}<tr><td><strong>{{ row.requirement }}</strong></td><td><span class="status-pill status-{{ row.status|lower|replace(' ', '-') }}">{{ row.status }}</span></td><td>{{ row.available_evidence }}</td><td>{{ row.next_action }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

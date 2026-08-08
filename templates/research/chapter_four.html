@@ -24,6 +24,7 @@
   <a class="button" href="{{ url_for('research.chapter_guide') }}">Open Chapter Guide</a>
   <a class="button" href="{{ url_for('research.export_supplied_evaluation') }}">Export Evaluation Data</a>
   <a class="button" href="{{ url_for('research.export_full_dataset') }}">Export Connected Dataset</a>
+  <a class="button" href="{{ url_for('research.evaluation_analysis_report') }}">Open Statistical Analysis</a>
   <button class="button" onclick="window.print()">Print Chapter Four</button>
 </div>
 <section class="hero-panel">
@@ -47,6 +48,16 @@
   <p><strong>Questionnaire responses:</strong> {{ supplied_summary.learner_questionnaire_responses }} learners and {{ supplied_summary.teacher_questionnaire_responses }} teachers. <strong>Reliability:</strong> {{ supplied_summary.reliability_days }} daily records from {{ supplied_summary.reliability_log_start }} to {{ supplied_summary.reliability_log_end }}, with {{ supplied_summary.operational_success_rate }}% operational success.</p>
   <p>Interpretation: the recorded sample shows a favourable paired pre/post association. Because the study has no control group, the result should be discussed as an observed improvement rather than definitive proof of causation.</p>
 </section>
+<section class="learn-card chapter-section evaluation-evidence">
+  <h2>Inferential Analysis of Matched Outcomes</h2>
+  <p><strong>Valid pairs:</strong> {{ statistical_analysis.paired.valid_pairs }}. <strong>Mean gain:</strong> {{ statistical_analysis.paired.mean_gain }} percentage points (95% CI {{ statistical_analysis.paired.confidence_interval_low }} to {{ statistical_analysis.paired.confidence_interval_high }}).</p>
+  <p><strong>Paired t-test:</strong> t({{ statistical_analysis.paired.degrees_of_freedom }}) = {{ statistical_analysis.paired.t_statistic }}, p {{ statistical_analysis.paired.p_value_display }}. <strong>Cohen's dz:</strong> {{ statistical_analysis.paired.cohens_dz }}.</p>
+  <p><strong>Wilcoxon sensitivity check:</strong> W = {{ statistical_analysis.paired.wilcoxon.statistic }}, z = {{ statistical_analysis.paired.wilcoxon.z }}, p {{ statistical_analysis.paired.wilcoxon.p_value_display }}.</p>
+  <p>{{ statistical_analysis.paired.method_note }}</p>
+  <table class="chapter-table"><thead><tr><th>Questionnaire scale</th><th>Responses</th><th>Items</th><th>Cronbach's alpha</th><th>Interpretation</th></tr></thead><tbody>{% for row in statistical_analysis.questionnaire_reliability %}<tr><td>{{ row.scale }}</td><td>{{ row.responses }}</td><td>{{ row.items }}</td><td>{{ row.cronbach_alpha }}</td><td>{{ row.interpretation }}</td></tr>{% endfor %}</tbody></table>
+</section>
+{{ table_block('Exploratory Analysis by Subject', [('group','Subject'),('valid_pairs','Valid pairs'),('mean_pre_test','Mean pre-test'),('mean_post_test','Mean post-test'),('mean_gain','Mean gain'),('improved_rate','Improved (%)'),('mastery_rate','Mastery (%)'),('acceptance_mean','Acceptance')], statistical_analysis.subject_subgroups) }}
+{{ table_block('Exploratory Analysis by School', [('group','School'),('valid_pairs','Valid pairs'),('mean_pre_test','Mean pre-test'),('mean_post_test','Mean post-test'),('mean_gain','Mean gain'),('improved_rate','Improved (%)'),('mastery_rate','Mastery (%)'),('acceptance_mean','Acceptance')], statistical_analysis.school_subgroups) }}
 <section class="learn-card chapter-section">
   <h2>Data Collection and Verification Statement</h2>
   <p><strong>Design:</strong> {{ evidence_summary.collection_design }}. <strong>Sampling:</strong> {{ evidence_summary.sampling_strategy }}.</p>
