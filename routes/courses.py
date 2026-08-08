@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, redirect, session, url_for
 from database import get_db
+from services.evaluation_dataset import linked_learner_evaluation_evidence
 
 courses_bp = Blueprint("courses", __name__)
 
@@ -21,6 +22,11 @@ def courses():
         JOIN subjects ON courses.subject_id = subjects.subject_id
         ORDER BY subjects.subject_name, courses.course_title
     """).fetchall()
+    evaluation_evidence = linked_learner_evaluation_evidence(conn, session["user_id"])
     conn.close()
 
-    return render_template("courses.html", courses=courses)
+    return render_template(
+        "courses.html",
+        courses=courses,
+        evaluation_evidence=evaluation_evidence,
+    )

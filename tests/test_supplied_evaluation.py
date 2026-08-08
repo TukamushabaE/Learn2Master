@@ -12,6 +12,7 @@ from services.evaluation_dataset import (
     evaluation_account_map,
     evaluation_school_summaries,
     import_evaluation_dataset,
+    linked_learner_evaluation_evidence,
     participant_temporary_password,
     provision_evaluation_accounts,
 )
@@ -489,3 +490,93 @@ def test_admin_and_teacher_dashboards_surface_the_same_evaluation_totals(client,
     assert b"Evaluation Participants</span><strong>72" in teacher_page.data
     assert b"Questionnaire Responses</span><strong>68" in teacher_page.data
     assert b"Controlled Participant Register" in teacher_page.data
+
+
+def test_linked_learner_account_surfaces_its_record_and_opens_matching_outcomes(
+    client, db, monkeypatch
+):
+    secret = "evaluation-account-test-secret-2026"
+    monkeypatch.setenv("LEARN2MASTER_PARTICIPANT_ACCOUNT_SECRET", secret)
+    import_evaluation_dataset(conn=db)
+    provision_evaluation_accounts(conn=db, secret=secret)
+    account = db.execute(
+        "SELECT user_id FROM users WHERE username='KTHS-L001'"
+    ).fetchone()
+    assert account
+
+    evidence = linked_learner_evaluation_evidence(db, account["user_id"])
+    assert evidence["participant_code"] == "KTHS-L001"
+    assert evidence["subject"] == "Physics"
+    assert evidence["class_level"] == "S2"
+    assert evidence["pre_test_pct"] == 45.9
+    assert evidence["post_test_pct"] == 59.9
+    assert evidence["gain_points"] == 14
+    assert evidence["practice_attempts"] == 5
+    assert evidence["recommendations_received"] == 3
+    assert evidence["recommendations_acted_on"] == 2
+    assert evidence["teacher_interventions"] == 2
+    assert evidence["reflection_complete"] == "Yes"
+    assert evidence["practical_evidence_verified"] == "Yes"
+    assert evidence["learner_acceptance_mean"] == 3.9
+    assert evidence["available_outcomes"]
+
+    with client.session_transaction() as learner_session:
+        learner_session["user_id"] = account["user_id"]
+        learner_session["username"] = "KTHS-L001"
+        learner_session["full_name"] = "Participant KTHS-L001"
+        learner_session["role"] = "learner"
+        learner_session["must_change_password"] = 0
+
+    routes = (
+        "/student/dashboard",
+        "/subjects",
+        "/courses",
+        "/mastery",
+        "/student/assessments",
+        "/student/analytics",
+        "/learner/portfolio",
+        "/profile",
+        "/learner/ai-coach",
+        "/ai/explanations",
+        "/research/questionnaires",
+    )
+    for route in routes:
+        page = client.get(route)
+        assert page.status_code == 200, route
+        assert b"Recorded Framework Evaluation Evidence" in page.data, route
+        assert b"KTHS-L001" in page.data, route
+        assert b"45.9%" in page.data, route
+        assert b"59.9%" in page.data, route
+        assert b"14" in page.data, route
+        assert b"5" in page.data, route
+        assert b"3.9/5" in page.data, route
+
+    physics_second = db.execute(
+        """
+        SELECT lo.outcome_id
+        FROM learning_outcomes lo
+        JOIN competencies c ON c.competency_id=lo.competency_id
+        JOIN subjects s ON s.subject_id=c.subject_id
+        WHERE s.subject_name='Physics' AND lo.sequence_order=2
+        ORDER BY lo.outcome_id LIMIT 1
+        """
+    ).fetchone()
+    assert physics_second
+    outcome_page = client.get(f"/outcome/{physics_second['outcome_id']}")
+    assert outcome_page.status_code == 200
+    assert b"KTHS-L001" in outcome_page.data
+    assert b"Open Learning Outcome" in outcome_page.data
+
+    ict_second = db.execute(
+        """
+        SELECT lo.outcome_id
+        FROM learning_outcomes lo
+        JOIN competencies c ON c.competency_id=lo.competency_id
+        JOIN subjects s ON s.subject_id=c.subject_id
+        WHERE s.subject_name='ICT' AND lo.sequence_order=2
+        ORDER BY lo.outcome_id LIMIT 1
+        """
+    ).fetchone()
+    assert ict_second
+    locked = client.get(f"/outcome/{ict_second['outcome_id']}")
+    assert locked.status_code == 302

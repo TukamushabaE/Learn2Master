@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, redirect, session, url_for
 from database import get_db
+from services.evaluation_dataset import linked_learner_evaluation_evidence
 
 mastery_bp = Blueprint("mastery", __name__)
 
@@ -30,6 +31,11 @@ def mastery():
             AND mastery_records.learner_id = ?
         ORDER BY subjects.subject_name, competencies.competency_code, learning_outcomes.sequence_order
     """, (learner_id,)).fetchall()
+    evaluation_evidence = linked_learner_evaluation_evidence(conn, learner_id)
     conn.close()
 
-    return render_template("mastery.html", records=records)
+    return render_template(
+        "mastery.html",
+        records=records,
+        evaluation_evidence=evaluation_evidence,
+    )

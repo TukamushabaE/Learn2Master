@@ -6,6 +6,7 @@
   <div><p class="eyebrow">Explainable AI</p><h1>AI Decision Explanations</h1><p>Transparent records showing evidence used, learner outcome, confidence and reason for every AI decision.</p></div>
   <div class="hero-badge"><span>Records</span><strong>{{ rows|length }}</strong></div>
 </section>
+{% include "partials/learner_evaluation_evidence.html" %}
 <section class="learn-card">
   <div class="concept-grid">
   {% for row in rows %}

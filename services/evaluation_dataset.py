@@ -303,6 +303,105 @@ def evaluation_account_map(conn):
     }
 
 
+def linked_learner_evaluation_evidence(conn, user_id):
+    """Return the recorded evaluation evidence linked to one learner account.
+
+    The evaluation register is subject-level evidence.  It is deliberately kept
+    separate from ``assessment_attempts`` and ``mastery_records`` so the portal
+    never presents imported summary values as question-by-question activity.
+    """
+    ensure_evaluation_dataset_schema(conn)
+    row = conn.execute(
+        """
+        SELECT records.evaluation_record_id, records.participant_code,
+               records.school_code, records.subject, records.class_level,
+               records.study_status, records.pre_test_pct, records.post_test_pct,
+               records.gain_points, records.acceptance_mean, records.mastery_status,
+               records.payload_json, records.imported_at,
+               links.provisioned_at, links.first_password_changed_at,
+               users.username, users.last_login_at, schools.school_name
+        FROM evaluation_account_links links
+        JOIN evaluation_dataset_records records
+          ON records.evaluation_record_id=links.evaluation_record_id
+        JOIN users ON users.user_id=links.user_id
+        LEFT JOIN schools ON schools.school_id=users.school_id
+        WHERE links.user_id=? AND records.record_type='learner'
+        LIMIT 1
+        """,
+        (user_id,),
+    ).fetchone()
+    if not row:
+        return None
+
+    evidence = {key: row[key] for key in row.keys() if key != "payload_json"}
+    try:
+        payload = json.loads(row["payload_json"] or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        payload = {}
+    study = payload.get("learner_study") or {}
+    survey = payload.get("learner_survey") or {}
+    evidence.update(
+        {
+            "practice_attempts": study.get("practice_attempts"),
+            "recommendations_received": study.get("recommendations_received"),
+            "recommendations_acted_on": study.get("recommendations_acted_on"),
+            "feedback_response_pct": study.get("feedback_response_pct"),
+            "teacher_interventions": study.get("teacher_interventions"),
+            "reflection_complete": study.get("reflection_complete"),
+            "practical_evidence_verified": study.get("practical_evidence_verified"),
+            "device_access": study.get("device_access"),
+            "connectivity": study.get("connectivity"),
+            "learner_acceptance_mean": survey.get("learner_acceptance_mean"),
+        }
+    )
+    outcomes = conn.execute(
+        """
+        SELECT lo.outcome_id, lo.outcome_code, lo.outcome_name,
+               lo.sequence_order, subjects.subject_name,
+               courses.course_id, courses.course_title
+        FROM learning_outcomes lo
+        JOIN competencies ON competencies.competency_id=lo.competency_id
+        JOIN subjects ON subjects.subject_id=competencies.subject_id
+        LEFT JOIN lessons ON lessons.outcome_id=lo.outcome_id
+        LEFT JOIN courses ON courses.course_id=lessons.course_id
+        WHERE LOWER(TRIM(subjects.subject_name))=LOWER(TRIM(?))
+        ORDER BY lo.sequence_order, lo.outcome_id
+        """,
+        (evidence.get("subject") or "",),
+    ).fetchall()
+    evidence["available_outcomes"] = [
+        {key: outcome[key] for key in outcome.keys()} for outcome in outcomes
+    ]
+    evidence["source_label"] = PUBLIC_SOURCE_LABEL
+    return evidence
+
+
+def evaluation_subject_allows_outcome(conn, user_id, outcome_id):
+    """Allow a linked learner to open outcomes in the evaluated subject.
+
+    Access does not set mastery or create attempts; it only opens the learning
+    material that corresponds to the subject named in the evaluation register.
+    """
+    ensure_evaluation_dataset_schema(conn)
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM evaluation_account_links links
+        JOIN evaluation_dataset_records records
+          ON records.evaluation_record_id=links.evaluation_record_id
+        JOIN learning_outcomes lo ON lo.outcome_id=?
+        JOIN competencies ON competencies.competency_id=lo.competency_id
+        JOIN subjects ON subjects.subject_id=competencies.subject_id
+        WHERE links.user_id=?
+          AND records.record_type='learner'
+          AND LOWER(TRIM(records.subject))=LOWER(TRIM(subjects.subject_name))
+        LIMIT 1
+        """,
+        (outcome_id, user_id),
+    ).fetchone()
+    return bool(row)
+
+
 def _as_float(value):
     if value in (None, ""):
         return None

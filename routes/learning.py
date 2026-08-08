@@ -17,6 +17,10 @@ from services.ai_explainability_engine import build_ai_explanation
 from services.bkt_engine import update_bkt_record, bkt_summary
 from services.learner_profile_engine import refresh_learner_profile
 from services.offline_engine import queue_offline_event
+from services.evaluation_dataset import (
+    evaluation_subject_allows_outcome,
+    linked_learner_evaluation_evidence,
+)
 
 learning_bp = Blueprint("learning", __name__)
 
@@ -297,6 +301,8 @@ def get_assessment(conn, lesson_id, assessment_type):
 
 
 def is_outcome_unlocked(conn, learner_id, outcome):
+    if evaluation_subject_allows_outcome(conn, learner_id, outcome["outcome_id"]):
+        return True
     if outcome["sequence_order"] == 1:
         return True
 
@@ -639,8 +645,20 @@ def pathway(course_id):
         unlocked = is_outcome_unlocked(conn, learner_id, outcome)
         cards.append({"outcome": outcome, "unlocked": unlocked})
 
+    evaluation_evidence = linked_learner_evaluation_evidence(conn, learner_id)
+    if evaluation_evidence and (
+        (evaluation_evidence.get("subject") or "").strip().lower()
+        != course["subject_name"].strip().lower()
+    ):
+        evaluation_evidence = None
+
     conn.close()
-    return render_template("learning/pathway.html", course=course, cards=cards)
+    return render_template(
+        "learning/pathway.html",
+        course=course,
+        cards=cards,
+        evaluation_evidence=evaluation_evidence,
+    )
 
 
 @learning_bp.route("/outcome/<int:outcome_id>")
@@ -685,6 +703,13 @@ def outcome(outcome_id):
             outcome=outcome,
             request_reference=getattr(g, "request_reference", "unavailable"),
         ), 200
+
+    evaluation_evidence = linked_learner_evaluation_evidence(conn, learner_id)
+    if evaluation_evidence and (
+        (evaluation_evidence.get("subject") or "").strip().lower()
+        != outcome["subject_name"].strip().lower()
+    ):
+        evaluation_evidence = None
 
     g.outcome_stage = "prerequisite_check"
     if not is_outcome_unlocked(conn, learner_id, outcome):
@@ -905,6 +930,7 @@ def outcome(outcome_id):
         stage=stage,
         practice_threshold=PRACTICE_CONCEPT_THRESHOLD,
         configuration_warnings=configuration_warnings,
+        evaluation_evidence=evaluation_evidence,
     )
 
 

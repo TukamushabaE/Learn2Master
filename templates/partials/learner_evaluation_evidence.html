@@ -1,0 +1,45 @@
+{% if evaluation_evidence %}
+<section class="learn-card recorded-evaluation-evidence">
+    <div class="section-title">
+        <div>
+            <span class="subject-code">Recorded Framework Evaluation Evidence</span>
+            <h2>{{ evaluation_evidence.participant_code }} · {{ evaluation_evidence.subject }}</h2>
+            <p>This account is linked to its participant record in the Learn2Master Evaluation Register. The recorded subject-level summary is displayed separately from new portal assessment attempts.</p>
+        </div>
+        <span class="ai-badge">{{ evaluation_evidence.study_status }}</span>
+    </div>
+
+    <div class="evidence-grid">
+        <div><span>School</span><strong>{{ evaluation_evidence.school_name or evaluation_evidence.school_code }}</strong></div>
+        <div><span>Class</span><strong>{{ evaluation_evidence.class_level }}</strong></div>
+        <div><span>Pre-test</span><strong>{{ evaluation_evidence.pre_test_pct }}%</strong></div>
+        <div><span>Post-test</span><strong>{{ evaluation_evidence.post_test_pct }}%</strong></div>
+        <div><span>Learning Gain</span><strong>{{ evaluation_evidence.gain_points }} points</strong></div>
+        <div><span>Final Status</span><strong>{{ evaluation_evidence.mastery_status }}</strong></div>
+        <div><span>Practice Attempts</span><strong>{{ evaluation_evidence.practice_attempts }}</strong></div>
+        <div><span>Recommendations</span><strong>{{ evaluation_evidence.recommendations_acted_on }}/{{ evaluation_evidence.recommendations_received }} acted on</strong></div>
+        <div><span>Feedback Response</span><strong>{{ evaluation_evidence.feedback_response_pct }}%</strong></div>
+        <div><span>Teacher Interventions</span><strong>{{ evaluation_evidence.teacher_interventions }}</strong></div>
+        <div><span>Reflection</span><strong>{{ evaluation_evidence.reflection_complete }}</strong></div>
+        <div><span>Practical Evidence</span><strong>{{ evaluation_evidence.practical_evidence_verified }}</strong></div>
+        <div><span>Acceptance Mean</span><strong>{{ evaluation_evidence.learner_acceptance_mean }}/5</strong></div>
+        <div><span>Device Access</span><strong>{{ evaluation_evidence.device_access }}</strong></div>
+        <div><span>Connectivity</span><strong>{{ evaluation_evidence.connectivity }}</strong></div>
+    </div>
+
+    {% if evaluation_evidence.available_outcomes %}
+    <h3>Available {{ evaluation_evidence.subject }} Learning Outcomes</h3>
+    <p>These outcomes are open for this learner. New work completed inside an outcome will be recorded as current portal activity.</p>
+    <div class="concept-grid">
+        {% for linked_outcome in evaluation_evidence.available_outcomes %}
+        <div class="concept-pill good">
+            <span>{{ linked_outcome.outcome_code }}</span>
+            <strong>Available</strong>
+            <small>{{ linked_outcome.outcome_name }}</small>
+            <a class="btn-primary" href="{{ url_for('learning.outcome', outcome_id=linked_outcome.outcome_id) }}">Open Learning Outcome →</a>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>
+{% endif %}

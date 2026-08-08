@@ -40,6 +40,8 @@
     <div class="hero-badge"><span>AI Confidence</span><strong>{{ outcome.mastery_score }}%</strong></div>
 </section>
 
+{% include "partials/learner_evaluation_evidence.html" %}
+
 {% if configuration_warnings %}
 <section class="learn-card configuration-warning" role="status">
     <span class="subject-code">Configuration notice</span>
