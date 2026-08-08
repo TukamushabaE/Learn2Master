@@ -111,9 +111,9 @@ def copy_database(source_url, target_url, target_schema):
     schema_url = reset_target_schema(target_url, target_schema)
     source = psycopg2.connect(source_url)
     target = psycopg2.connect(schema_url)
-    set_postgres_search_path(target, target_schema)
     source.set_session(readonly=True, isolation_level="REPEATABLE READ")
     target.autocommit = False
+    set_postgres_search_path(target, target_schema)
     try:
         source_tables = set(table_names(source))
         target_tables = set(table_names(target))

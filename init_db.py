@@ -369,8 +369,8 @@ def run_postgres(url=None, reset=False, search_path=None):
 
     print("Initializing Learn2Master PostgreSQL database...")
     conn = psycopg2.connect(url)
-    set_postgres_search_path(conn, search_path or configured_database_schema())
     conn.autocommit = False
+    set_postgres_search_path(conn, search_path or configured_database_schema())
     try:
         with conn.cursor() as cur:
             for statement in schema_statements("postgres", reset=reset):
