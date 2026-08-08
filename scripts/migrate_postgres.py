@@ -14,7 +14,7 @@ from urllib.parse import parse_qsl, urlencode, urlunparse
 import psycopg2
 from psycopg2 import extras, sql
 
-from database import PostgresConnectionWrapper
+from database import PostgresConnectionWrapper, set_postgres_search_path
 from init_db import _table_name_from_create, run_postgres, schema_statements
 from services.evaluation_dataset import ensure_evaluation_dataset_schema
 
@@ -92,9 +92,10 @@ def reset_target_schema(target_url, target_schema):
         admin.close()
 
     schema_url = url_with_search_path(target_url, target_schema)
-    run_postgres(schema_url, reset=True)
+    run_postgres(schema_url, reset=True, search_path=target_schema)
     raw = psycopg2.connect(schema_url)
     try:
+        set_postgres_search_path(raw, target_schema)
         ensure_evaluation_dataset_schema(PostgresConnectionWrapper(raw))
     finally:
         raw.close()
@@ -110,6 +111,7 @@ def copy_database(source_url, target_url, target_schema):
     schema_url = reset_target_schema(target_url, target_schema)
     source = psycopg2.connect(source_url)
     target = psycopg2.connect(schema_url)
+    set_postgres_search_path(target, target_schema)
     source.set_session(readonly=True, isolation_level="REPEATABLE READ")
     target.autocommit = False
     try:

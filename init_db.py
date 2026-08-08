@@ -12,7 +12,13 @@ try:
 except ImportError:  # pragma: no cover - SQLite-only environments do not need psycopg2.
     psycopg2 = None
 
-from database import normalize_database_url, is_postgres_url, sqlite_path_from_url
+from database import (
+    configured_database_schema,
+    is_postgres_url,
+    normalize_database_url,
+    set_postgres_search_path,
+    sqlite_path_from_url,
+)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH = os.path.join(BASE_DIR, "database_v2.sql")
@@ -298,6 +304,7 @@ def ensure_current_schema(url=None):
         if not psycopg2:
             raise RuntimeError("psycopg2-binary is required for PostgreSQL schema upgrades.")
         conn = psycopg2.connect(normalized_url)
+        set_postgres_search_path(conn)
         try:
             with conn.cursor() as cur:
                 statements = _additive_schema_statements("postgres")
@@ -353,7 +360,7 @@ def run_sqlite(db_path=None, reset=False):
         conn.close()
 
 
-def run_postgres(url=None, reset=False):
+def run_postgres(url=None, reset=False, search_path=None):
     url = normalize_database_url(url)
     if not url:
         raise RuntimeError("DATABASE_URL is required for PostgreSQL initialization.")
@@ -362,6 +369,7 @@ def run_postgres(url=None, reset=False):
 
     print("Initializing Learn2Master PostgreSQL database...")
     conn = psycopg2.connect(url)
+    set_postgres_search_path(conn, search_path or configured_database_schema())
     conn.autocommit = False
     try:
         with conn.cursor() as cur:

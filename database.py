@@ -101,6 +101,26 @@ def is_postgres_url(url=None):
     return bool(url and url.startswith("postgresql://"))
 
 
+def configured_database_schema():
+    schema = (os.environ.get("LEARN2MASTER_DATABASE_SCHEMA") or "").strip()
+    if not schema:
+        return None
+    if not re.fullmatch(r"[a-z_][a-z0-9_]*", schema):
+        raise RuntimeError("LEARN2MASTER_DATABASE_SCHEMA is invalid.")
+    return schema
+
+
+def set_postgres_search_path(conn, schema=None):
+    schema = schema or configured_database_schema()
+    if not schema:
+        return None
+    if not re.fullmatch(r"[a-z_][a-z0-9_]*", schema):
+        raise RuntimeError("PostgreSQL schema name is invalid.")
+    with conn.cursor() as cur:
+        cur.execute(f'SET search_path TO "{schema}"')
+    return schema
+
+
 def sqlite_path_from_url(url=None):
     url = url or os.environ.get("DATABASE_URL")
     if not url or not url.startswith("sqlite:///"):
@@ -296,6 +316,7 @@ def get_db():
         if not psycopg2:
             raise RuntimeError("DATABASE_URL is PostgreSQL, but psycopg2 is not installed.")
         conn = psycopg2.connect(db_url)
+        set_postgres_search_path(conn)
         return PostgresConnectionWrapper(conn)
 
     sqlite_path = sqlite_path_from_url(db_url)
