@@ -142,11 +142,36 @@ def reliability_summary(rows):
 
 
 TRACEABILITY = [
-    ("RQ1 / Objective 1", "How can CBC outcomes be represented as a mastery sequence?", "Design and development", "Curriculum configuration", "subjects → competencies → learning_outcomes → lessons", "/admin/subjects", "Chapter 4 curriculum configuration", "Chapter 5 design interpretation"),
-    ("RQ2 / Objective 2", "How does adaptive feedback respond to diagnosed weakness?", "Demonstration", "AI recommendation generated, viewed and followed", "assessment_attempts + recommendations + research_events", "/research/feedback-responsiveness", "Chapter 4 feedback responsiveness", "Chapter 5 cautious adaptive-feedback interpretation"),
-    ("RQ3 / Objective 3", "What learning gain and mastery are observed?", "Evaluation", "Valid paired pre/post by learner, outcome and phase", "assessment_attempts + mastery_records", "/research/learning-gain", "Chapter 4 paired outcomes and mastery", "Chapter 5 outcome interpretation"),
-    ("RQ4 / Objective 4", "How do teachers oversee mastery decisions?", "Evaluation", "Interventions, reviews, approvals and overrides", "teacher_interventions + teacher_feedback + mastery_reviews", "/research/teacher-oversight", "Chapter 4 teacher oversight", "Chapter 5 oversight interpretation"),
-    ("RQ5 / Objective 5", "Is the framework acceptable and operationally dependable?", "Evaluation and communication", "Likert responses and recorded application events", "research_questionnaire_* + research_events", "/research/questionnaire-results", "Chapter 4 questionnaire and reliability evidence", "Chapter 5 usability and limitation interpretation"),
+    (
+        "RQ1 / Objective 1",
+        "What are the current implementation gaps in mastery-based learning for Physics and ICT under CBC?",
+        "Problem identification and solution objectives",
+        "Literature, curriculum and contextual requirements traceability",
+        "CBC requirements -> functional requirements -> framework modules",
+        "/research/proposal-traceability",
+        "Chapter 4 requirements and framework evidence",
+        "Chapter 5 interpretation of the implementation gaps",
+    ),
+    (
+        "RQ2 / Objective 2",
+        "How can an AI-enabled framework be designed and developed to automate sequential mastery-based learning tracking and validation of Physics and ICT learning outcomes?",
+        "Design, development and demonstration",
+        "Operational learner profiling, sequencing, assessment, feedback, recommendation, explainability and teacher oversight",
+        "subjects + competencies + learning_outcomes + assessment_attempts + mastery_records + recommendations",
+        "/research/proposal-traceability",
+        "Chapter 4 framework implementation and demonstration",
+        "Chapter 5 design-science contribution",
+    ),
+    (
+        "RQ3 / Objective 3",
+        "How does the developed AI-enabled framework perform in ensuring sequential mastery of learning outcomes?",
+        "Evaluation, communication and refinement",
+        "Learning gain, mastery, time-to-mastery, feedback responsiveness, teacher oversight, acceptance and reliability",
+        "evaluation records + portal assessment/mastery/questionnaire/teacher/reliability evidence",
+        "/research/evaluation-analysis",
+        "Chapter 4 statistical, qualitative and technical results",
+        "Chapter 5 findings, limitations and recommendations",
+    ),
 ]
 
 

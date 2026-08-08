@@ -17,6 +17,7 @@ from services.evaluation_dataset import (
     participant_temporary_password,
     provision_evaluation_accounts,
 )
+from services.evaluation_analysis import evaluation_analysis
 from routes.research import connected_research_summary
 from scripts.migrate_postgres import start_migration_health_server, url_with_search_path
 
@@ -96,6 +97,69 @@ def test_evaluation_register_import_preserves_supplied_rows_and_results(db):
     assert classifications[0]["data_classification"] == SUPPLIED_CLASSIFICATION
     assert classifications[0]["authenticity_status"] == SUPPLIED_AUTHENTICITY
     assert classifications[0]["source_label"] == "Learn2Master_Evaluation_Register"
+
+
+def test_proposal_aligned_analysis_uses_recorded_values_and_exposes_missing_evidence(client, db):
+    import_evaluation_dataset(conn=db)
+    analysis = evaluation_analysis(db)
+    paired = analysis["paired"]
+
+    assert paired["valid_pairs"] == 60
+    assert paired["mean_pre_test"] == 56.09
+    assert paired["mean_post_test"] == 77.59
+    assert paired["mean_gain"] == 21.51
+    assert paired["confidence_interval_low"] == 18.54
+    assert paired["confidence_interval_high"] == 24.47
+    assert paired["t_statistic"] == 14.52
+    assert paired["degrees_of_freedom"] == 59
+    assert paired["p_value_display"] == "<0.001"
+    assert paired["cohens_dz"] == 1.87
+    assert paired["improved_count"] == 58
+    assert paired["wilcoxon"]["p_value_display"] == "<0.001"
+
+    learner_scale, teacher_scale = analysis["questionnaire_reliability"]
+    assert learner_scale["responses"] == 60
+    assert learner_scale["items"] == 10
+    assert learner_scale["cronbach_alpha"] == 0.767
+    assert teacher_scale["responses"] == 8
+    assert teacher_scale["items"] == 8
+    assert teacher_scale["cronbach_alpha"] == 0.834
+
+    statuses = {row["requirement"]: row["status"] for row in analysis["completeness"]}
+    assert statuses["Matched pre-test/post-test learning gain"] == "Complete"
+    assert statuses["System reliability under low-resource conditions"] == "Partial"
+    assert statuses["Participant assessment dates and verified evaluation duration"] == "Missing"
+    assert statuses["Causal effectiveness or control-group comparison"] == "Not in design"
+
+    login(client, "admin", "12345")
+    report = client.get("/research/evaluation-analysis")
+    assert report.status_code == 200
+    assert b"Complete Data Analysis" in report.data
+    assert b"14.52" in report.data
+    assert b"18.54 to 24.47" in report.data
+    assert b"0.767" in report.data
+    assert b"What Is Complete and What Is Still Missing" in report.data
+
+    export = client.get("/research/evaluation-analysis/export.csv")
+    assert export.status_code == 200
+    assert b"Cohen's dz" in export.data
+    assert b"Questionnaire reliability" in export.data
+
+    chapter_four = client.get("/research/chapter-four-report")
+    assert chapter_four.status_code == 200
+    assert b"Inferential Analysis of Matched Outcomes" in chapter_four.data
+    assert b"Cronbach's alpha" in chapter_four.data
+
+    chapter_five = client.get("/research/chapter-five-insights")
+    assert chapter_five.status_code == 200
+    assert b"paired t(59)=14.52" in chapter_five.data
+
+    traceability = client.get("/research/proposal-traceability")
+    assert traceability.status_code == 200
+    assert b"What are the current implementation gaps" in traceability.data
+    assert b"How can an AI-enabled framework be designed and developed" in traceability.data
+    assert b"How does the developed AI-enabled framework perform" in traceability.data
+    assert b"RQ4" not in traceability.data
 
 
 def test_existing_source_key_is_migrated_without_duplicate_records(db):
